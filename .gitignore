@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.vite/
+
+# 화면 확인용 스크린샷 — 루트에만 적용한다.
+# ⚠️ 전역 `*.png`로 걸지 말 것: src/ui/art/assets/의 게임 에셋이 조용히 누락된다.
+/*.png
+/.playwright-mcp/
+
+# 1회성 진단 스크립트 (tmp-*.mts 등). scripts/의 σ 도출 근거는 커밋 대상이다.
+/tmp-*
+
+# 서브에이전트 작업 공간 (ledger·리뷰 패키지 등 스크래치)
+.superpowers/
+
+# 로컬 환경
+.env
+.env.local
+.DS_Store

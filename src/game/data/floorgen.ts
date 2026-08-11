@@ -1,0 +1,516 @@
+/**
+ * 층 생성기 — 21층 이후.
+ *
+ * ── 왜 필요한가 ────────────────────────────────────────
+ * 1~20층은 손으로 짰다. 8개 층(13~20)에 sim을 6~7회 돌렸고 중복 구성이 3번 나왔다.
+ * 같은 방식으로 80층을 더 하는 것은 감당이 안 되고, 무엇보다 **재미가 없는 반복**이다.
+ *
+ * ── 무엇을 생성하고 무엇을 안 하는가 ──────────────────
+ * 생성: 일반 층의 적 구성 / 임무 / 배경 / 보호 대상 수치
+ * 손으로: **보스 층**(10층마다). 최상층과 구간 보스는 개성이 있어야 한다.
+ *
+ * ── 반드시 결정적이어야 한다 ──────────────────────────
+ * 같은 층 번호는 **언제나 같은 층**이 나와야 한다. 안 그러면
+ *   - 세이브에 층 내용을 저장해야 하고(용량·마이그레이션 부담)
+ *   - `npm run sim`으로 잰 승률이 다음 실행에서 달라져 밸런싱이 불가능해진다.
+ * 그래서 Math.random을 쓰지 않고 **층 번호에서 유도한 해시**로만 뽑는다.
+ * (`src/game/`의 RNG 규칙과 같은 정신이다 — 재현 불가능한 무작위는 이 프로젝트에서 금지다.)
+ */
+import type { EnemyDefId } from '../types';
+import type { GuardDef, Mission, MissionKind } from '../mission';
+import { ENEMY } from './sample';
+import type { FloorScene, FloorSpec } from './floors';
+
+/** 손으로 짠 층의 마지막 번호. 여기까지는 floors.ts의 배열이 정본이다. */
+export const HANDCRAFTED_UNTIL = 20;
+
+/** 최종 목표 층. */
+export const TOWER_HEIGHT = 100;
+
+/** 보스 주기 — 10층마다. 20층까지의 리듬(6·12·20)을 이어받되 규칙적으로 만든다. */
+export const BOSS_EVERY = 10;
+
+/**
+ * 같은 적 구성이 다시 나오기까지 최소 간격.
+ *
+ * 적 풀이 6~7종인데 3~4기를 뽑아 80층을 채우므로 **전체 무중복은 불가능하다**
+ * (비둘기집 원리). 멀리 떨어진 층끼리 같은 것은 플레이 중에 알아채지 못하므로
+ * 간격만 강제한다. `floors.test.ts`가 이 값으로 잠근다.
+ */
+export const MIN_REPEAT_GAP = 8;
+
+/**
+ * 같은 층 **이름**이 다시 나오기까지 최소 간격.
+ *
+ * 적 구성보다 크게 잡는다. 구성은 전투 중에 흐릿하게 인지되지만 **이름은 화면 상단에
+ * 글자로 박혀 있어** 훨씬 쉽게 기억된다. 실측으로 '얼어붙은 제단'이 32·36층에
+ * 간격 4로 나왔는데, 이 정도면 플레이 중에 바로 알아챈다.
+ *
+ * 16×16=256조합에 80층이라 간격 20은 충분히 여유가 있다(재추첨 24회면 반드시 성공).
+ * `floors.test.ts`가 이 값으로 잠근다.
+ */
+export const NAME_REPEAT_GAP = 20;
+
+/**
+ * 같은 **장소어**(NAME_B — '옥좌', '묘역' …)가 다시 나오기까지 최소 간격.
+ *
+ * 전체 이름 간격(20)보다 짧다. 장소어가 16종뿐이라 80층을 채우려면 재사용이 불가피하고,
+ * 20을 요구하면 후보가 고갈돼 오히려 이름 중복이 생긴다.
+ * 막으려는 것은 **인접 반복**이다 — '창백한 옥좌' 다음 층이 '얼어붙은 옥좌'면
+ * 수식어만 갈아끼운 게 드러난다.
+ */
+export const PLACE_REPEAT_GAP = 6;
+
+/** 이름에서 장소어만 떼어낸다. 이름은 항상 '수식어 장소어' 두 토막이다. */
+function placeOf(name: string): string {
+  return name.slice(name.indexOf(' ') + 1);
+}
+
+/**
+ * 결정적 해시. 층 번호 + 용도(salt)로 0~1 값을 만든다.
+ *
+ * 층마다 여러 번 뽑아야 하는데(적/임무/배경…) 같은 값이 나오면 안 되므로
+ * salt로 스트림을 나눈다. rng.ts의 substream과 같은 발상이다.
+ */
+function pick01(floorId: number, salt: number): number {
+  // salt를 먼저 섞는다. 층 번호만 먼저 해싱하면 인접 층이 비슷한 값을 내
+  // 서로 다른 층에서 같은 구성이 자주 나온다(실제로 80층 중 17쌍이 겹쳤다).
+  let h = Math.imul((floorId * 0x27d4eb2d) ^ (salt * 0x165667b1), 0x85ebca6b);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 13;
+  h = Math.imul(h ^ floorId, 0x9e3779b1);
+  h ^= h >>> 16;
+  return (h >>> 0) / 0x100000000;
+}
+
+/** 배열에서 하나 고른다 (결정적) */
+function pickOne<T>(arr: readonly T[], floorId: number, salt: number): T {
+  return arr[Math.floor(pick01(floorId, salt) * arr.length) % arr.length];
+}
+
+// ------------------------------------------------------------
+// 구간 정의 — 난이도 곡선의 단일 출처
+// ------------------------------------------------------------
+
+export interface Tier {
+  /** 이 구간이 시작되는 층 */
+  from: number;
+  name: string;
+  /** 이 구간에서 뽑을 수 있는 일반 적 */
+  pool: EnemyDefId[];
+  /** 도발을 가진 적 — §5-11. 최소 하나는 섞여야 힐러가 먼저 죽는 구조가 안 된다 */
+  taunts: EnemyDefId[];
+  /** 적 기수 범위 */
+  count: [number, number];
+  /** 보호 대상 HP 기준값 (수비/호위 층에서 사용) */
+  guardHp: number;
+  guardDef: number;
+  /** 이 구간의 보스 */
+  boss: EnemyDefId;
+}
+
+/**
+ * 구간은 20층 단위다.
+ *
+ * 왜 20층인가: 10층마다 보스가 오므로 한 구간에 보스가 2번 들어간다.
+ * 구간을 10층으로 끊으면 적 풀이 매 10층 갈려 "방금 본 적"이 사라져 연속성이 없고,
+ * 40층으로 끊으면 같은 적을 40층 내내 본다.
+ *
+ * 적 풀은 **겹치게** 짰다. 21층에서 중층 적이 사라지면 난이도가 급변하고,
+ * 무엇보다 19종으로 100층을 채우려면 재사용이 불가피하다.
+ * 대신 구간이 오를수록 강한 적의 비중이 늘어난다.
+ */
+export const TIERS: Tier[] = [
+  {
+    from: 21, name: '상층',
+    pool: [
+      ENEMY.seraph, ENEMY.wraith, ENEMY.wisp, ENEMY.revenant,
+      ENEMY.plaguebearer, ENEMY.direwolf, ENEMY.hexweaver,
+    ],
+    taunts: [ENEMY.colossus, ENEMY.stonewarden, ENEMY.warden],
+    count: [3, 4], guardHp: 3800, guardDef: 56,
+    boss: ENEMY.hierophant,
+  },
+  {
+    from: 41, name: '심층',
+    pool: [
+      ENEMY.seraph, ENEMY.wraith, ENEMY.plaguebearer,
+      ENEMY.hexweaver, ENEMY.grovekeeper, ENEMY.direwolf,
+    ],
+    taunts: [ENEMY.colossus, ENEMY.stonewarden],
+    count: [3, 4], guardHp: 5200, guardDef: 68,
+    boss: ENEMY.blightlord,
+  },
+  {
+    from: 61, name: '천층',
+    pool: [
+      ENEMY.seraph, ENEMY.wraith, ENEMY.plaguebearer,
+      ENEMY.hexweaver, ENEMY.grovekeeper, ENEMY.revenant,
+    ],
+    taunts: [ENEMY.colossus, ENEMY.stonewarden],
+    count: [4, 4], guardHp: 6800, guardDef: 80,
+    boss: ENEMY.warcaller,
+  },
+  {
+    from: 81, name: '정상',
+    pool: [
+      ENEMY.seraph, ENEMY.wraith, ENEMY.grovekeeper,
+      ENEMY.hexweaver, ENEMY.plaguebearer, ENEMY.direwolf,
+    ],
+    taunts: [ENEMY.colossus, ENEMY.stonewarden],
+    count: [4, 4], guardHp: 8600, guardDef: 92,
+    boss: ENEMY.sovereign,
+  },
+];
+
+export function tierOf(floorId: number): Tier {
+  let found = TIERS[0];
+  for (const t of TIERS) if (floorId >= t.from) found = t;
+  return found;
+}
+
+/**
+ * 층 깊이에 따른 적 스탯 배수.
+ *
+ * ── 왜 필요한가 ────────────────────────────────────────
+ * 영웅은 ★2→★6에서 배수가 1.35→5.4(**4배**)로 커지고 레벨도 15→99로 오른다.
+ * 적 수치가 고정이면 90층 적이 21층 적과 같아서, 실제로 생성 구간 표본이
+ * **전부 승률 100%**였다. 층을 만들어도 전투가 성립하지 않았다.
+ *
+ * ── 곡선 ───────────────────────────────────────────────
+ * 1~20층은 **반드시 1.0**이다. 실측으로 잡은 승률 표(§STEP 9)가 여기 걸려 있어
+ * 배수를 먹이면 검증된 밸런스가 통째로 날아간다.
+ *
+ * 21층부터 층당 복리로 오른다. 영웅 성장이 등급 승급(불연속)+레벨(연속)의 곱이라
+ * 선형으로 따라가면 구간 끝에서 벌어진다 — 지수가 자연스럽다.
+ *
+ * ⚠️ **지수는 영웅 성장폭에서 역산해야 한다.** 처음에 1.031로 냈다가
+ * 100층 배수가 **11.5배**가 되어 40층부터 승률이 0%로 붙었다.
+ * 실제 영웅 성장은 그만큼 크지 않다(실측):
+ *
+ *   ★5 Lv.60 → ★6 Lv.99 = 등급 1.42배 × 레벨 1.65배 ≈ **2.34배**
+ *
+ * 적도 같은 폭으로 커져야 하지만 **성장 배수를 그대로 맞추면 안 된다.**
+ * 영웅에는 장비·잠재치·개입·포션이 추가로 얹히기 때문이다 —
+ * 실제로 1.012(100층 2.6배)로 잡았더니 표본이 거의 전부 100%였다.
+ * 성장보다 조금 더 앞서게 잡는다.
+ *
+ *   40층 ≈ 1.4배 · 60층 ≈ 1.9배 · 80층 ≈ 2.5배 · 100층 ≈ 3.4배
+ *
+ * **이 값은 칼날이다**(§5-1과 같은 성질). 실측한 양끝:
+ *   1.031 → 100층 11.5배, **40층부터 전멸**
+ *   1.020 → 100층  4.8배, **60층부터 전멸**
+ *   1.012 → 100층  2.6배, **전 구간 100%**
+ * 폭이 0.008밖에 안 되는데 결과가 완전히 뒤집힌다.
+ * 만졌으면 반드시 `npm run sim`으로 표본 승률을 확인할 것.
+ */
+export const DEPTH_MULT_BASE = 1.015;
+
+export function enemyStatMultFor(floorId: number): number {
+  if (floorId <= HANDCRAFTED_UNTIL) return 1;
+  const base = DEPTH_MULT_BASE ** (floorId - HANDCRAFTED_UNTIL);
+  /**
+   * 보스 층은 배수를 **덜 먹인다**.
+   *
+   * 보스 자체가 이미 일반 적의 2~3배 HP를 갖고 있어서, 같은 배수를 곱하면
+   * 격차가 곱으로 벌어진다 — 실측으로 90층 보스 층이 32,959, 같은 깊이 일반 층이
+   * 23,016이었고 승률이 4% vs 100%로 갈렸다.
+   * 보스는 "수치가 큰 적"이 아니라 "다르게 싸워야 하는 적"이어야 한다.
+   */
+  return floorId % BOSS_EVERY === 0 ? 1 + (base - 1) * 0.55 : base;
+}
+
+// ------------------------------------------------------------
+// 임무 배치
+// ------------------------------------------------------------
+
+/**
+ * 임무 리듬 — 10층 주기.
+ *
+ * **5의 배수는 수비/호위(숨돌림)**다. 9층·15층·19층이 그 역할을 했고
+ * 실측으로 97~98%가 나왔다 — 매 층이 학살이면 플레이가 지친다(§STEP 9).
+ * 나머지는 토벌을 기본으로 하되 생존/탈출/탈취를 섞어 6종을 모두 쓴다.
+ */
+const CYCLE: MissionKind[] = [
+  'subjugate', // 1
+  'seize',     // 2
+  'escape',    // 3
+  'subjugate', // 4
+  'defend',    // 5 ← 숨돌림
+  'subjugate', // 6
+  'survive',   // 7
+  'escort',    // 8
+  'subjugate', // 9
+  'subjugate', // 10 ← 보스(아래에서 덮어씀)
+];
+
+const SCENES: FloorScene[] = ['ruins', 'field', 'outpost', 'gate', 'corridor', 'chasm'];
+
+/**
+ * 층 이름 — 수식어 + 장소. 조합으로 만든다(66×… 이름 어휘와 같은 발상)
+ *
+ * ⚠️ **어휘를 줄이지 말 것.** 16×16=256조합으로 80층을 채우는데도
+ * 생일 문제 때문에 무작위로 뽑으면 중복이 수십 쌍 나온다(12×12=144일 때 실측 15종이었다).
+ * 조합 수는 `pickName()`의 재추첨이 성공할 여지를 만드는 것이지, 그 자체로 중복을 막지 못한다.
+ */
+const NAME_A = [
+  '무너진', '잿빛', '봉인된', '메마른', '끝없는', '얼어붙은',
+  '잊혀진', '피어린', '고요한', '뒤틀린', '검은', '부서진',
+  '침묵의', '녹슨', '허물어진', '창백한',
+];
+const NAME_B = [
+  '회랑', '성소', '계단', '안뜰', '묘역', '성문',
+  '탑신', '광장', '제단', '수로', '난간', '옥좌',
+  '중정', '망루', '아치', '지하도',
+];
+
+/**
+ * 손으로 짠 층(1~20)의 이름 — 생성 이름이 이걸 다시 쓰면 안 된다.
+ *
+ * 실측으로 **100층이 19층과 똑같이 '잿빛 회랑'**이었다. 어제 공들인 엔딩이
+ * 재탕 이름 위에서 뜨고 있었던 것이다. 5층('무너진 회랑')도 생성 어휘와 겹친다.
+ *
+ * ⚠️ 여기에 `floors.ts`를 import하면 **순환 참조**가 된다(floors.ts가 이 파일을 부른다).
+ * 그래서 겹치는 것만 문자열로 적는다 — 손으로 짠 층은 20개뿐이고 더 늘지 않으므로
+ * 목록이 낡을 위험보다 순환 참조가 더 나쁘다.
+ */
+const HANDCRAFTED_NAMES: readonly string[] = [
+  '무너진 관문', '재의 들판', '버려진 초소', '성문 앞', '무너진 회랑', '균열의 심장',
+  '잿바람 고개', '봉쇄된 계단', '파수병의 안뜰', '재의 묘역', '폭군의 성문', '무너지는 첨탑',
+  '무쇠 계단', '빛바랜 성소', '침묵의 제단', '군주의 앞뜰', '재의 강', '깨어진 왕좌',
+  '잿빛 회랑', '잿불의 옥좌',
+];
+
+/**
+ * 최상층 이름 — 생성에 맡기지 않는다.
+ *
+ * 100층은 엔딩이 뜨는 층이라 "무너진 중정" 같은 조합 이름이면 무게가 안 실린다.
+ * 보스 층 중 유일하게 손으로 준다(나머지 보스 층은 조합으로 충분하다).
+ */
+const SUMMIT_NAME = '잿불의 왕좌';
+
+/** 임무별 브리핑. 층마다 다르게 보이되 의미는 임무가 결정한다. */
+function briefingOf(kind: MissionKind, turns: number): string {
+  switch (kind) {
+    case 'subjugate': return '앞을 막은 것들을 베어라!';
+    case 'survive': return `지원이 올 때까지 ${turns}턴간 버텨라!`;
+    case 'defend': return `제단이 부서지기 전에 ${turns}턴을 사수하라!`;
+    case 'escort': return '동행자를 살린 채 길을 뚫어라!';
+    case 'escape': return `길이 무너진다. ${turns}턴간 버틴 뒤 이탈하라!`;
+    case 'seize': return '앞장선 것을 베어라! 나머지는 상대하지 않아도 된다.';
+  }
+}
+
+// ------------------------------------------------------------
+// 생성
+// ------------------------------------------------------------
+
+/**
+ * 생성 결과 캐시.
+ *
+ * 생성이 결정적이므로 캐싱해도 결과가 달라지지 않는다 — 순수하게 성능만을 위한 것이다.
+ * 중복 회피가 이전 층을 참조하므로 캐시 없이는 재귀가 **지수적으로 터진다**
+ * (한 층이 8개 이전 층을 부르고 그 각각이 또 8개 — 실제로 테스트가 5분 넘게 멈췄다).
+ */
+const enemyCache = new Map<number, EnemyDefId[]>();
+
+/**
+ * 적 구성을 뽑는다.
+ *
+ * 규칙(전부 이미 밟은 함정에서 나온 것이다):
+ *  - **도발 적을 반드시 하나 넣는다**(§5-11). 없으면 힐러가 먼저 죽어 승률이 0/100으로 굳는다.
+ *  - **같은 적을 3기 이상 넣지 않는다.** 같은 디버프가 겹치면 급격히 무너진다(§STEP 9).
+ *  - 보스 층은 보스 + 호위 1~2기.
+ */
+function pickEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[] {
+  const cached = enemyCache.get(floorId);
+  if (cached) return cached;
+
+  const result = computeEnemies(floorId, tier, isBoss);
+  enemyCache.set(floorId, result);
+  return result;
+}
+
+function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[] {
+  if (isBoss) {
+    /**
+     * 보스 + 호위.
+     *
+     * ⚠️ 호위를 pool에서만 뽑으면 **보스와 호위가 둘 다 breaker**인 층이 생긴다.
+     * 그러면 도발이 없어 힐러가 먼저 죽고 승률이 0/100으로 굳는다(§5-11).
+     * 실제로 50층이 그렇게 나왔다 — 도발 하나를 확정으로 넣는다.
+     * 보스전에서 도발 탱커는 "보스를 때릴 시간을 벌어야 한다"는 압박도 만든다.
+     */
+    const guardEscort = pickOne(tier.taunts, floorId, 11);
+    /**
+     * 한 구간에 보스 층이 둘인데(예: 30·40층) 보스도 도발도 같은 풀에서 나오므로
+     * 그대로 두면 **두 층이 완전히 같아진다**(실제로 30·40층이 동일했다).
+     * 구간 안에서 두 번째 보스 층에는 호위를 하나 더 붙여 차이를 만든다.
+     */
+    const secondBossOfTier = Math.floor((floorId - tier.from) / BOSS_EVERY) % 2 === 1;
+    if (!(floorId >= 61 || secondBossOfTier)) return [tier.boss, guardEscort];
+
+    /**
+     * 세 번째 자리는 앞선 보스 층과 겹치지 않게 고른다.
+     * 도발 풀이 2종뿐이라 그냥 두면 70·80층이 완전히 같아진다(실제로 그랬다).
+     */
+    const prevBoss = floorId - BOSS_EVERY;
+    const prevThird = prevBoss > HANDCRAFTED_UNTIL && tierOf(prevBoss) === tier
+      ? pickOne(tier.pool, prevBoss, 12)
+      : null;
+    let third = pickOne(tier.pool, floorId, 12);
+    for (let v = 1; v < 5 && third === prevThird; v++) {
+      third = pickOne(tier.pool, floorId, 12 + v * 37);
+    }
+    return [tier.boss, guardEscort, third];
+  }
+
+  const [lo, hi] = tier.count;
+  const n = lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1));
+
+  const build = (variant: number): EnemyDefId[] => {
+    const out: EnemyDefId[] = [pickOne(tier.taunts, floorId, 2 + variant * 100)];
+    const counts = new Map<EnemyDefId, number>([[out[0], 1]]);
+    for (let i = 1; i < n; i++) {
+      // 같은 적이 2기를 넘지 않도록 최대 3번 다시 뽑는다.
+      let cand = pickOne(tier.pool, floorId, 3 + i + variant * 100);
+      for (let retry = 0; retry < 3 && (counts.get(cand) ?? 0) >= 2; retry++) {
+        cand = pickOne(tier.pool, floorId, 30 + i * 7 + retry + variant * 100);
+      }
+      out.push(cand);
+      counts.set(cand, (counts.get(cand) ?? 0) + 1);
+    }
+    return out;
+  };
+
+  /**
+   * 최근 층과 같은 구성이면 다시 뽑는다.
+   *
+   * 해시만으로는 가까운 층이 겹치는 것을 막을 수 없다(실제로 32·39층이 같았다).
+   * 적 풀이 6~7종이라 80층 전체 무중복은 비둘기집 원리상 불가능하므로,
+   * **간격만 벌린다** — 멀리 떨어진 층끼리 같은 건 플레이 중에 알아채지 못한다.
+   *
+   * 앞선 층을 다시 생성해 비교하므로 여전히 결정적이다(재귀는 아니다 — build만 부른다).
+   */
+  const recent = new Set<string>();
+  for (let back = 1; back <= MIN_REPEAT_GAP && floorId - back > HANDCRAFTED_UNTIL; back++) {
+    const prev = floorId - back;
+    if (prev % BOSS_EVERY === 0) continue; // 보스 층은 별도 규칙
+    // 이전 층을 **실제로 다시 생성해** 비교한다. 근사치로 비교하면 놓친다
+    // (기수를 대충 맞췄더니 79·72층이 그대로 겹쳤다).
+    //
+    // ⚠️ 메모이즈가 없으면 지수적으로 터진다. 한 층이 8개 이전 층을 부르고
+    // 그 각각이 또 8개를 부른다 — 실제로 테스트가 5분 넘게 멈췄다.
+    // 캐시가 있으면 층당 한 번만 계산되므로 전체가 선형이다.
+    recent.add([...pickEnemies(prev, tierOf(prev), false)].sort().join(','));
+  }
+
+  for (let v = 0; v < 6; v++) {
+    const cand = build(v);
+    if (!recent.has([...cand].sort().join(','))) return cand;
+  }
+  return build(0);
+}
+
+
+/**
+ * 이름 캐시. `pickEnemies`와 같은 이유로 반드시 필요하다.
+ *
+ * 이름도 중복 회피를 위해 이전 층을 다시 계산하므로, 캐시가 없으면
+ * 한 층이 MIN_REPEAT_GAP개 이전 층을 부르고 그 각각이 또 부른다 —
+ * 적 구성에서 이미 밟은 지수 폭발(테스트 5분 정지)과 똑같은 함정이다.
+ */
+const nameCache = new Map<number, string>();
+
+/**
+ * 층 이름을 뽑는다.
+ *
+ * 적 구성과 **같은 규칙**이다(§MIN_REPEAT_GAP) — 가까운 층끼리만 겹치지 않게 하고
+ * 전체 무중복은 요구하지 않는다. 다만 이름은 적 구성과 달리 **손으로 짠 층과도**
+ * 겹치면 안 된다. 플레이어는 1~20층을 실제로 지나왔으므로 기억하고 있다.
+ */
+function pickName(floorId: number): string {
+  const cached = nameCache.get(floorId);
+  if (cached) return cached;
+
+  // 최상층은 조합에 맡기지 않는다.
+  if (floorId === TOWER_HEIGHT) {
+    nameCache.set(floorId, SUMMIT_NAME);
+    return SUMMIT_NAME;
+  }
+
+  const taken = new Set<string>(HANDCRAFTED_NAMES);
+  /**
+   * 장소어(NAME_B)는 **전체 이름보다 짧은 간격**으로만 막는다.
+   *
+   * 전체 이름만 비교하면 '창백한 옥좌'(21층)와 '얼어붙은 옥좌'(22층)가 나란히 통과한다 —
+   * 실측으로 옥좌가 80층 중 **11번**(기대 4.7) 나왔고 인접 반복이 10건이었다.
+   * 수식어만 다른 이름이 연달아 나오면 조합기라는 게 드러난다.
+   */
+  const nearbyPlaces = new Set<string>();
+  for (let back = 1; back <= NAME_REPEAT_GAP && floorId - back > HANDCRAFTED_UNTIL; back++) {
+    const prev = pickName(floorId - back);
+    taken.add(prev);
+    if (back <= PLACE_REPEAT_GAP) nearbyPlaces.add(placeOf(prev));
+  }
+
+  /**
+   * salt를 바꿔가며 다시 뽑는다. 두 축을 함께 굴려야 한다 —
+   * 수식어만 바꾸면 '…제단'이 연달아 나와 겹치지 않아도 단조롭게 읽힌다.
+   *
+   * 앞쪽 절반은 장소어 간격까지 지키고, 실패하면 후반부에서 그 조건을 푼다.
+   * 장소어가 16종뿐이라 간격을 항상 지킬 수는 없다 — **이름 중복(더 눈에 띈다)을
+   * 막는 쪽이 우선**이므로 완화 순서를 이렇게 잡았다.
+   */
+  for (let v = 0; v < 24; v++) {
+    const cand = `${pickOne(NAME_A, floorId, 41 + v * 13)} ${pickOne(NAME_B, floorId, 42 + v * 29)}`;
+    if (taken.has(cand)) continue;
+    if (v < 12 && nearbyPlaces.has(placeOf(cand))) continue;
+    nameCache.set(floorId, cand);
+    return cand;
+  }
+
+  // 24번 모두 실패하는 경우는 실측상 없지만, 결정적으로 끝나야 하므로 기본값을 둔다.
+  const fallback = `${pickOne(NAME_A, floorId, 41)} ${pickOne(NAME_B, floorId, 42)}`;
+  nameCache.set(floorId, fallback);
+  return fallback;
+}
+
+/** 층 하나를 만든다. 같은 floorId는 언제나 같은 결과. */
+export function generateFloor(floorId: number): FloorSpec {
+  const tier = tierOf(floorId);
+  const isBoss = floorId % BOSS_EVERY === 0;
+
+  const slot = ((floorId - 1) % CYCLE.length + CYCLE.length) % CYCLE.length;
+  const kind: MissionKind = isBoss ? 'subjugate' : CYCLE[slot];
+
+  const enemyIds = pickEnemies(floorId, tier, isBoss);
+
+  // 요구 턴은 층이 깊을수록 조금씩 늘어난다. 너무 늘리면 지루해지므로 상한을 둔다.
+  const turns = Math.min(10, 7 + Math.floor(floorId / 40));
+
+  const mission: Mission = {
+    kind,
+    ...(kind === 'survive' || kind === 'defend' || kind === 'escape' ? { turns } : {}),
+    ...(kind === 'seize' ? { targetIndex: 0 } : {}),
+    briefing: briefingOf(kind, turns),
+  };
+
+  const guards: GuardDef[] | undefined =
+    kind === 'defend'
+      ? [{ id: 'depot', name: '제단', kind: 'objective', hp: tier.guardHp, def: tier.guardDef }]
+      : kind === 'escort'
+        ? [{ id: 'envoy', name: '동행자', kind: 'npc', hp: tier.guardHp, def: tier.guardDef }]
+        : undefined;
+
+  return {
+    id: floorId,
+    name: pickName(floorId),
+    scene: pickOne(SCENES, floorId, 43),
+    mission,
+    enemyIds,
+    ...(guards ? { guards } : {}),
+    ...(isBoss ? { isBoss: true } : {}),
+  };
+}

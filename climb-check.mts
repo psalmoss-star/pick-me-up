@@ -1,0 +1,201 @@
+/**
+ * 연속 등반 측정 — 층간 HP 유지의 영향과 숙소 회복률을 잰다.
+ *
+ * `npm run sim`은 매 층을 currentHp:0(만피)으로 **독립** 측정하므로
+ * 층간 HP 유지를 켜도 표가 미동도 하지 않는다 (HANDOFF §5-7/§5-9와 같은 사각지대).
+ * 여기서는 1층부터 실제로 이어서 오르며 잔여 HP를 다음 층으로 넘긴다.
+ *
+ * 목적: 숙소(층간 회복) 수치를 정하기 위해, 회복률별로 등반이 어디서 끊기는지 본다.
+ */
+import { runEncounter } from './src/game/encounter';
+import { createRng } from './src/game/rng';
+import { klassFor, statsOfInstance } from './src/game/stats';
+import { gameData, FLOORS } from './src/game/data';
+import { HERO } from './src/game/data/sample';
+import { restHealRate, FACILITY_MAX_LEVEL } from './src/game/data/facilities';
+import { floorRewards } from './src/game/data/floors';
+import { gainExp } from './src/game/progression';
+import type { HeroDefId, HeroInstId, HeroInstance, Star } from './src/game/types';
+
+const hero = (
+  defId: HeroDefId, star: Star, level: number, n: number,
+): HeroInstance => ({
+  instId: `${defId}#${n}` as HeroInstId, defId, star, klass: klassFor(star), level, exp: 0,
+  currentHp: 0, isDead: false, acquiredAtFloor: 1,
+});
+
+/**
+ * 로스터 = 출전 3인 + 대기 2인.
+ *
+ * 앞의 3명은 sim.ts의 기준 파티와 **같은 구성이어야** 층별 표와 비교가 성립한다.
+ * 뒤의 2명은 실제 게임의 대기 인원(초기 로스터가 5인, 정원은 3)을 반영한 것으로,
+ * 사망자가 나왔을 때 빈자리를 채운다. 대기 인원 없이 재면 사망 한 번이 곧 실패가 되어
+ * 완주율이 실제보다 훨씬 낮게 나온다(중층 0% → 이게 원인이었다).
+ */
+const party = (): HeroInstance[] => [
+  hero(HERO.ashen, 2, 15, 1),
+  hero(HERO.bulwark, 2, 15, 2),
+  hero(HERO.tide, 3, 20, 3),
+  hero(HERO.gale, 2, 15, 4),
+  hero(HERO.bolt, 2, 15, 5),
+];
+
+const midParty = (): HeroInstance[] => [
+  hero(HERO.ashen, 3, 30, 1),
+  hero(HERO.bulwark, 3, 30, 2),
+  hero(HERO.tide, 3, 35, 3),
+  hero(HERO.gale, 3, 30, 4),
+  hero(HERO.bolt, 3, 30, 5),
+];
+
+const highParty = (): HeroInstance[] => [
+  hero(HERO.ashen, 4, 50, 1),
+  hero(HERO.bulwark, 4, 50, 2),
+  hero(HERO.tide, 4, 55, 3),
+  hero(HERO.gale, 4, 50, 4),
+  hero(HERO.bolt, 4, 50, 5),
+];
+
+const maxHpOf = (h: HeroInstance): number =>
+  statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+
+/**
+ * 파티 정원. 원본은 `screens/BaseScreen.tsx`의 PARTY_LIMIT이지만 여기서 import하면
+ * React 화면이 딸려와 tsx 스크립트가 죽는다(§5-19: import.meta.glob은 Vite 전용).
+ * CLI는 game/ 순수 계층만 건드려야 하므로 값을 복제한다 — 바뀌면 함께 고칠 것.
+ */
+const PARTY_LIMIT = 3;
+
+/**
+ * 연속으로 오른다. 패배하거나 구간 끝을 깰 때까지.
+ *
+ * @param healRate 층 사이 회복 비율(최대 HP 대비). 0 = 회복 없음.
+ * @param maxFloor 이 구간에서 깰 층 수
+ * @param from 시작 층 인덱스(0 = 1층). 중층/상층 구간을 재려면 옮긴다.
+ * @param makeParty 구간별 기준 파티. sim.ts와 같은 구성이어야 비교가 성립한다.
+ * @returns 클리어한 층 수
+ */
+function climb(
+  seed: number, healRate: number, maxFloor: number,
+  from = 0, makeParty: () => HeroInstance[] = party,
+): number {
+  let roster = makeParty();
+
+  for (let n = 0; n < maxFloor; n++) {
+    // i는 FLOORS의 절대 인덱스, n은 이 구간에서 깬 층 수다.
+    // 반환값은 반드시 n이어야 한다 — i를 돌려주면 from>0인 구간에서
+    // 첫 층에 지고도 from만큼 깬 것으로 잡힌다.
+    const i = from + n;
+    const alive = roster.filter((h) => !h.isDead);
+    if (alive.length === 0) return n;
+
+    /**
+     * 파티는 정원(3)까지만 나간다 — 실제 게임과 같아야 측정이 성립한다.
+     *
+     * ⚠️ 예전엔 생존자를 전부 내보냈다. 그래서 한 명이라도 죽으면 그 다음 층을
+     * **2인으로** 치렀고, 8층 기준 2인 승률은 0~4%다(3인은 78%). 즉 사망 한 번이
+     * 곧 구간 실패였고, 이게 중층 완주율 0%의 진짜 원인이었다 — HP도 exp도 아니었다.
+     * 실제 플레이는 대기 인원으로 빈자리를 채우므로 그것을 모델에 넣는다.
+     *
+     * 선발 기준은 HP 비율이 높은 순 — 다친 영웅을 쉬게 하는 자연스러운 플레이다.
+     */
+    const sorted = [...alive].sort((a, b) => {
+      const ra = (a.currentHp === 0 ? maxHpOf(a) : a.currentHp) / maxHpOf(a);
+      const rb = (b.currentHp === 0 ? maxHpOf(b) : b.currentHp) / maxHpOf(b);
+      return rb - ra;
+    });
+    const sortie = sorted.slice(0, PARTY_LIMIT);
+
+    const r = runEncounter({
+      party: sortie, floor: FLOORS[i], data: gameData,
+      rng: createRng(seed * 1000 + i),
+    });
+    if (r.outcome !== 'victory') return n;
+
+    const survived = new Map(r.survivors.map((s) => [s.instId, s.currentHp]));
+    const dead = new Set<string>(r.casualties);
+    // 참전 보상 경험치. runStore.finish()와 같은 규칙이어야 측정이 실제 플레이와 맞는다.
+    const exp = floorRewards(FLOORS[i], r.turnsElapsed).exp;
+    roster = roster.map((h) => {
+      if (dead.has(h.instId)) return { ...h, isDead: true };
+      const hp = survived.get(h.instId);
+      if (hp == null) return h;
+      const grown = gainExp(h, exp, gameData.starScaling).hero;
+      const max = maxHpOf(grown);
+      return { ...grown, currentHp: Math.min(max, hp + Math.round(max * healRate)) };
+    });
+  }
+  return maxFloor;
+}
+
+const N = 300;
+const MAX = 6; // 저층 파티이므로 6층까지
+
+/**
+ * 1. 실제 숙소 레벨별 등반 — 시설 투자가 등반에 얼마나 기여하는가.
+ *    수치는 data/facilities.ts에서 읽는다. 여기서 다시 적으면 튜닝이 갈라진다.
+ */
+console.log('\n  숙소 레벨별 연속 등반 (저층 파티, 300회)\n');
+console.log('  숙소      | 회복률 | 평균 도달 | 6층 완주');
+for (let lv = 0; lv <= FACILITY_MAX_LEVEL; lv++) {
+  const rate = restHealRate(lv);
+  let total = 0, full = 0;
+  for (let s = 0; s < N; s++) {
+    const reached = climb(s, rate, MAX);
+    total += reached;
+    if (reached >= MAX) full++;
+  }
+  console.log(
+    `  Lv.${lv}     | ${`${(rate * 100).toFixed(0)}%`.padStart(6)} | ` +
+    `${(total / N).toFixed(2).padStart(9)} | ${((full / N) * 100).toFixed(0).padStart(7)}%`,
+  );
+}
+
+/**
+ * 2. 참고선 — 회복 0%(층간 유지만)와 전회복(시설 도입 전 동작).
+ *    Lv.3이 전회복에 근접해야 "기존 밸런스가 만렙 기준선으로 보존된다"가 성립한다.
+ */
+console.log('\n  참고선\n');
+console.log('  구분      | 회복률 | 평균 도달 | 6층 완주');
+for (const [name, rate] of [['회복없음', 0], ['전회복', 1]] as const) {
+  let total = 0, full = 0;
+  for (let s = 0; s < N; s++) {
+    const reached = climb(s, rate, MAX);
+    total += reached;
+    if (reached >= MAX) full++;
+  }
+  console.log(
+    `  ${name.padEnd(8)}| ${`${(rate * 100).toFixed(0)}%`.padStart(6)} | ` +
+    `${(total / N).toFixed(2).padStart(9)} | ${((full / N) * 100).toFixed(0).padStart(7)}%`,
+  );
+}
+/**
+ * 3. 구간별 연속 등반 — sim이 구조적으로 못 재는 영역.
+ *
+ * sim은 매 층을 만피로 **독립** 측정하므로 "6층을 깨고 그 HP로 7층에 들어간다"를
+ * 영영 못 본다(§5-13). 층별 승률이 전부 합격이어도 구간을 이어 오르면 무너질 수 있다.
+ *
+ * 숙소는 만렙(Lv.3)을 가정한다 — 상층에 도달한 플레이어가 시설을 안 올렸을 리 없고,
+ * 여기서 보려는 것은 시설 효과가 아니라 **구간 자체가 이어서 오를 수 있는가**다.
+ */
+console.log('\n  구간별 연속 등반 (숙소 Lv.3, 300회)\n');
+console.log('  구간              | 평균 도달 | 완주율');
+const SEGMENTS = [
+  { name: '저층 1~6', from: 0, count: 6, make: party },
+  { name: '중층 7~12', from: 6, count: 6, make: midParty },
+  { name: '상층 13~20', from: 12, count: 8, make: highParty },
+] as const;
+for (const seg of SEGMENTS) {
+  const rate = restHealRate(FACILITY_MAX_LEVEL);
+  let total = 0, full = 0;
+  for (let s = 0; s < N; s++) {
+    const reached = climb(s, rate, seg.count, seg.from, seg.make);
+    total += reached;
+    if (reached >= seg.count) full++;
+  }
+  console.log(
+    `  ${seg.name.padEnd(14)}| ${(total / N).toFixed(2).padStart(9)} / ${seg.count} | ` +
+    `${((full / N) * 100).toFixed(0).padStart(5)}%`,
+  );
+}
+console.log('');
