@@ -7,7 +7,7 @@
  * 매핑은 후자만 알고 있어서 전투 중 황녀가 성문으로 그려졌다.
  */
 import { describe, expect, it } from 'vitest';
-import { enemyArtOf, guardArtOf, heroArtOf } from './artMap';
+import { enemyArtOf, guardArtOf, heroArtOf, HERO_ART } from './artMap';
 import { FLOORS } from '../game/data/floors';
 import { enemies, heroes } from '../game/data/sample';
 
@@ -35,9 +35,24 @@ describe('enemyArtOf', () => {
 });
 
 describe('heroArtOf', () => {
-  it('정의된 모든 영웅이 고유한 아트를 갖는다', () => {
+  /*
+    ⚠️ 예전에는 "영웅마다 아트가 고유하다"를 검사했다. 유형이 5종이고
+    실루엣도 5종이라 그때는 성립했지만, 유형을 12종으로 늘리면서 깨졌다 —
+    실루엣이 5개뿐이라 **겹치는 것이 정상**이다.
+
+    다만 원래 의도(누락되면 조용히 전부 검사가 된다)는 그대로 지켜야 한다.
+    그래서 "고유한가" 대신 **"매핑표에 명시돼 있는가"**를 검사한다.
+    이게 진짜 잡고 싶었던 것이다.
+  */
+  it('정의된 모든 영웅이 매핑표에 명시돼 있다', () => {
+    const missing = Object.keys(heroes).filter((id) => !(id in HERO_ART));
+    expect(missing, `매핑 누락: ${missing.join(', ')}`).toHaveLength(0);
+  });
+
+  it('실루엣이 한쪽으로 쏠리지 않는다', () => {
+    // 전부 'sword'로 떨어지는 사고를 잡는다 — 폴백 누락의 실제 증상이다.
     const arts = Object.keys(heroes).map(heroArtOf);
-    expect(new Set(arts).size).toBe(Object.keys(heroes).length);
+    expect(new Set(arts).size).toBeGreaterThanOrEqual(4);
   });
 });
 

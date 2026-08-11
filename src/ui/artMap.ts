@@ -8,12 +8,29 @@ import type { HeroArtKind } from './art/HeroArt';
 import type { EnemyArtKind } from './art/EnemyArt';
 import type { GuardArtKind } from './art/GuardArt';
 
-const HERO_ART: Record<string, HeroArtKind> = {
+/**
+ * ⚠️ 새 영웅을 추가하면 여기도 반드시 채울 것.
+ * 빠뜨리면 `?? 'sword'` 폴백에 걸려 **조용히 전부 검사가 된다** —
+ * 유형을 늘린 의미가 사라지는데 에러는 안 난다(§5-16과 같은 종류의 함정).
+ *
+ * 실루엣은 5종뿐이라 겹칠 수밖에 없다. 겹칠 때는 **역할이 다른 쪽**으로 묶는다
+ * (같은 지팡이라도 힐러와 딜러는 카드 색·별이 달라 구분된다).
+ * 실루엣 자체를 늘리는 것은 HeroArt.tsx 작업이라 별건이다.
+ */
+export const HERO_ART: Record<string, HeroArtKind> = {
   h_ashen: 'sword',
   h_bulwark: 'shield',
   h_tide: 'staff',
   h_gale: 'dagger',
   h_bolt: 'greatsword',
+  // 확장분
+  h_thorn: 'dagger',      // 밀렵꾼 — 단검
+  h_cinder: 'staff',      // 술사 — 지팡이
+  h_hush: 'dagger',       // 숨을 지우는 자 — 단검
+  h_ward: 'staff',        // 결계 — 지팡이
+  h_banner: 'greatsword', // 대열을 세운 자 — 대검
+  h_leech: 'staff',       // 술사 계열
+  h_anvil: 'shield',      // 벽 — 방패
 };
 
 const ENEMY_ART: Record<string, EnemyArtKind> = {

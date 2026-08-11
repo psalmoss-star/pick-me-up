@@ -110,6 +110,37 @@ describe('개체는 서로 다른 인물이다', () => {
   });
 
   /**
+   * "이름만 바뀌고 캐릭터는 돌려막기"를 막는다.
+   *
+   * 개체 이름은 매번 새로 생성되므로(identity.ts) **이름만 보면 항상 다양해 보인다.**
+   * 실제 다양성은 defId(유형)에 있는데, 유형이 5종뿐이던 시절에는 소환을 반복하면
+   * 같은 초상·역할·스킬이 이름만 바꿔 돌아왔다 — 사용자가 실제로 지적한 문제다.
+   *
+   * 유형 수를 다시 줄이면 이 테스트가 깨진다. 그게 목적이다.
+   */
+  it('충분히 소환하면 도감의 유형 대부분이 등장한다', () => {
+    /*
+      ⚠️ 시드를 매번 바꿔야 한다. 이 파일의 기본 store()는 `() => 42`로
+      **항상 같은 시드**를 주므로 120번을 뽑아도 같은 난수열을 반복한다
+      (그 상태로는 12종 중 6종만 나왔다 — 게임 결함이 아니라 시드 고정 탓이다).
+      실제 플레이는 매 소환마다 새 시드를 쓰므로(runStore의 defaultSeedSource)
+      여기서도 그렇게 만들어야 진짜 풀 다양성을 잰다.
+    */
+    let seed = 1;
+    const s = createRunStore(() => seed++);
+    rich(s);
+    for (let i = 0; i < 200; i++) s.getState().summon('free', i);
+
+    const seen = new Set(s.getState().roster.map((h) => h.defId));
+    const total = Object.keys(gameData.heroes).length;
+
+    // 균등 추첨이라 200회면 사실상 전부 나온다.
+    // 유형을 다시 5종으로 줄이면 total 조건에서 바로 걸린다.
+    expect(total).toBeGreaterThanOrEqual(10);
+    expect(seen.size, `${seen.size}/${total} 유형만 등장`).toBeGreaterThan(total * 0.8);
+  });
+
+  /**
    * 퍼머데스. 죽은 자와 같은 이름의 영웅이 소환되면 그 무덤 기록이 무의미해진다.
    * 사용자는 **초상화** 재사용만 허용했다.
    */
