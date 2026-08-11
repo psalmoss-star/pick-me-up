@@ -6,12 +6,14 @@ import { ForgeScreen } from './screens/ForgeScreen';
 import { FacilityScreen } from './screens/FacilityScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { SmithScreen } from './screens/SmithScreen';
+import { GraveScreen } from './screens/GraveScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
+import { loadLegacy } from './stores/legacy';
 import { floorAt } from './game/data';
 import { isFinalFloor } from './game/data/floors';
 import {
@@ -21,7 +23,7 @@ import type { HeroInstance } from './game/types';
 
 type Screen =
   | 'base' | 'brief' | 'battle' | 'result'
-  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith';
+  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave';
 
 /** 모바일 전용. 데스크톱에서도 이 폭의 세로 화면을 중앙에 띄운다. */
 const MOBILE_WIDTH = 480;
@@ -33,6 +35,8 @@ export default function App() {
    */
   const [screen, setScreen] = useState<Screen>('base');
   const [detail, setDetail] = useState<HeroInstance | null>(null);
+  // 무덤은 저장소에서 읽으므로 화면을 열 때 최신값을 가져온다.
+  const [legacy, setLegacy] = useState(() => loadLegacy());
 
   const floorIndex = useRunStore((s) => s.floorIndex);
   const towerCleared = useRunStore((s) => s.towerCleared);
@@ -50,6 +54,8 @@ export default function App() {
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
+  const runNo = useRunStore((s) => s.runNo);
+  const startNewRun = useRunStore((s) => s.startNewRun);
   const summon = useRunStore((s) => s.summon);
   const markLegendarySeen = useRunStore((s) => s.markLegendarySeen);
   const fuse = useRunStore((s) => s.fuse);
@@ -164,8 +170,18 @@ export default function App() {
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
             deathCount={deathCount}
-            // TODO(Task 5): 'grave' 화면 라우팅 연결 — GraveScreen 생성 후 setScreen('grave')로 교체
-            onOpenGrave={() => {}}
+            onOpenGrave={() => { setLegacy(loadLegacy()); setScreen('grave'); }}
+          />
+        )}
+        {screen === 'grave' && (
+          <GraveScreen
+            legacy={legacy}
+            runNo={runNo}
+            floorIndex={floorIndex}
+            deathCount={deathCount}
+            towerCleared={towerCleared}
+            onStartNewRun={() => { startNewRun(); setLegacy(loadLegacy()); setScreen('base'); }}
+            onBack={() => setScreen('facility')}
           />
         )}
         {screen === 'shop' && (
