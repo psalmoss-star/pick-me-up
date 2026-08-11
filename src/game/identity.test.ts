@@ -59,7 +59,7 @@ describe('이름 생성', () => {
 
   it('시드가 다르면 대체로 다른 이름이 나온다', () => {
     const names = new Set(Array.from({ length: 50 }, (_, s) => gen(s).name));
-    // 2,904 조합에서 50개를 뽑으면 대부분 달라야 한다
+    // 3,185 조합에서 50개를 뽑으면 대부분 달라야 한다
     expect(names.size).toBeGreaterThan(40);
   });
 });
@@ -199,17 +199,24 @@ describe('회차 너머 이름 봉인', () => {
     expect(takenNames([], gameData.heroes).size).toBe(0);
   });
 
-  it('봉인된 이름은 생성되지 않는다', () => {
+  it('봉인된 이름은 생성되지 않는다 (재추첨 분기가 실제로 실행됨을 증명)', () => {
     /*
-      전수 확인: 어휘가 2,904조합이라 확률로는 못 잡는다.
-      봉인 집합에 이름 하나를 넣고 여러 번 생성해 그 이름이 안 나오는지 본다.
+      단순히 "여러 시드를 돌려서 봉인된 이름이 안 나온다"는 것만으로는 부족하다 —
+      애초에 그 시드에서 봉인된 이름이 1차 후보로 나오지 않으면 재추첨 분기를
+      한 번도 타지 않고도 테스트가 통과해버린다 (sealed 유니온을 통째로 지워도 그린).
+
+      그래서 seed 0의 "봉인 없는 1차 후보"가 정확히 무엇인지 먼저 확정하고
+      (createRng(0) → generateIdentity({ taken: new Set() }) === '재의 도윤'),
+      바로 그 이름을 seal한 뒤 같은 seed로 다시 생성해 **결과가 달라지는지**를 본다.
+      결과가 다르면 taken.has()가 그 1차 후보를 걸러내고 재추첨 루프가 도는
+      경로가 실제로 실행됐다는 뜻이다.
     */
-    const banned = '북풍의 리엔';
-    const sealed = new Set([banned]);
-    for (let i = 0; i < 200; i++) {
-      const rng = createRng(i);
-      const id = generateIdentity({ rng, taken: takenNames([], gameData.heroes, sealed) });
-      expect(id.name).not.toBe(banned);
-    }
+    const unsealed = generateIdentity({ rng: createRng(0), taken: new Set() });
+    expect(unsealed.name).toBe('재의 도윤'); // 1차 후보 고정 — 이 값이 바뀌면 아래 검증의 전제가 깨진다
+
+    const sealed = takenNames([], gameData.heroes, new Set([unsealed.name]));
+    const result = generateIdentity({ rng: createRng(0), taken: sealed });
+
+    expect(result.name).not.toBe(unsealed.name);
   });
 });

@@ -50,7 +50,7 @@ export function generateIdentity(args: {
   /*
     여기까지 왔다면 어휘가 거의 소진됐다는 뜻이다.
     순수 함수는 반드시 종료해야 하므로 무한 재추첨 대신 접미사로 강제 분리한다.
-    2,904 조합에 로스터 수십 명이면 실제로는 도달하지 않는 경로다.
+    3,185 조합에 로스터 수십 명이면 실제로는 도달하지 않는 경로다.
   */
   const base = `${rngPick(rng, MODIFIERS)}의 ${rngPick(rng, GIVEN_NAMES)}`;
   for (let n = 2; ; n++) {
