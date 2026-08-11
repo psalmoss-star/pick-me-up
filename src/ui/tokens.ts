@@ -16,6 +16,37 @@ export const T = {
   dim: '#8A8496',
 } as const;
 
+/**
+ * 마을(대기실) 전용 팔레트 — 사이드뷰 배경화.
+ *
+ * 왜 T와 따로 두는가: 마을은 유일하게 "밤하늘 아래 거점"을 그리는 장면이고
+ * 보라/인디고 계열이 필요하다. 이걸 T에 섞으면 카드·전투·패널까지 물들어
+ * 등급 표현(STAR_TIERS)과 경쟁한다. 장면 전용 색은 여기 모아둔다.
+ *
+ * 규칙은 그대로다 — 색은 tokens 밖에서 하드코딩하지 않는다.
+ */
+export const V = {
+  skyTop: '#141031',
+  skyBottom: '#1E1748',
+  moon: '#F2EDD8',
+  ridgeFar: '#221A4A',
+  ridgeNear: '#2A2158',
+  ground: '#2E2560',
+  groundEdge: '#3A2F72',
+  wall: '#3B2F6E',
+  wallDark: '#2A2150',
+  roofWarm: '#4A3A32',
+  roofCool: '#2F5D52',
+  roofShop: '#C4522E',
+  window: '#F0A93B',
+  windowAlt: '#4ED3A0',
+  windowShop: '#F0A882',
+  tower: '#453A80',
+  towerDark: '#332A63',
+  accent: '#8B7BE8',
+  label: '#2A2350',
+} as const;
+
 export type Tone = 'normal' | 'rare' | 'warning' | 'death';
 
 export const TONES: Record<Tone, { line: string; glow: string; text: string }> = {

@@ -12,7 +12,8 @@ import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
-import type { BaseMapSpot } from './ui/BaseMap';
+import type { VillageSpot } from './ui/VillageScene';
+import type { TabKey } from './ui/TabBar';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
@@ -107,17 +108,42 @@ export default function App() {
    * 소환소·상점·무덤은 각자 화면이 따로 있다.
    * 무덤은 진입 시 무덤 파일을 다시 읽는다 — 다른 화면에서 회차가 끝났을 수 있다.
    */
-  const goToSpot = (spot: BaseMapSpot) => {
+  const goToSpot = (spot: VillageSpot) => {
     switch (spot) {
       case 'summon': setScreen('summon'); break;
       case 'shop': setScreen('shop'); break;
       case 'grave': setGraveFrom('base'); setLegacy(loadLegacy()); setScreen('grave'); break;
-      // 합성소는 제단(합성/승급), 무기창고는 대장간(강화)이 실제 동작이다.
-      case 'forge': setScreen('forge'); break;
+      // 마을의 '대장간' 건물은 무기창고(armory) 자리이고 실제 동작은 강화다.
       case 'armory': setScreen('smith'); break;
-      // 숙소·훈련소는 고유 화면이 없다 — 시설 화면에서 레벨을 올린다.
+      case 'forge': setScreen('forge'); break;
+      // 여관·시설 — 시설 화면에서 레벨을 올린다.
       case 'rest':
       case 'training': setScreen('facility'); break;
+      /*
+        탑 — 등반 시작. 파티가 비었으면 브리핑으로 보내지 않는다.
+        VillageScene이 잠긴 모습으로 그리지만 클릭 자체는 들어오므로 여기서도 막는다
+        (그림만 믿고 가드를 빼면 나중에 스타일이 바뀔 때 조용히 뚫린다).
+      */
+      case 'tower':
+        if (party.length > 0 && !towerCleared) setScreen('brief');
+        break;
+    }
+  };
+
+  /** 하단 탭 → 화면. 전부 실제로 열리는 곳이어야 한다. */
+  const goToTab = (tab: TabKey) => {
+    switch (tab) {
+      case 'party':
+      case 'heroes': setScreen('roster'); break;
+      // 가방 = 장비를 다루는 곳. 현재는 대장간(강화·착용)이 그 역할이다.
+      case 'bag': setScreen('smith'); break;
+      /*
+        퀘스트 = 이번 층의 돌파 과제. 전용 화면이 없어 브리핑을 재사용한다 —
+        브리핑이 이미 미달성 과제를 목록으로 보여주고 '돌아가기'로 나올 수 있다.
+        ⚠️ 이 화면에는 '진입'(전투 시작)도 함께 있다. 과제만 보는 화면이 필요해지면
+        그때 분리할 것 — 지금 빈 화면을 새로 만드는 것보다 낫다.
+      */
+      case 'quest': setScreen('brief'); break;
     }
   };
 
@@ -149,7 +175,15 @@ export default function App() {
   return (
     <div
       style={{
-        // minHeight는 index.css의 #root가 100dvh로 처리한다 (인라인은 폴백 선언 불가)
+        /*
+          minHeight는 index.css의 #root가 100dvh로 처리한다 (인라인은 폴백 선언 불가).
+          ⚠️ 다만 자식이 `minHeight: inherit`로 받아쓰려면 여기에 실제 값이 있어야 한다 —
+          #root에만 있으면 이 층에서 0px로 끊겨 하단 고정 레이아웃이 화면을 못 채운다
+          (마을 화면 탭 바 아래에 133px 빈 공간이 생겼던 원인).
+        */
+        minHeight: 'inherit',
+        display: 'flex',
+        flexDirection: 'column',
         background: `radial-gradient(80% 60% at 50% 0%,#12101C 0%,${T.void} 70%)`,
         color: T.text,
         fontFamily: "'Nanum Myeongjo','Noto Serif KR',serif",
@@ -164,7 +198,11 @@ export default function App() {
         style={{
           maxWidth: MOBILE_WIDTH,
           margin: '0 auto',
-          minHeight: 'inherit',
+          width: '100%',
+          // 부모가 flex column이므로 남은 높이를 전부 받는다 — 화면 채우기의 실제 수단
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
           paddingLeft: 'env(safe-area-inset-left)',
           paddingRight: 'env(safe-area-inset-right)',
         }}
@@ -172,14 +210,12 @@ export default function App() {
         {screen === 'base' && (
           <BaseScreen
             floor={floor}
-            floorIndex={floorIndex}
             roster={roster}
             party={party}
             facilities={facilities}
-            onEnter={() => setScreen('brief')}
-            onInspect={setDetail}
             onGoTo={goToSpot}
-            onOpenRoster={() => setScreen('roster')}
+            onTab={goToTab}
+            pendingQuestCount={pendingQuests(floor.id, claimedQuests).length}
             towerCleared={towerCleared}
             deathCount={deathCount}
           />
