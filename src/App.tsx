@@ -92,11 +92,6 @@ export default function App() {
     if (startBattle()) setScreen('battle');
   };
 
-  const finish = () => {
-    finishBattle();
-    setScreen('base');
-  };
-
   /**
    * 결과 화면에 보여줄 과제 달성 목록을 **미리** 판정한다.
    *
@@ -265,7 +260,13 @@ export default function App() {
               쓰므로 결과가 갈리지 않는다.
             */
             questGrants={previewQuests()}
-            onFinish={finish}
+            onFinish={() => {
+              const wasFinal = isFinalFloor(floorIndex);
+              finishBattle();
+              // 엔딩 직후에는 무덤으로. "기록을 남긴다"가 가리키는 곳이다.
+              if (wasFinal) { setLegacy(loadLegacy()); setScreen('grave'); }
+              else setScreen('base');
+            }}
           />
         )}
       </div>
