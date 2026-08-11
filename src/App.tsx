@@ -261,10 +261,18 @@ export default function App() {
             */
             questGrants={previewQuests()}
             onFinish={() => {
+              /*
+                무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야
+                한다 — 최상층에서 져도 wasFinal만 보고 무덤으로 보내면, 패배 결과 화면(엔딩 패널
+                없음, "대기실로" 버튼)을 보고 눌렀는데 무덤이 뜨는 모순이 생긴다. 최상층 패배는
+                재도전이 가능해야 하므로 대기실로 돌려보내야 한다.
+                finishBattle()이 result를 지우므로 승패도 wasFinal과 함께 미리 읽어둔다.
+              */
               const wasFinal = isFinalFloor(floorIndex);
+              const wasVictory = result.outcome === 'victory';
               finishBattle();
               // 엔딩 직후에는 무덤으로. "기록을 남긴다"가 가리키는 곳이다.
-              if (wasFinal) { setLegacy(loadLegacy()); setScreen('grave'); }
+              if (wasFinal && wasVictory) { setLegacy(loadLegacy()); setScreen('grave'); }
               else setScreen('base');
             }}
           />
