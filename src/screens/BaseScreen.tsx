@@ -16,8 +16,6 @@ export interface BaseScreenProps {
   onGoTo: (spot: VillageSpot) => void;
   /** 하단 탭 */
   onTab: (tab: TabKey) => void;
-  /** 미달성 과제 수 — 퀘스트 탭 배지 */
-  pendingQuestCount?: number;
   /** 최상층을 이미 클리어했는가 — 더 오를 층이 없다 */
   towerCleared?: boolean;
   /**
@@ -43,7 +41,7 @@ export interface BaseScreenProps {
  */
 export function BaseScreen({
   floor, roster, party, facilities,
-  onGoTo, onTab, pendingQuestCount = 0,
+  onGoTo, onTab,
   towerCleared = false, deathCount,
 }: BaseScreenProps) {
   const alive = roster.filter((h) => !h.isDead);
@@ -94,7 +92,7 @@ export function BaseScreen({
         />
       </div>
 
-      <TabBar onSelect={onTab} badges={{ quest: pendingQuestCount }} />
+      <TabBar onSelect={onTab} />
     </div>
   );
 }

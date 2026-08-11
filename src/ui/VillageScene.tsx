@@ -18,7 +18,13 @@ import { FACILITY_MAX_LEVEL, type FacilityKind } from '../game/data/facilities';
  * 색만 바꾸면 Lv.1과 Lv.3이 구분되지 않는다.
  */
 
-/** 마을에서 고를 수 있는 자리. */
+/**
+ * 마을에서 고를 수 있는 자리.
+ *
+ * 시설 4종(숙소·훈련소·합성소·무기창고)이 **전부 개별 건물**이다.
+ * 예전에는 '여관·시설' 하나에 4종이 숨어 있어서, 마을을 봐도 무엇을
+ * 지을 수 있는지 알 수 없었다 — 배치도의 목적에 어긋난다.
+ */
 export type VillageSpot = FacilityKind | 'grave' | 'summon' | 'shop' | 'tower';
 
 export interface VillageSceneProps {
@@ -37,13 +43,19 @@ export interface VillageSceneProps {
  * 처음에 500으로 뒀다가 지면 아래 빈 보라 영역이 90px 남았다.
  */
 const W = 400;
-const H = 450;
+const H = 470;
 
-/** 지면 높이 — 건물들이 이 선 위에 선다. */
-const GROUND_Y = 360;
+/**
+ * 건물이 두 줄로 선다 — 시설 4종 + 상점 + 무덤을 한 줄에 넣으면
+ * 폭 375px에서 라벨이 서로 겹친다(부감도 시절에 이미 겪었다).
+ * 뒷줄은 언덕 위, 앞줄은 지면. 원근이 생겨 마을이 깊어 보이는 부수 효과도 있다.
+ */
+const BACK_Y = 286;
+const GROUND_Y = 384;
 
-/** 건물 라벨이 놓이는 줄 — 지면 안쪽. */
-const LABEL_Y = 402;
+/** 각 줄의 라벨 높이 — 건물 바로 아래. */
+const BACK_LABEL_Y = 306;
+const FRONT_LABEL_Y = 420;
 
 /**
  * 건물 한 채. 레벨에 따라 창문이 늘어난다.
@@ -228,47 +240,55 @@ export function VillageScene({
         <path d="M330 78 A30 30 0 1 1 300 48 A24 24 0 1 0 330 78 Z" fill={V.moon} opacity=".92" />
 
         {/* 먼 산 — 지평선을 만들어 '세계 안'이라는 인상을 준다 */}
-        <path d="M0 285 L70 190 L140 285 Z" fill={V.ridgeFar} />
-        <path d="M96 285 L186 180 L276 285 Z" fill={V.ridgeFar} />
-        <rect x="0" y="285" width={W} height={GROUND_Y - 285} fill={V.ridgeNear} />
+        <path d="M0 226 L64 150 L128 226 Z" fill={V.ridgeFar} />
+        <path d="M92 226 L170 140 L248 226 Z" fill={V.ridgeFar} />
 
-        {/* 지면 */}
+        {/* 뒷줄 언덕 */}
+        <rect x="0" y="226" width={W} height={GROUND_Y - 226} fill={V.ridgeNear} />
+        <rect x="0" y={BACK_Y} width={W} height="4" fill={V.ground} opacity=".5" />
+
+        {/* 앞줄 지면 */}
         <rect x="0" y={GROUND_Y} width={W} height={H - GROUND_Y} fill={V.ground} />
         <rect x="0" y={GROUND_Y} width={W} height="5" fill={V.groundEdge} />
 
-        <Tower x={348} locked={towerLocked} />
+        <Tower x={352} locked={towerLocked} />
 
         {/*
-          소환 제단 — 건물들보다 **뒤·위**에 둔다(먼저 그려 뒤에 깔림).
-          같은 x에 집과 겹치면 가려지므로 지면보다 60px 위 언덕에 세운다.
+          ── 뒷줄 (언덕) ────────────────────────────────
+          소환 제단이 중앙. 좌우로 훈련소·합성소.
+          탑(x=352)과 겹치지 않도록 x는 300을 넘지 않는다.
         */}
-        <Altar x={196} y={GROUND_Y - 60} />
+        <House x={64} y={BACK_Y} w={62} h={42} roof="flat" roofColor={V.roofWarm} level={facilities.training ?? 0} windowColor={V.window} />
+        <Altar x={172} y={BACK_Y} />
+        <House x={272} y={BACK_Y} w={62} h={42} roof="gable" roofColor={V.roofCool} level={facilities.forge ?? 0} windowColor={V.windowAlt} />
 
-        {/* 무덤 — 마을 왼쪽 끝 */}
-        <Graveyard x={40} y={GROUND_Y} deaths={deathCount} />
-
-        {/* 대장간 — 무기창고(armory) 자리 */}
-        <House x={116} y={GROUND_Y} w={74} h={58} roof="gable" roofColor={V.roofWarm} level={facilities.armory ?? 0} windowColor={V.window} />
-        {/* 여관·시설 — 숙소(rest) 자리 */}
-        <House x={212} y={GROUND_Y} w={70} h={48} roof="gable" roofColor={V.roofCool} level={facilities.rest ?? 0} windowColor={V.windowAlt} />
-        {/* 상점 — 차양. 레벨 개념이 없으므로 항상 Lv.1 모습 */}
-        <House x={302} y={GROUND_Y} w={64} h={44} roof="awning" roofColor={V.roofShop} level={1} windowColor={V.windowShop} />
+        {/*
+          ── 앞줄 (지면) ────────────────────────────────
+          무덤 · 숙소 · 무기창고 · 상점.
+        */}
+        <Graveyard x={38} y={GROUND_Y} deaths={deathCount} />
+        <House x={124} y={GROUND_Y} w={70} h={54} roof="gable" roofColor={V.roofCool} level={facilities.rest ?? 0} windowColor={V.windowAlt} />
+        <House x={216} y={GROUND_Y} w={70} h={54} roof="gable" roofColor={V.roofWarm} level={facilities.armory ?? 0} windowColor={V.window} />
+        {/* 상점 — 레벨 개념이 없으므로 항상 같은 모습 */}
+        <House x={306} y={GROUND_Y} w={62} h={44} roof="awning" roofColor={V.roofShop} level={1} windowColor={V.windowShop} />
       </svg>
 
       {/*
         라벨은 SVG 밖 버튼이다. 안에 넣으면 터치 타깃이 그림 크기에 묶여 44px을 못 지킨다.
         퍼센트 배치라 뷰포트가 달라져도 그림 위 같은 자리에 남는다.
       */}
-      <Label spot="tower" x={348} y={36} text="탑 입장" />
-      <Label spot="summon" x={196} y={222} text="소환 제단" />
-      {/*
-        건물 라벨은 한 줄로 정렬한다. 무덤만 다른 높이에 두면 시선이 튀고,
-        실제로 지붕과 겹쳐 글자가 읽히지 않았다.
-      */}
-      <Label spot="grave" x={40} y={LABEL_Y} text="무덤" />
-      <Label spot="armory" x={116} y={LABEL_Y} text="대장간" />
-      <Label spot="rest" x={212} y={LABEL_Y} text="여관·시설" />
-      <Label spot="shop" x={306} y={LABEL_Y} text="상점" />
+      <Label spot="tower" x={352} y={34} text="탑 입장" />
+
+      {/* 뒷줄 라벨 */}
+      <Label spot="training" x={64} y={BACK_LABEL_Y} text="훈련소" />
+      <Label spot="summon" x={172} y={BACK_LABEL_Y} text="소환 제단" />
+      <Label spot="forge" x={272} y={BACK_LABEL_Y} text="합성소" />
+
+      {/* 앞줄 라벨 */}
+      <Label spot="grave" x={38} y={FRONT_LABEL_Y} text="무덤" />
+      <Label spot="rest" x={124} y={FRONT_LABEL_Y} text="숙소" />
+      <Label spot="armory" x={216} y={FRONT_LABEL_Y} text="무기창고" />
+      <Label spot="shop" x={306} y={FRONT_LABEL_Y} text="상점" />
     </div>
   );
 }

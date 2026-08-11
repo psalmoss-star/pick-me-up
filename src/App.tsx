@@ -130,20 +130,15 @@ export default function App() {
     }
   };
 
-  /** 하단 탭 → 화면. 전부 실제로 열리는 곳이어야 한다. */
+  /**
+   * 하단 탭 → 화면.
+   *
+   * 탭은 하나뿐이다. 나머지는 전부 마을 건물이 담당한다 —
+   * 같은 곳으로 가는 입구를 둘 두면 사용자가 다른 곳인 줄 알고 양쪽을 눌러본다.
+   */
   const goToTab = (tab: TabKey) => {
     switch (tab) {
-      case 'party':
       case 'heroes': setScreen('roster'); break;
-      // 가방 = 장비를 다루는 곳. 현재는 대장간(강화·착용)이 그 역할이다.
-      case 'bag': setScreen('smith'); break;
-      /*
-        퀘스트 = 이번 층의 돌파 과제. 전용 화면이 없어 브리핑을 재사용한다 —
-        브리핑이 이미 미달성 과제를 목록으로 보여주고 '돌아가기'로 나올 수 있다.
-        ⚠️ 이 화면에는 '진입'(전투 시작)도 함께 있다. 과제만 보는 화면이 필요해지면
-        그때 분리할 것 — 지금 빈 화면을 새로 만드는 것보다 낫다.
-      */
-      case 'quest': setScreen('brief'); break;
     }
   };
 
@@ -215,7 +210,6 @@ export default function App() {
             facilities={facilities}
             onGoTo={goToSpot}
             onTab={goToTab}
-            pendingQuestCount={pendingQuests(floor.id, claimedQuests).length}
             towerCleared={towerCleared}
             deathCount={deathCount}
           />
