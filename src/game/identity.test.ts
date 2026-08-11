@@ -14,6 +14,7 @@ import {
 import { GIVEN_NAMES, MODIFIERS, TITLES } from './data/names';
 import { createRng } from './rng';
 import { heroes } from './data/sample';
+import { gameData } from './data';
 import { klassFor } from './stats';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from './types';
 
@@ -183,5 +184,32 @@ describe('어휘 데이터', () => {
   /** 이름에 '의'가 들어가면 파싱이 깨진다 */
   it('이름 부분에 구분자가 섞이지 않는다', () => {
     for (const g of GIVEN_NAMES) expect(g).not.toContain('의 ');
+  });
+});
+
+describe('회차 너머 이름 봉인', () => {
+  it('봉인된 이름은 takenNames에 포함된다', () => {
+    const sealed = new Set(['물결의 세인']);
+    const taken = takenNames([], gameData.heroes, sealed);
+    expect(taken.has('물결의 세인')).toBe(true);
+  });
+
+  it('sealed를 안 넘기면 기존 동작과 같다 (회귀)', () => {
+    // 기존 호출부(sim·테스트)를 깨뜨리지 않아야 한다.
+    expect(takenNames([], gameData.heroes).size).toBe(0);
+  });
+
+  it('봉인된 이름은 생성되지 않는다', () => {
+    /*
+      전수 확인: 어휘가 2,904조합이라 확률로는 못 잡는다.
+      봉인 집합에 이름 하나를 넣고 여러 번 생성해 그 이름이 안 나오는지 본다.
+    */
+    const banned = '북풍의 리엔';
+    const sealed = new Set([banned]);
+    for (let i = 0; i < 200; i++) {
+      const rng = createRng(i);
+      const id = generateIdentity({ rng, taken: takenNames([], gameData.heroes, sealed) });
+      expect(id.name).not.toBe(banned);
+    }
   });
 });

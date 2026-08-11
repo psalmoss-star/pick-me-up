@@ -99,6 +99,18 @@ export function displayTitle(
 export function takenNames(
   roster: readonly HeroInstance[],
   defs: Record<HeroDefId, HeroDef>,
+  /**
+   * 회차를 넘어 봉인된 이름 (무덤에 오른 사망자).
+   *
+   * 로스터는 회차마다 비므로 이것 없이는 1회차에 죽은 이름이 2회차에 다시 나온다 —
+   * 무덤에 "6층에서 전사"라고 적힌 이름의 영웅이 살아 걸어다니게 된다.
+   *
+   * 옵셔널인 이유: src/game/은 stores/를 모른다. 집합을 만들어 넘기는 것은
+   * 호출부(runStore.summon)의 일이고, sim·테스트는 안 넘겨도 동작해야 한다.
+   */
+  sealed?: ReadonlySet<string>,
 ): Set<string> {
-  return new Set(roster.map((h) => displayName(h, defs)));
+  const out = new Set(roster.map((h) => displayName(h, defs)));
+  if (sealed) for (const n of sealed) out.add(n);
+  return out;
 }
