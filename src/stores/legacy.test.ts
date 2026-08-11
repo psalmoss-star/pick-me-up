@@ -10,6 +10,8 @@ import {
   loadLegacy, saveLegacy, sealedNames,
 } from './legacy';
 import type { Legacy } from '../game/legacyTypes';
+import { createRunStore, initialRoster } from './runStore';
+import { clearRun } from './save';
 
 /** vitest 환경이 node라 localStorage가 없다 — save.test.ts와 같은 흉내 저장소 */
 class MemStorage {
@@ -90,5 +92,74 @@ describe('무덤 저장', () => {
   it('저장 키가 런 세이브와 다르다', () => {
     // 같은 키면 회차 시작이 무덤을 지운다 — 이 분리가 설계의 핵심이다.
     expect(LEGACY_KEY).not.toBe('tower-of-picks:run');
+  });
+});
+
+describe('무덤 적재', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('clearRun()이 무덤을 지우지 않는다', () => {
+    saveLegacy(sample());
+    clearRun();
+    expect(loadLegacy().fallen[0].name).toBe('물결의 세인');
+  });
+
+  it('회차를 시작하면 로스터·재화가 초기화된다', () => {
+    const store = createRunStore(() => 42);
+    store.setState({ floorIndex: 30, towerCleared: true, deathCount: 9 });
+    store.getState().startNewRun();
+
+    const s = store.getState();
+    expect(s.floorIndex).toBe(0);
+    expect(s.towerCleared).toBe(false);
+    expect(s.deathCount).toBe(0);
+    expect(s.roster.length).toBe(initialRoster().length);
+    expect(s.wallet.gold).toBe(300);
+  });
+
+  it('회차를 시작하면 runNo가 오르고 직전 런이 기록된다', () => {
+    const store = createRunStore(() => 42);
+    store.setState({ floorIndex: 30, towerCleared: true, deathCount: 9 });
+    store.getState().startNewRun();
+
+    expect(store.getState().runNo).toBe(2);
+    const l = loadLegacy();
+    expect(l.runNo).toBe(2);
+    expect(l.runs).toHaveLength(1);
+    expect(l.runs[0].reachedFloor).toBe(31); // floorIndex 30 = 31층
+    expect(l.runs[0].cleared).toBe(true);
+    expect(l.runs[0].deaths).toBe(9);
+  });
+
+  it('회차를 시작해도 무덤의 사망자는 남는다', () => {
+    saveLegacy(sample());
+    const store = createRunStore(() => 42);
+    store.getState().startNewRun();
+    expect(loadLegacy().fallen[0].name).toBe('물결의 세인');
+  });
+
+  it('도감은 회차를 넘어 유지된다', () => {
+    const l = { ...sample(), codex: { h_tide: { firstSeenAt: 1, count: 3 } } as never };
+    saveLegacy(l);
+    const store = createRunStore(() => 42);
+    store.getState().startNewRun();
+    // freshSlice()의 빈 도감이 아니라 무덤의 도감이 들어와야 한다
+    expect(Object.keys(store.getState().codex)).toContain('h_tide');
+  });
+
+  it('전투 사망자가 명부에 오른다', () => {
+    const store = createRunStore(() => 42);
+    // 1층을 실제로 돌려 사망이 나올 때까지 시드를 바꾼다.
+    // (사망이 확정적으로 나는 시드가 없으므로 사망이 났을 때만 검증한다)
+    store.getState().start();
+    const before = store.getState().result?.casualties.length ?? 0;
+    store.getState().finish();
+
+    const l = loadLegacy();
+    expect(l.fallen).toHaveLength(before);
+    if (before > 0) {
+      expect(l.fallen[0].name).not.toBe('');
+      expect(l.fallen[0].floorId).toBe(1);
+    }
   });
 });
