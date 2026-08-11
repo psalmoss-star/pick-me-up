@@ -466,6 +466,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        */
       const potionsUsed = result.events.filter((e) => e.type === 'heal' && e.fromPotion).length;
 
+      /**
+       * towerCleared는 sticky다("|| " 로만 켜지고 꺼지지 않는다) — 최상층을 이미 깬 뒤
+       * 재도전해도 계속 true다. set() 이후의 after.towerCleared만 보면 "방금 막 클리어했다"와
+       * "이미 클리어된 채로 다시 싸웠다"를 구분할 수 없어서, 재도전 중 사상자가 나오면
+       * 그 시점의(생존자가 줄어든) 파티로 정상 기록이 재작성된다. set() 이전 값을 미리
+       * 떼어 둬야 "방금 전환됐는가"를 판정할 수 있다.
+       */
+      const wasCleared = get().towerCleared;
+
       const survivedHp = new Map(result.survivors.map((s) => [s.instId as string, s.currentHp]));
       const healRate = restHealRate(get().facilities.rest);
       const idleExp = cleared ? idleExpGain(get().facilities.training) : 0;
@@ -616,19 +625,31 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
             runNo: legacy.runNo,
           }));
 
-        /** 정상에 선 파티 — towerCleared가 서는 순간의 생존 파티원 */
-        const summitAdd = after.towerCleared && !legacy.summit.some((x) => x.runNo === legacy.runNo)
-          ? [{
-              runNo: legacy.runNo,
-              heroes: after.roster
-                .filter((h) => after.party.includes(h.instId) && !h.isDead)
-                .map((h) => ({
-                  name: displayName(h, gameData.heroes),
-                  title: displayTitle(h, gameData.heroes),
-                  star: h.star,
-                  defId: h.defId,
-                })),
-            }]
+        /**
+         * 정상에 선 파티 — towerCleared가 **막 서는 순간**(!wasCleared && after.towerCleared)의
+         * 생존 파티원만 기록한다. wasCleared까지 함께 봐야 하는 이유는 위 주석 참조 —
+         * 안 그러면 클리어 후 재도전에서 사상자가 난 파티로 정상 기록이 덮어써진다.
+         * dedupe(`!legacy.summit.some(...)`) 때문에 한 번 잘못 쓰이면 올바른 파티로도
+         * 다시는 덮어쓸 수 없으므로, 애초에 전환 시점에만 쓴다.
+         *
+         * heroes가 빈 배열이면 아예 append하지 않는다 — 파티 전멸 직후의 클리어처럼
+         * "정상에 선 자"가 아무도 없는 경우까지 영구 기록에 남기는 건 의미가 없다.
+         */
+        const justCleared = !wasCleared && after.towerCleared;
+        const summitHeroes = justCleared
+          ? after.roster
+              .filter((h) => after.party.includes(h.instId) && !h.isDead)
+              .map((h) => ({
+                name: displayName(h, gameData.heroes),
+                title: displayTitle(h, gameData.heroes),
+                star: h.star,
+                defId: h.defId,
+              }))
+          : [];
+        const summitAdd = justCleared
+          && summitHeroes.length > 0
+          && !legacy.summit.some((x) => x.runNo === legacy.runNo)
+          ? [{ runNo: legacy.runNo, heroes: summitHeroes }]
           : [];
 
         saveLegacy({
@@ -648,6 +669,14 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
     startNewRun: () => {
       const s = get();
+      /**
+       * 선행 조건은 상태가 사는 이 자리에서 강제한다.
+       * GraveScreen.tsx의 UI 가드는 그대로 두되(방어의 이중화), 여기서도 막아야
+       * 스토어를 직접 조작하는 어떤 호출자도 towerCleared 없이 런을 끝낼 수 없다.
+       * 어기면 reachedFloor:1·cleared:false짜리 유령 기록이 runs에 남고
+       * legacy.runNo가 되돌릴 수 없이 올라간다.
+       */
+      if (!s.towerCleared) return;
       const legacy = loadLegacy();
 
       /**
@@ -719,9 +748,14 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       /**
        * 도감은 무덤이 정본이다 — 회차를 넘어 유지되므로 여기서도 같이 갱신한다.
        * 런 쪽 codex만 갱신하면 회차를 시작할 때 이번 회차의 발견이 사라진다.
+       *
+       * **반드시 병합해야 한다 — 통째로 대체하면 안 된다.**
+       * 런의 codex는 무덤의 codex의 부분집합일 수 있다(예: 새로고침으로 runNo만 복원되고
+       * 런 codex는 startNewRun()을 거치지 않아 비어 있는 경우). 이때 `codex: get().codex`로
+       * 그대로 덮어쓰면 이전 회차들이 쌓아온 영구 도감이 통째로 사라진다.
        */
       const lg = loadLegacy();
-      saveLegacy({ ...lg, codex: get().codex });
+      saveLegacy({ ...lg, codex: { ...lg.codex, ...get().codex } });
 
       // 소환은 되돌릴 수 없다 — 뽑는 즉시 저장한다.
       saveRun(get());
@@ -922,6 +956,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         claimedQuests: saved.claimedQuests,
         seenFirstLegendary: saved.seenFirstLegendary,
         towerCleared: saved.towerCleared,
+        /**
+         * runNo는 SavedRun에 없다(무덤이 정본이라 런 세이브에 중복 저장하지 않는다).
+         * 그래서 hydrate 시점에 무덤에서 직접 읽는다 — 안 그러면 새로고침마다
+         * runNo가 freshSlice()의 1로 되돌아가면서 무덤 헤더와 어긋난다.
+         */
+        runNo: loadLegacy().runNo,
         // 전투 중 상태는 항상 초기화한다. 저장 파일엔 없지만,
         // 진행 중이던 스토어에 hydrate가 불릴 수 있다.
         seed: 0,
