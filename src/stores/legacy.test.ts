@@ -14,6 +14,7 @@ import { createRunStore, initialRoster } from './runStore';
 import { clearRun, saveRun, deserialize, serialize } from './save';
 import { displayName, displayTitle } from '../game/identity';
 import { gameData } from '../game/data';
+import { FLOORS } from '../game/data/floors';
 
 /** vitest 환경이 node라 localStorage가 없다 — save.test.ts와 같은 흉내 저장소 */
 class MemStorage {
@@ -303,21 +304,33 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
   it('I1: 승리 직후라도 정상 파티가 전멸(빈 배열)이면 summit에 기록하지 않는다', () => {
     saveLegacy(emptyLegacy());
     const store = createRunStore(() => 42);
-    // towerCleared는 아직 false → 이번 승리가 "막 클리어하는 순간"이 된다.
-    // party 전원을 이번 전투의 사상자로 만들어, 승리해도 생존 파티원이 0명이 되게 한다.
+
+    /*
+      ⚠️ **최상층에 서 있어야 이 검증이 성립한다.**
+      towerCleared는 `cleared && isFinalFloor(floorIndex)`로만 서므로, floorIndex가 0이면
+      승리를 주입해도 전이가 일어나지 않고 summit 블록 자체가 실행되지 않는다 —
+      그러면 이 테스트는 가드를 지워도 통과하는 빈 테스트가 된다(실제로 그랬다).
+    */
+    store.setState({ floorIndex: FLOORS.length - 1 });
+
     const dying = store.getState().roster.map((h) => ({ ...h, currentHp: 1 }));
     store.setState({ roster: dying });
     store.getState().start();
 
-    // 몇 번을 시도해도 이 시드/체력 조작에서는 파티 전원이 죽거나 patrty가 빈 채로
-    // 승리하는 경우를 직접 만들기 어려우므로, 승리 결과를 강제로 주입해 조건만 검증한다.
+    /*
+      승리하면서 파티 전원이 죽는 상황은 시드 조작으로 만들기 어렵다.
+      전이 조건(towerCleared)과 빈 파티를 동시에 만들기 위해 결과를 주입한다 —
+      party 전원을 사상자로 넣어 생존 파티원이 0명이 되게 한다.
+    */
+    const partyIds = store.getState().party;
     store.setState({
-      result: { ...store.getState().result!, outcome: 'victory', casualties: [] },
+      result: { ...store.getState().result!, outcome: 'victory', casualties: [...partyIds] },
     });
     store.getState().finish();
 
-    // heroes.length === 0 가드가 없다면 towerCleared 전이와 함께 빈 summit row가 append된다.
-    const summitAfter = loadLegacy().summit;
-    expect(summitAfter.every((s) => s.heroes.length > 0)).toBe(true);
+    // 전이는 실제로 일어났는가 — 이게 false면 위 주입이 무의미해진 것이다.
+    expect(store.getState().towerCleared).toBe(true);
+    // heroes.length === 0 가드가 없다면 여기서 빈 summit row가 append된다.
+    expect(loadLegacy().summit).toEqual([]);
   });
 });
