@@ -163,6 +163,9 @@ export default function App() {
             wallet={wallet}
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
+            deathCount={deathCount}
+            // TODO(Task 5): 'grave' 화면 라우팅 연결 — GraveScreen 생성 후 setScreen('grave')로 교체
+            onOpenGrave={() => {}}
           />
         )}
         {screen === 'shop' && (

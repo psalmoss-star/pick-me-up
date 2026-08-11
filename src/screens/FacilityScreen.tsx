@@ -18,6 +18,10 @@ export interface FacilityScreenProps {
   wallet: Wallet;
   onUpgrade: (kind: FacilityKind) => FacilityUpgradeResult;
   onBack: () => void;
+  /** 무덤으로. 부감 맵에서 무덤을 누르면 호출된다 */
+  onOpenGrave: () => void;
+  /** 잃은 영웅 수 — 무덤에 비석이 몇 개 서는지 */
+  deathCount: number;
 }
 
 const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
@@ -61,7 +65,7 @@ function nextText(kind: FacilityKind, level: number): string | null {
  * 숙소는 층간 회복이므로 **탑에 오르기 전에** 의미가 생긴다.
  * 그래서 효과를 현재값과 다음값으로 나란히 보여준다 — 투자 판단이 화면에서 끝나야 한다.
  */
-export function FacilityScreen({ facilities, wallet, onUpgrade, onBack }: FacilityScreenProps) {
+export function FacilityScreen({ facilities, wallet, onUpgrade, onBack, onOpenGrave, deathCount }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
    * 부감 맵에서 고른 시설. 해당 카드로 스크롤하고 강조만 한다.
@@ -113,7 +117,16 @@ export function FacilityScreen({ facilities, wallet, onUpgrade, onBack }: Facili
         한눈에 "무엇이 덜 자랐나"가 잡힌다.
       */}
       <div style={{ marginBottom: 18 }}>
-        <BaseMap facilities={facilities} onSelect={selectOnMap} selected={focus} />
+        <BaseMap
+          facilities={facilities}
+          selected={focus}
+          deathCount={deathCount}
+          onSelect={(spot) => {
+            // 무덤은 시설이 아니다 — 강조·스크롤이 아니라 화면 전환이다.
+            if (spot === 'grave') { onOpenGrave(); return; }
+            selectOnMap(spot);
+          }}
+        />
       </div>
 
       <div style={{ display: 'grid', gap: 12 }}>
