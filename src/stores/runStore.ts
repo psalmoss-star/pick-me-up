@@ -597,6 +597,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       if (casualties.size > 0 || after.towerCleared) {
         const legacy = loadLegacy();
 
+        /**
+         * after.snapshot을 쓰는 이유: 위 set()은 snapshot 필드를 건드리지 않으므로
+         * start()가 채운 "전투 시작 시점 로스터"가 그대로 남아 있다 — 사망자를 찾으려면
+         * 이걸 봐야 한다(사후의 s.roster에서 죽은 개체를 걸러내는 것보다 직접적이다).
+         * 나중에 이 set()에 snapshot 갱신 로직이 추가되면 이 find()가 조용히 깨지니 주의할 것.
+         */
         const newlyFallen: FallenRecord[] = [...casualties]
           .map((id) => after.snapshot.find((h) => h.instId === id))
           .filter((h): h is HeroInstance => h != null)

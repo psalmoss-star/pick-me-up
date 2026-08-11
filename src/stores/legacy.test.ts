@@ -12,6 +12,8 @@ import {
 import type { Legacy } from '../game/legacyTypes';
 import { createRunStore, initialRoster } from './runStore';
 import { clearRun } from './save';
+import { displayName, displayTitle } from '../game/identity';
+import { gameData } from '../game/data';
 
 /** vitest 환경이 node라 localStorage가 없다 — save.test.ts와 같은 흉내 저장소 */
 class MemStorage {
@@ -149,17 +151,46 @@ describe('무덤 적재', () => {
 
   it('전투 사망자가 명부에 오른다', () => {
     const store = createRunStore(() => 42);
-    // 1층을 실제로 돌려 사망이 나올 때까지 시드를 바꾼다.
-    // (사망이 확정적으로 나는 시드가 없으므로 사망이 났을 때만 검증한다)
+
+    /**
+     * 사망을 시드가 아니라 상태로 강제한다.
+     * 파티 전원의 currentHp를 1로 낮추면 전투 시작 시 최대치로 안 채워지고
+     * (battle.ts: currentHp>0이면 그 값을 쓴다) 첫 피격에 곧바로 죽는다 —
+     * 시드 사냥보다 견고하고, 어떤 시드를 넣어도 재현된다.
+     */
+    const dying = store.getState().roster.map((h) => ({ ...h, currentHp: 1 }));
+    store.setState({ roster: dying });
+
     store.getState().start();
-    const before = store.getState().result?.casualties.length ?? 0;
+    const casualties = store.getState().result?.casualties ?? [];
+    expect(casualties.length).toBeGreaterThan(0); // 강제가 실제로 먹었는지 확인
+
+    const deadId = casualties[0];
+    const deadHero = store.getState().roster.find((h) => h.instId === deadId)!;
+    const expectedName = displayName(deadHero, gameData.heroes);
+    const expectedTitle = displayTitle(deadHero, gameData.heroes);
+
     store.getState().finish();
 
     const l = loadLegacy();
-    expect(l.fallen).toHaveLength(before);
-    if (before > 0) {
-      expect(l.fallen[0].name).not.toBe('');
-      expect(l.fallen[0].floorId).toBe(1);
-    }
+    expect(l.fallen).toHaveLength(casualties.length);
+    const record = l.fallen.find((f) => f.defId === deadHero.defId && f.name === expectedName)!;
+    expect(record).toBeDefined();
+    expect(record.name).toBe(expectedName);
+    expect(record.title).toBe(expectedTitle);
+    expect(record.star).toBe(deadHero.star);
+    expect(record.floorId).toBe(1);
+    expect(record.runNo).toBe(1);
+    expect(record.revealProgress).toBeGreaterThanOrEqual(0);
+    expect(record.revealProgress).toBeLessThanOrEqual(1);
+  });
+
+  it('합성 제물은 명부에 오르지 않는다', () => {
+    const store = createRunStore(() => 42);
+    const [target, sacrifice] = store.getState().roster;
+    store.getState().fuse(target.instId, sacrifice.instId);
+
+    // 제물은 로스터에서 사라졌지만 casualties가 아니므로 무덤 기록은 그대로 비어 있다.
+    expect(loadLegacy().fallen).toEqual([]);
   });
 });
