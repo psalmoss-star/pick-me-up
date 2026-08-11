@@ -18,12 +18,20 @@ import { FACILITY_MAX_LEVEL, type FacilityKind } from '../game/data/facilities';
  * 색만 바꾸면 Lv.1과 Lv.3이 구분되지 않는다.
  */
 
+/** 부감 맵에서 고를 수 있는 자리. 무덤은 시설이 아니지만 같은 공간에 산다. */
+export type BaseMapSpot = FacilityKind | 'grave';
+
+/** 무덤 자리 — 광장 위. 시설(y=92)과 겹치지 않도록 충분히 띄운다. */
+const GRAVE = { x: 160, y: 46 };
+
 export interface BaseMapProps {
   facilities: Record<FacilityKind, number>;
-  /** 탭하면 해당 시설로. 없으면 표시 전용 */
-  onSelect?: (kind: FacilityKind) => void;
-  /** 강조할 시설 (선택 상태) */
-  selected?: FacilityKind | null;
+  /** 탭하면 해당 자리로. 없으면 표시 전용 */
+  onSelect?: (spot: BaseMapSpot) => void;
+  /** 강조할 자리 (선택 상태) */
+  selected?: BaseMapSpot | null;
+  /** 잃은 영웅 수. 0이면 비석이 서지 않는다 */
+  deathCount?: number;
 }
 
 /**
@@ -106,7 +114,42 @@ function Building({
   );
 }
 
-export function BaseMap({ facilities, onSelect, selected }: BaseMapProps) {
+/**
+ * 무덤 — 시설이 아니다.
+ *
+ * `Building`을 재사용하지 않는 이유: 같은 상자로 그리면 "지을 수 있는 것"으로 읽히고
+ * 레벨·비용을 기대하게 된다. 무덤은 **자라지 않는다** — 대신 비석이 늘어난다.
+ * 사망자가 0이면 터만 보인다(미건설 시설과 같은 표현).
+ */
+function Grave({ x, y, deaths, dim }: { x: number; y: number; deaths: number; dim: boolean }) {
+  // 비석은 최대 3개까지만. 27명을 다 그리면 그림이 무너진다.
+  const stones = Math.min(3, deaths);
+  const line = deaths > 0 ? T.frame : T.dim;
+
+  return (
+    <g opacity={dim ? 0.45 : 1} style={{ transition: 'opacity 200ms' }}>
+      <ellipse cx={x} cy={y + 4} rx={30} ry={6} fill="#000" opacity=".45" />
+      <rect x={x - 26} y={y} width={52} height={5} fill="#100D18" stroke={line} strokeWidth="1" opacity={deaths > 0 ? 1 : 0.7} />
+      {Array.from({ length: stones }).map((_, i) => {
+        const sx = x - 16 + i * 16;
+        return (
+          <g key={i}>
+            {/* 비석 — 위가 둥근 판. 높이 20px로 낮게 유지한다(위 칸 침범 방지) */}
+            <path
+              d={`M${sx - 5} ${y} L${sx - 5} ${y - 13} Q${sx} ${y - 20} ${sx + 5} ${y - 13} L${sx + 5} ${y} Z`}
+              fill="#171226" stroke={line} strokeWidth="1.2"
+            />
+          </g>
+        );
+      })}
+      {deaths > stones && (
+        <text x={x + 30} y={y - 2} fill={T.dim} fontSize="9">외 {deaths - stones}</text>
+      )}
+    </g>
+  );
+}
+
+export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: BaseMapProps) {
   return (
     <div style={{ position: 'relative', border: `1px solid ${T.panelHi}`, background: '#08070C', overflow: 'hidden' }}>
       <svg viewBox="0 0 320 216" style={{ display: 'block', width: '100%' }} aria-hidden="true">
@@ -135,6 +178,12 @@ export function BaseMap({ facilities, onSelect, selected }: BaseMapProps) {
           />
         ))}
 
+        {/* 광장 → 무덤 길 */}
+        <line
+          x1="160" y1="140" x2={GRAVE.x} y2={GRAVE.y}
+          stroke={T.panelHi} strokeWidth="1.4" strokeDasharray="3 4" opacity=".9"
+        />
+
         {ORDER.map((k) => (
           <Building
             key={k}
@@ -159,6 +208,16 @@ export function BaseMap({ facilities, onSelect, selected }: BaseMapProps) {
             {SPOT[k].label}
           </text>
         ))}
+
+        <Grave x={GRAVE.x} y={GRAVE.y} deaths={deathCount} dim={!!selected && selected !== 'grave'} />
+        <text
+          x={GRAVE.x} y={GRAVE.y + 19}
+          textAnchor="middle"
+          fill={selected === 'grave' ? T.gold : T.dim}
+          fontSize="10" letterSpacing="1"
+        >
+          무덤
+        </text>
       </svg>
 
       {/*
@@ -186,6 +245,25 @@ export function BaseMap({ facilities, onSelect, selected }: BaseMapProps) {
           }}
         />
       ))}
+
+      {onSelect && (
+        <button
+          onClick={() => onSelect('grave')}
+          aria-label={`무덤 (잃은 영웅 ${deathCount})`}
+          style={{
+            position: 'absolute',
+            left: `${(GRAVE.x / 320) * 100}%`,
+            top: `${(GRAVE.y / 216) * 100}%`,
+            transform: 'translate(-50%, -70%)',
+            width: 72, height: 56,
+            minWidth: 44, minHeight: 44,
+            background: 'transparent',
+            border: selected === 'grave' ? `1px solid ${T.gold}` : '1px solid transparent',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        />
+      )}
     </div>
   );
 }

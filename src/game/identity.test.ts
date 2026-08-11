@@ -14,6 +14,7 @@ import {
 import { GIVEN_NAMES, MODIFIERS, TITLES } from './data/names';
 import { createRng } from './rng';
 import { heroes } from './data/sample';
+import { gameData } from './data';
 import { klassFor } from './stats';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from './types';
 
@@ -58,7 +59,7 @@ describe('이름 생성', () => {
 
   it('시드가 다르면 대체로 다른 이름이 나온다', () => {
     const names = new Set(Array.from({ length: 50 }, (_, s) => gen(s).name));
-    // 2,904 조합에서 50개를 뽑으면 대부분 달라야 한다
+    // 3,185 조합에서 50개를 뽑으면 대부분 달라야 한다
     expect(names.size).toBeGreaterThan(40);
   });
 });
@@ -183,5 +184,39 @@ describe('어휘 데이터', () => {
   /** 이름에 '의'가 들어가면 파싱이 깨진다 */
   it('이름 부분에 구분자가 섞이지 않는다', () => {
     for (const g of GIVEN_NAMES) expect(g).not.toContain('의 ');
+  });
+});
+
+describe('회차 너머 이름 봉인', () => {
+  it('봉인된 이름은 takenNames에 포함된다', () => {
+    const sealed = new Set(['물결의 세인']);
+    const taken = takenNames([], gameData.heroes, sealed);
+    expect(taken.has('물결의 세인')).toBe(true);
+  });
+
+  it('sealed를 안 넘기면 기존 동작과 같다 (회귀)', () => {
+    // 기존 호출부(sim·테스트)를 깨뜨리지 않아야 한다.
+    expect(takenNames([], gameData.heroes).size).toBe(0);
+  });
+
+  it('봉인된 이름은 생성되지 않는다 (재추첨 분기가 실제로 실행됨을 증명)', () => {
+    /*
+      단순히 "여러 시드를 돌려서 봉인된 이름이 안 나온다"는 것만으로는 부족하다 —
+      애초에 그 시드에서 봉인된 이름이 1차 후보로 나오지 않으면 재추첨 분기를
+      한 번도 타지 않고도 테스트가 통과해버린다 (sealed 유니온을 통째로 지워도 그린).
+
+      그래서 seed 0의 "봉인 없는 1차 후보"가 정확히 무엇인지 먼저 확정하고
+      (createRng(0) → generateIdentity({ taken: new Set() }) === '재의 도윤'),
+      바로 그 이름을 seal한 뒤 같은 seed로 다시 생성해 **결과가 달라지는지**를 본다.
+      결과가 다르면 taken.has()가 그 1차 후보를 걸러내고 재추첨 루프가 도는
+      경로가 실제로 실행됐다는 뜻이다.
+    */
+    const unsealed = generateIdentity({ rng: createRng(0), taken: new Set() });
+    expect(unsealed.name).toBe('재의 도윤'); // 1차 후보 고정 — 이 값이 바뀌면 아래 검증의 전제가 깨진다
+
+    const sealed = takenNames([], gameData.heroes, new Set([unsealed.name]));
+    const result = generateIdentity({ rng: createRng(0), taken: sealed });
+
+    expect(result.name).not.toBe(unsealed.name);
   });
 });

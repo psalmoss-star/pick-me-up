@@ -44,6 +44,7 @@ const sample = (): RunSlice => {
     snapshot: [],
     deathCount: 1,
     towerCleared: false,
+    runNo: 1,
   };
 };
 

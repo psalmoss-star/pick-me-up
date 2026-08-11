@@ -34,10 +34,13 @@ import {
   fuse as fuseHeroes, promote as promoteHero, gainExp,
   type FuseCheck, type FuseResult, type PromoteCheck, type PromoteResult,
 } from '../game/progression';
+import { displayName, displayTitle } from '../game/identity';
 import type {
   BannerKind, CodexEntry, GachaState, GearDefId, GearInstId, GearInstance, GearSlot,
   HeroDefId, HeroInstId, HeroInstance, Star, Wallet,
 } from '../game/types';
+import type { FallenRecord, Legacy } from '../game/legacyTypes';
+import { loadLegacy, saveLegacy, sealedNames } from './legacy';
 
 /**
  * 배열 인벤토리를 조회용 Map으로.
@@ -177,6 +180,11 @@ export interface RunSlice {
    * "정상에 서 있음"과 "정상을 넘었음"을 구분할 수 없다.
    */
   towerCleared: boolean;
+  /**
+   * 현재 회차 (1부터). 무덤(legacy)이 정본이고 여기는 표시용 사본이다.
+   * 저장 대상이 아니다 — 회차 시작 시 legacy에서 다시 읽는다.
+   */
+  runNo: number;
 }
 
 export interface RunActions {
@@ -187,6 +195,13 @@ export interface RunActions {
   intervene: (next: Intervention[]) => void;
   /** 전투 종료 처리. 퍼머데스가 반영되는 유일한 지점. */
   finish: () => void;
+  /**
+   * 회차 시작. 런을 전부 버리고 1층부터 다시 시작한다.
+   *
+   * **되돌릴 수 없다.** 호출 전에 반드시 확인 창을 거칠 것 (합성 제물과 같은 원칙).
+   * 무덤(사망자 명부·등반 기록·도감)은 보존된다.
+   */
+  startNewRun: () => void;
   /**
    * 소환. 성공하면 영웅이 로스터에 들어가고 재화·천장·도감이 갱신된다.
    * 실패(재화 부족/쿨다운)는 예외가 아니라 결과로 돌아온다 — 상태는 그대로다.
@@ -289,6 +304,7 @@ function freshSlice(): RunSlice {
     result: null,
     snapshot: [],
     deathCount: 0,
+    runNo: 1,
   };
 }
 
@@ -450,6 +466,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        */
       const potionsUsed = result.events.filter((e) => e.type === 'heal' && e.fromPotion).length;
 
+      /**
+       * towerCleared는 sticky다("|| " 로만 켜지고 꺼지지 않는다) — 최상층을 이미 깬 뒤
+       * 재도전해도 계속 true다. set() 이후의 after.towerCleared만 보면 "방금 막 클리어했다"와
+       * "이미 클리어된 채로 다시 싸웠다"를 구분할 수 없어서, 재도전 중 사상자가 나오면
+       * 그 시점의(생존자가 줄어든) 파티로 정상 기록이 재작성된다. set() 이전 값을 미리
+       * 떼어 둬야 "방금 전환됐는가"를 판정할 수 있다.
+       */
+      const wasCleared = get().towerCleared;
+
       const survivedHp = new Map(result.survivors.map((s) => [s.instId as string, s.currentHp]));
       const healRate = restHealRate(get().facilities.rest);
       const idleExp = cleared ? idleExpGain(get().facilities.training) : 0;
@@ -571,10 +596,117 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       }));
 
       /**
+       * 무덤 적재 — 사망자는 **죽는 즉시** 명부에 오른다.
+       * 회차가 끝날 때 몰아서 쓰면 중간에 그만둔 런의 사망자가 통째로 사라진다.
+       *
+       * 합성 제물은 여기 오지 않는다. casualties는 전투 사망자만 담기 때문이며,
+       * 그게 맞다 — 제물은 죽음이 아니라 흡수다 (identity.ts 참조).
+       */
+      const after = get();
+      if (casualties.size > 0 || after.towerCleared) {
+        const legacy = loadLegacy();
+
+        /**
+         * after.snapshot을 쓰는 이유: 위 set()은 snapshot 필드를 건드리지 않으므로
+         * start()가 채운 "전투 시작 시점 로스터"가 그대로 남아 있다 — 사망자를 찾으려면
+         * 이걸 봐야 한다(사후의 s.roster에서 죽은 개체를 걸러내는 것보다 직접적이다).
+         * 나중에 이 set()에 snapshot 갱신 로직이 추가되면 이 find()가 조용히 깨지니 주의할 것.
+         */
+        const newlyFallen: FallenRecord[] = [...casualties]
+          .map((id) => after.snapshot.find((h) => h.instId === id))
+          .filter((h): h is HeroInstance => h != null)
+          .map((h) => ({
+            name: displayName(h, gameData.heroes),
+            title: displayTitle(h, gameData.heroes),
+            star: h.star,
+            defId: h.defId,
+            floorId: floorSpec.id,
+            revealProgress: h.revealProgress ?? 0,
+            runNo: legacy.runNo,
+          }));
+
+        /**
+         * 정상에 선 파티 — towerCleared가 **막 서는 순간**(!wasCleared && after.towerCleared)의
+         * 생존 파티원만 기록한다. wasCleared까지 함께 봐야 하는 이유는 위 주석 참조 —
+         * 안 그러면 클리어 후 재도전에서 사상자가 난 파티로 정상 기록이 덮어써진다.
+         * dedupe(`!legacy.summit.some(...)`) 때문에 한 번 잘못 쓰이면 올바른 파티로도
+         * 다시는 덮어쓸 수 없으므로, 애초에 전환 시점에만 쓴다.
+         *
+         * heroes가 빈 배열이면 아예 append하지 않는다 — 파티 전멸 직후의 클리어처럼
+         * "정상에 선 자"가 아무도 없는 경우까지 영구 기록에 남기는 건 의미가 없다.
+         */
+        const justCleared = !wasCleared && after.towerCleared;
+        const summitHeroes = justCleared
+          ? after.roster
+              .filter((h) => after.party.includes(h.instId) && !h.isDead)
+              .map((h) => ({
+                name: displayName(h, gameData.heroes),
+                title: displayTitle(h, gameData.heroes),
+                star: h.star,
+                defId: h.defId,
+              }))
+          : [];
+        const summitAdd = justCleared
+          && summitHeroes.length > 0
+          && !legacy.summit.some((x) => x.runNo === legacy.runNo)
+          ? [{ runNo: legacy.runNo, heroes: summitHeroes }]
+          : [];
+
+        saveLegacy({
+          ...legacy,
+          fallen: [...legacy.fallen, ...newlyFallen],
+          summit: [...legacy.summit, ...summitAdd],
+        });
+      }
+
+      /**
        * 자동 저장. 여기가 사망이 확정되는 지점이므로 여기서 저장해야
        * 새로고침으로 퍼머데스를 무를 수 없다 (save.ts 주석 참조).
        * set() 이후에 부르는 이유는 갱신된 상태를 저장하기 위해서다.
        */
+      saveRun(get());
+    },
+
+    startNewRun: () => {
+      const s = get();
+      /**
+       * 선행 조건은 상태가 사는 이 자리에서 강제한다.
+       * GraveScreen.tsx의 UI 가드는 그대로 두되(방어의 이중화), 여기서도 막아야
+       * 스토어를 직접 조작하는 어떤 호출자도 towerCleared 없이 런을 끝낼 수 없다.
+       * 어기면 reachedFloor:1·cleared:false짜리 유령 기록이 runs에 남고
+       * legacy.runNo가 되돌릴 수 없이 올라간다.
+       */
+      if (!s.towerCleared) return;
+      const legacy = loadLegacy();
+
+      /**
+       * 직전 런을 기록으로 확정한다. **여기가 런의 끝**이다 —
+       * 진행 중인 런은 runs에 없어야 하므로(끝나지 않았으므로) 이 시점에 append한다.
+       */
+      const next: Legacy = {
+        ...legacy,
+        runNo: legacy.runNo + 1,
+        runs: [
+          ...legacy.runs,
+          {
+            runNo: legacy.runNo,
+            reachedFloor: s.floorIndex + 1,
+            cleared: s.towerCleared,
+            deaths: s.deathCount,
+            summons: s.gacha.totalPulls,
+            endedAt: Date.now(),
+          },
+        ],
+      };
+      saveLegacy(next);
+
+      /**
+       * 런을 갈아끼운다. freshSlice()를 그대로 쓰므로 **1회차와 완전히 같은 출발**이고,
+       * 그래서 sim으로 잡은 층별 승률이 회차와 무관하게 유지된다.
+       *
+       * 도감만 예외적으로 계승한다 — 전력에 영향이 없어 밸런스가 안 움직인다.
+       */
+      set({ ...freshSlice(), runNo: next.runNo, codex: next.codex });
       saveRun(get());
     },
 
@@ -599,6 +731,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           죽은 영웅의 이름이 재사용되면 그 무덤 기록이 무의미해진다 (identity.ts 참조).
         */
         roster,
+        /** 회차를 넘어 봉인된 이름 — 무덤의 사망자 (identity.ts 참조) */
+        sealed: sealedNames(loadLegacy()),
       });
 
       // 실패는 상태를 건드리지 않는다. 재화 부족/쿨다운은 정상 흐름이다.
@@ -610,6 +744,18 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         gacha: result.gacha,
         codex: registerCodex(s.codex, result.hero, now),
       }));
+
+      /**
+       * 도감은 무덤이 정본이다 — 회차를 넘어 유지되므로 여기서도 같이 갱신한다.
+       * 런 쪽 codex만 갱신하면 회차를 시작할 때 이번 회차의 발견이 사라진다.
+       *
+       * **반드시 병합해야 한다 — 통째로 대체하면 안 된다.**
+       * 런의 codex는 무덤의 codex의 부분집합일 수 있다(예: 새로고침으로 runNo만 복원되고
+       * 런 codex는 startNewRun()을 거치지 않아 비어 있는 경우). 이때 `codex: get().codex`로
+       * 그대로 덮어쓰면 이전 회차들이 쌓아온 영구 도감이 통째로 사라진다.
+       */
+      const lg = loadLegacy();
+      saveLegacy({ ...lg, codex: { ...lg.codex, ...get().codex } });
 
       // 소환은 되돌릴 수 없다 — 뽑는 즉시 저장한다.
       saveRun(get());
@@ -810,6 +956,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         claimedQuests: saved.claimedQuests,
         seenFirstLegendary: saved.seenFirstLegendary,
         towerCleared: saved.towerCleared,
+        /**
+         * runNo는 SavedRun에 없다(무덤이 정본이라 런 세이브에 중복 저장하지 않는다).
+         * 그래서 hydrate 시점에 무덤에서 직접 읽는다 — 안 그러면 새로고침마다
+         * runNo가 freshSlice()의 1로 되돌아가면서 무덤 헤더와 어긋난다.
+         */
+        runNo: loadLegacy().runNo,
         // 전투 중 상태는 항상 초기화한다. 저장 파일엔 없지만,
         // 진행 중이던 스토어에 hydrate가 불릴 수 있다.
         seed: 0,

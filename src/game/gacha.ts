@@ -156,9 +156,14 @@ export function pull(args: {
    * 실제 소환 경로(runStore.summon)는 반드시 넘긴다.
    */
   roster?: readonly HeroInstance[];
+  /**
+   * 회차를 넘어 봉인된 이름. roster와 같은 성격이라 같은 방식으로 받는다.
+   * 생략하면 봉인 없이 생성된다 — 테스트·시뮬레이터용이며 실제 경로는 반드시 넘긴다.
+   */
+  sealed?: ReadonlySet<string>;
 }): PullResult {
   const {
-    banner, wallet, gacha, pool, codex, rng, now, currentFloor, makeId, roster = [],
+    banner, wallet, gacha, pool, codex, rng, now, currentFloor, makeId, roster = [], sealed,
   } = args;
 
   // 쿨다운
@@ -189,7 +194,7 @@ export function pull(args: {
     시드를 먼저 확정하고, 이름은 그 뒤에 굴린다. (gacha.test.ts의 시드 회귀 테스트가 잠근다)
   */
   const seed = rollHeroSeed(rng);
-  const identity = generateIdentity({ rng, taken: takenNames(roster, pool) });
+  const identity = generateIdentity({ rng, taken: takenNames(roster, pool, sealed) });
 
   const hero: HeroInstance = {
     instId: makeId() as HeroInstId,

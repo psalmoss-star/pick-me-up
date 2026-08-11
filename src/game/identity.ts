@@ -50,7 +50,7 @@ export function generateIdentity(args: {
   /*
     여기까지 왔다면 어휘가 거의 소진됐다는 뜻이다.
     순수 함수는 반드시 종료해야 하므로 무한 재추첨 대신 접미사로 강제 분리한다.
-    2,904 조합에 로스터 수십 명이면 실제로는 도달하지 않는 경로다.
+    3,185 조합에 로스터 수십 명이면 실제로는 도달하지 않는 경로다.
   */
   const base = `${rngPick(rng, MODIFIERS)}의 ${rngPick(rng, GIVEN_NAMES)}`;
   for (let n = 2; ; n++) {
@@ -99,6 +99,18 @@ export function displayTitle(
 export function takenNames(
   roster: readonly HeroInstance[],
   defs: Record<HeroDefId, HeroDef>,
+  /**
+   * 회차를 넘어 봉인된 이름 (무덤에 오른 사망자).
+   *
+   * 로스터는 회차마다 비므로 이것 없이는 1회차에 죽은 이름이 2회차에 다시 나온다 —
+   * 무덤에 "6층에서 전사"라고 적힌 이름의 영웅이 살아 걸어다니게 된다.
+   *
+   * 옵셔널인 이유: src/game/은 stores/를 모른다. 집합을 만들어 넘기는 것은
+   * 호출부(runStore.summon)의 일이고, sim·테스트는 안 넘겨도 동작해야 한다.
+   */
+  sealed?: ReadonlySet<string>,
 ): Set<string> {
-  return new Set(roster.map((h) => displayName(h, defs)));
+  const out = new Set(roster.map((h) => displayName(h, defs)));
+  if (sealed) for (const n of sealed) out.add(n);
+  return out;
 }

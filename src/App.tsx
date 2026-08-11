@@ -6,12 +6,14 @@ import { ForgeScreen } from './screens/ForgeScreen';
 import { FacilityScreen } from './screens/FacilityScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { SmithScreen } from './screens/SmithScreen';
+import { GraveScreen } from './screens/GraveScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
+import { loadLegacy } from './stores/legacy';
 import { floorAt } from './game/data';
 import { isFinalFloor } from './game/data/floors';
 import {
@@ -21,7 +23,7 @@ import type { HeroInstance } from './game/types';
 
 type Screen =
   | 'base' | 'brief' | 'battle' | 'result'
-  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith';
+  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave';
 
 /** 모바일 전용. 데스크톱에서도 이 폭의 세로 화면을 중앙에 띄운다. */
 const MOBILE_WIDTH = 480;
@@ -33,6 +35,8 @@ export default function App() {
    */
   const [screen, setScreen] = useState<Screen>('base');
   const [detail, setDetail] = useState<HeroInstance | null>(null);
+  // 무덤은 저장소에서 읽으므로 화면을 열 때 최신값을 가져온다.
+  const [legacy, setLegacy] = useState(() => loadLegacy());
 
   const floorIndex = useRunStore((s) => s.floorIndex);
   const towerCleared = useRunStore((s) => s.towerCleared);
@@ -50,6 +54,8 @@ export default function App() {
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
+  const runNo = useRunStore((s) => s.runNo);
+  const startNewRun = useRunStore((s) => s.startNewRun);
   const summon = useRunStore((s) => s.summon);
   const markLegendarySeen = useRunStore((s) => s.markLegendarySeen);
   const fuse = useRunStore((s) => s.fuse);
@@ -84,11 +90,6 @@ export default function App() {
   /** 전투 계산은 스토어가 하고, 화면 전환만 여기서 한다 */
   const start = () => {
     if (startBattle()) setScreen('battle');
-  };
-
-  const finish = () => {
-    finishBattle();
-    setScreen('base');
   };
 
   /**
@@ -163,6 +164,19 @@ export default function App() {
             wallet={wallet}
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
+            deathCount={deathCount}
+            onOpenGrave={() => { setLegacy(loadLegacy()); setScreen('grave'); }}
+          />
+        )}
+        {screen === 'grave' && (
+          <GraveScreen
+            legacy={legacy}
+            runNo={runNo}
+            floorIndex={floorIndex}
+            deathCount={deathCount}
+            towerCleared={towerCleared}
+            onStartNewRun={() => { startNewRun(); setLegacy(loadLegacy()); setScreen('base'); }}
+            onBack={() => setScreen('facility')}
           />
         )}
         {screen === 'shop' && (
@@ -246,7 +260,21 @@ export default function App() {
               쓰므로 결과가 갈리지 않는다.
             */
             questGrants={previewQuests()}
-            onFinish={finish}
+            onFinish={() => {
+              /*
+                무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야
+                한다 — 최상층에서 져도 wasFinal만 보고 무덤으로 보내면, 패배 결과 화면(엔딩 패널
+                없음, "대기실로" 버튼)을 보고 눌렀는데 무덤이 뜨는 모순이 생긴다. 최상층 패배는
+                재도전이 가능해야 하므로 대기실로 돌려보내야 한다.
+                finishBattle()이 result를 지우므로 승패도 wasFinal과 함께 미리 읽어둔다.
+              */
+              const wasFinal = isFinalFloor(floorIndex);
+              const wasVictory = result.outcome === 'victory';
+              finishBattle();
+              // 엔딩 직후에는 무덤으로. "기록을 남긴다"가 가리키는 곳이다.
+              if (wasFinal && wasVictory) { setLegacy(loadLegacy()); setScreen('grave'); }
+              else setScreen('base');
+            }}
           />
         )}
       </div>
