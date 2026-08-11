@@ -49,13 +49,31 @@ export function HeroCard({
   const starSize = Math.max(10, Math.round((star >= 5 ? 10 : 12) * s));
   const haloInset = Math.round(14 * s);
 
+  /*
+    카드 높이 — 폭 비례(1.58)를 **최소 높이**로만 쓴다.
+
+    ⚠️ `height`로 고정하면 안 된다. 글자 크기에는 하한(11/10px)이 있어서
+    폭이 130 아래로 내려가면 카드는 계속 줄어드는데 글자는 안 줄어든다.
+    실제로 파티 카드를 3열로 줄였을 때(width 101) 내부 행 합계가 165px인데
+    카드가 160px이라 **'Lv.15 · 견습병'이 overflow:hidden에 잘렸다** —
+    폰 스크린샷에서 카드 밑줄이 잘려 보인 것이 이것이다.
+
+    `minHeight`로 두면 내용이 넘칠 때만 카드가 자란다. 대부분의 폭에서는
+    비례 높이가 이기므로 기존 카드 모양은 그대로다.
+    (행 높이를 손으로 더해 하한을 계산해봤지만 실측과 17px 어긋났다 —
+     패딩·line-height를 코드에서 정확히 재현하는 것보다 브라우저에 맡기는 쪽이 옳다.)
+  */
+  const minHeight = Math.round(width * 1.58);
+
   return (
     <button
       onClick={onClick}
       style={{
         width,
-        height: Math.round(width * 1.58),
+        minHeight,
         position: 'relative',
+        // 내부 층이 minHeight를 상속받아 늘어날 수 있도록 flex 컨테이너로 둔다
+        display: 'flex',
         padding: 0,
         border: 'none',
         background: 'transparent',
@@ -71,8 +89,13 @@ export function HeroCard({
 
       <div
         style={{
-          position: 'absolute',
-          inset: 0,
+          /*
+            ⚠️ position:absolute가 아니다. 흐름 안에 둬야 내용이 카드를 밀어 올린다 —
+            absolute면 버튼 높이에 기여하지 못해 작은 폭에서 글자가 잘린다.
+            버튼이 minHeight만 갖고 이 층이 실제 높이를 정한다.
+          */
+          width: '100%',
+          minHeight: 'inherit',
           background: `linear-gradient(160deg,${tier.fill} 0%,#06050A 72%)`,
           border: `${luminous ? 2 : 1}px solid ${selected ? hi : tier.ring}`,
           boxShadow: tier.glow
