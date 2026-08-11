@@ -20,6 +20,12 @@ export interface FacilityScreenProps {
   onBack: () => void;
   /** 무덤으로. 부감 맵에서 무덤을 누르면 호출된다 */
   onOpenGrave: () => void;
+  /**
+   * 소환소·상점으로. 부감 맵은 이 화면에도 있으므로 여기서도 눌린다 —
+   * 대응 카드가 없다고 무시하면 '눌리지 않는 건물'이 되어 지도가 거짓말을 한다.
+   */
+  onOpenSummon: () => void;
+  onOpenShop: () => void;
   /** 잃은 영웅 수 — 무덤에 비석이 몇 개 서는지 */
   deathCount: number;
 }
@@ -65,7 +71,9 @@ function nextText(kind: FacilityKind, level: number): string | null {
  * 숙소는 층간 회복이므로 **탑에 오르기 전에** 의미가 생긴다.
  * 그래서 효과를 현재값과 다음값으로 나란히 보여준다 — 투자 판단이 화면에서 끝나야 한다.
  */
-export function FacilityScreen({ facilities, wallet, onUpgrade, onBack, onOpenGrave, deathCount }: FacilityScreenProps) {
+export function FacilityScreen({
+  facilities, wallet, onUpgrade, onBack, onOpenGrave, onOpenSummon, onOpenShop, deathCount,
+}: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
    * 부감 맵에서 고른 시설. 해당 카드로 스크롤하고 강조만 한다.
@@ -124,6 +132,9 @@ export function FacilityScreen({ facilities, wallet, onUpgrade, onBack, onOpenGr
           onSelect={(spot) => {
             // 무덤은 시설이 아니다 — 강조·스크롤이 아니라 화면 전환이다.
             if (spot === 'grave') { onOpenGrave(); return; }
+            // 소환소·상점도 시설이 아니다 — 각자 화면으로 바로 보낸다.
+            if (spot === 'summon') { onOpenSummon(); return; }
+            if (spot === 'shop') { onOpenShop(); return; }
             selectOnMap(spot);
           }}
         />

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { BaseScreen } from './screens/BaseScreen';
+import { BaseScreen, PARTY_LIMIT } from './screens/BaseScreen';
+import { RosterScreen } from './screens/RosterScreen';
 import { BriefScreen } from './screens/BriefScreen';
 import { SummonScreen } from './screens/SummonScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
@@ -11,6 +12,7 @@ import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
+import type { BaseMapSpot } from './ui/BaseMap';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
@@ -23,7 +25,7 @@ import type { HeroInstance } from './game/types';
 
 type Screen =
   | 'base' | 'brief' | 'battle' | 'result'
-  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave';
+  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave' | 'roster';
 
 /** 모바일 전용. 데스크톱에서도 이 폭의 세로 화면을 중앙에 띄운다. */
 const MOBILE_WIDTH = 480;
@@ -37,6 +39,12 @@ export default function App() {
   const [detail, setDetail] = useState<HeroInstance | null>(null);
   // 무덤은 저장소에서 읽으므로 화면을 열 때 최신값을 가져온다.
   const [legacy, setLegacy] = useState(() => loadLegacy());
+  /**
+   * 무덤에 어디서 들어왔는가. 마을과 시설 화면 둘 다 무덤을 열 수 있어서
+   * 돌아가기 대상이 진입 경로에 따라 달라져야 한다.
+   * 엔딩(결과 화면)에서 들어오는 경우는 'base'로 둔다 — 그 런은 이미 끝났다.
+   */
+  const [graveFrom, setGraveFrom] = useState<'base' | 'facility'>('base');
 
   const floorIndex = useRunStore((s) => s.floorIndex);
   const towerCleared = useRunStore((s) => s.towerCleared);
@@ -93,6 +101,27 @@ export default function App() {
   };
 
   /**
+   * 마을 부감도의 자리 → 화면.
+   *
+   * 시설 4종은 전부 시설 화면 하나로 간다(거기서 업그레이드한다).
+   * 소환소·상점·무덤은 각자 화면이 따로 있다.
+   * 무덤은 진입 시 무덤 파일을 다시 읽는다 — 다른 화면에서 회차가 끝났을 수 있다.
+   */
+  const goToSpot = (spot: BaseMapSpot) => {
+    switch (spot) {
+      case 'summon': setScreen('summon'); break;
+      case 'shop': setScreen('shop'); break;
+      case 'grave': setGraveFrom('base'); setLegacy(loadLegacy()); setScreen('grave'); break;
+      // 합성소는 제단(합성/승급), 무기창고는 대장간(강화)이 실제 동작이다.
+      case 'forge': setScreen('forge'); break;
+      case 'armory': setScreen('smith'); break;
+      // 숙소·훈련소는 고유 화면이 없다 — 시설 화면에서 레벨을 올린다.
+      case 'rest':
+      case 'training': setScreen('facility'); break;
+    }
+  };
+
+  /**
    * 결과 화면에 보여줄 과제 달성 목록을 **미리** 판정한다.
    *
    * 결과 화면은 finish()보다 먼저 뜨므로 스토어의 questGrants는 아직 비어 있다.
@@ -146,16 +175,23 @@ export default function App() {
             floorIndex={floorIndex}
             roster={roster}
             party={party}
-            onToggleParty={toggleParty}
+            facilities={facilities}
             onEnter={() => setScreen('brief')}
             onInspect={setDetail}
-            onSummon={() => setScreen('summon')}
-            onForge={() => setScreen('forge')}
-            onFacility={() => setScreen('facility')}
-            onShop={() => setScreen('shop')}
-            onSmith={() => setScreen('smith')}
+            onGoTo={goToSpot}
+            onOpenRoster={() => setScreen('roster')}
             towerCleared={towerCleared}
             deathCount={deathCount}
+          />
+        )}
+        {screen === 'roster' && (
+          <RosterScreen
+            roster={roster}
+            party={party}
+            partyLimit={PARTY_LIMIT}
+            onToggleParty={toggleParty}
+            onInspect={setDetail}
+            onBack={() => setScreen('base')}
           />
         )}
         {screen === 'facility' && (
@@ -165,7 +201,9 @@ export default function App() {
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
             deathCount={deathCount}
-            onOpenGrave={() => { setLegacy(loadLegacy()); setScreen('grave'); }}
+            onOpenGrave={() => { setGraveFrom('facility'); setLegacy(loadLegacy()); setScreen('grave'); }}
+            onOpenSummon={() => setScreen('summon')}
+            onOpenShop={() => setScreen('shop')}
           />
         )}
         {screen === 'grave' && (
@@ -176,7 +214,11 @@ export default function App() {
             deathCount={deathCount}
             towerCleared={towerCleared}
             onStartNewRun={() => { startNewRun(); setLegacy(loadLegacy()); setScreen('base'); }}
-            onBack={() => setScreen('facility')}
+            /*
+              무덤은 마을(대기실)과 시설 화면 양쪽에서 열린다.
+              돌아가기를 한쪽으로 고정하면 나머지 경로에서 '가본 적 없는 곳'으로 튕긴다.
+            */
+            onBack={() => setScreen(graveFrom)}
           />
         )}
         {screen === 'shop' && (
@@ -271,8 +313,16 @@ export default function App() {
               const wasFinal = isFinalFloor(floorIndex);
               const wasVictory = result.outcome === 'victory';
               finishBattle();
-              // 엔딩 직후에는 무덤으로. "기록을 남긴다"가 가리키는 곳이다.
-              if (wasFinal && wasVictory) { setLegacy(loadLegacy()); setScreen('grave'); }
+              /*
+                엔딩 직후에는 무덤으로. "기록을 남긴다"가 가리키는 곳이다.
+                graveFrom을 명시적으로 되돌린다 — 이전에 시설에서 무덤을 열었다면
+                그 값이 남아 있어서 엔딩의 '돌아가기'가 시설로 튄다.
+              */
+              if (wasFinal && wasVictory) {
+                setGraveFrom('base');
+                setLegacy(loadLegacy());
+                setScreen('grave');
+              }
               else setScreen('base');
             }}
           />

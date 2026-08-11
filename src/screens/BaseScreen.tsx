@@ -1,5 +1,6 @@
 import { HeroCard } from '../ui/HeroCard';
 import { Button, TOUCH_MIN } from '../ui/Button';
+import { BaseMap, type BaseMapSpot } from '../ui/BaseMap';
 import { TowerMap } from '../ui/TowerMap';
 import { useViewport } from '../ui/useViewport';
 import { Scene } from '../ui/art/Scene';
@@ -11,6 +12,7 @@ import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { gameData } from '../game/data';
+import type { FacilityKind } from '../game/data/facilities';
 import type { FloorSpec } from '../game/data/floors';
 import type { HeroInstId, HeroInstance } from '../game/types';
 
@@ -21,14 +23,13 @@ export interface BaseScreenProps {
   floorIndex: number;
   roster: HeroInstance[];
   party: HeroInstId[];
-  onToggleParty: (id: HeroInstId) => void;
+  facilities: Record<FacilityKind, number>;
   onEnter: () => void;
   onInspect: (hero: HeroInstance) => void;
-  onSummon: () => void;
-  onForge: () => void;
-  onFacility: () => void;
-  onShop: () => void;
-  onSmith: () => void;
+  /** 마을에서 장소를 골랐다. 시설·소환소·상점·무덤이 전부 여기로 온다 */
+  onGoTo: (spot: BaseMapSpot) => void;
+  /** 영웅 전체 화면으로 */
+  onOpenRoster: () => void;
   /** 최상층을 이미 클리어했는가 — 더 오를 층이 없다 */
   towerCleared?: boolean;
   /**
@@ -41,27 +42,64 @@ export interface BaseScreenProps {
   deathCount?: number;
 }
 
-/** 대기실 — 탑 미니맵 + 다음 층 + 파티 편성 */
+/**
+ * 대기실 — 마을 부감도가 주 화면이다.
+ *
+ * ── 왜 목록형 버튼이 아니라 마을인가 ───────────────────
+ * 방치형 게임의 표준 동선이다. 시설이 **장소**로 읽히면 "거점에 산다"는
+ * 감각이 생기고, 버튼 6개가 지도 위 건물로 흡수되어 화면이 짧아진다.
+ *
+ * ── 로스터를 뺀 이유 ──────────────────────────────────
+ * 카드 5장이 1185px을 먹어 주 동선(`탑 입장`)을 화면 밖으로 밀어냈다(실측 y=1378).
+ * 여기에는 **편성된 파티만** 가로로 보여주고, 전체는 RosterScreen으로 보낸다.
+ * 그래서 로스터가 20명이 돼도 이 화면 높이는 변하지 않는다.
+ */
 export function BaseScreen({
-  floor, floorIndex, roster, party, onToggleParty, onEnter, onInspect, onSummon, onForge,
-  onFacility, onShop, onSmith,
+  floor, floorIndex, roster, party, facilities,
+  onEnter, onInspect, onGoTo, onOpenRoster,
   towerCleared = false, deathCount,
 }: BaseScreenProps) {
   const alive = roster.filter((h) => !h.isDead);
   const { width } = useViewport();
-  // 2열 그리드에 맞춰 카드 폭을 잡는다. 컨테이너 패딩 24 + 그리드 간격 18.
-  const cardWidth = Math.max(112, Math.min(150, Math.floor((Math.min(width, 480) - 42) / 2)));
+  /*
+    파티 카드는 3장을 한 줄에 넣는다. 2열 그리드(150px)보다 작아지지만
+    타로카드 비율과 등급 구조는 그대로 유지된다 — 축소이지 썸네일화가 아니다.
+  */
+  const partyCardWidth = Math.max(84, Math.min(104, Math.floor((Math.min(width, 480) - 56) / 3)));
+
+  // 편성 순서를 그대로 보여준다. roster 순서로 정렬하면 편성한 순서가 사라진다.
+  const partyHeroes = party
+    .map((id) => roster.find((h) => h.instId === id))
+    .filter((h): h is HeroInstance => !!h);
 
   return (
-    <div style={{ padding: '14px 12px 0' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 18 }}>
+    /*
+      하단 여백은 sticky 액션 바 높이(약 78px)만큼 둔다.
+      0으로 두면 마지막 콘텐츠가 바 뒤에 깔려 영구히 가려진다 —
+      그라디언트 배경은 반투명이라 겹친 글자가 비쳐 보인다(실제로 '탑 전경 보기'가 겹쳤다).
+    */
+    <div style={{ padding: '14px 12px 78px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 14 }}>
         <span>대기실</span>
         <span>생존 영웅 {alive.length} / {roster.length}</span>
       </div>
 
+      {/*
+        마을 — 이 화면의 주인공. 시설·소환소·상점·무덤이 전부 여기서 열린다.
+        선택 상태를 넘기지 않는다(selected 생략): 여기서는 고르는 게 아니라 이동한다.
+      */}
+      <BaseMap
+        facilities={facilities}
+        deathCount={deathCount ?? 0}
+        onSelect={onGoTo}
+      />
+      <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.08em', margin: '8px 0 18px' }}>
+        건물을 눌러 이동합니다
+      </div>
+
       {/* 다음 층 — 주 정보라 항상 펼쳐둔다 */}
       <SectionLabel>{towerCleared ? '등반 종료' : '다음 층'}</SectionLabel>
-      <div style={{ position: 'relative', height: 132, border: `1px solid ${T.panelHi}`, overflow: 'hidden', marginBottom: 10 }}>
+      <div style={{ position: 'relative', height: 112, border: `1px solid ${T.panelHi}`, overflow: 'hidden', marginBottom: 10 }}>
         <Scene kind={floor.scene} />
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textShadow: '0 2px 8px #000' }}>
           {towerCleared ? (
@@ -81,7 +119,7 @@ export function BaseScreen({
           )}
         </div>
       </div>
-      <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, marginBottom: 20 }}>
+      <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, marginBottom: 18 }}>
         {towerCleared ? (
           // 퍼머데스 게임이므로 끝에 남는 건 '누가 남았는가'다. 그것만 말한다.
           // 숫자는 결과 화면의 엔딩과 같은 출처(deathCount)를 쓴다 — 갈리면 둘 중 하나가 거짓말이 된다.
@@ -96,7 +134,7 @@ export function BaseScreen({
       </div>
 
       {/* 탑 전경은 참조 정보 — 접어둔다 */}
-      <details style={{ marginBottom: 20 }}>
+      <details style={{ marginBottom: 18 }}>
         <summary
           style={{
             cursor: 'pointer', listStyle: 'none', color: T.dim,
@@ -110,21 +148,22 @@ export function BaseScreen({
         </div>
       </details>
 
-      <SectionLabel>파티 편성 ({party.length}/{PARTY_LIMIT})</SectionLabel>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 18,
-          justifyItems: 'center',
-          marginBottom: 10,
-        }}
-      >
-        {roster.map((h) => {
-          const def = gameData.heroes[h.defId];
-          return (
-            <div key={h.instId} style={{ textAlign: 'center' }}>
+      {/*
+        편성된 파티만. 전체 로스터는 '영웅 전체'로 나간다 —
+        여기에 다 그리면 이 화면이 다시 1442px이 된다.
+      */}
+      <SectionLabel>파티 ({party.length}/{PARTY_LIMIT})</SectionLabel>
+      {partyHeroes.length === 0 ? (
+        <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, padding: '10px 0 4px' }}>
+          편성된 영웅이 없습니다
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 4 }}>
+          {partyHeroes.map((h) => {
+            const def = gameData.heroes[h.defId];
+            return (
               <HeroCard
+                key={h.instId}
                 name={displayName(h, gameData.heroes)}
                 star={h.star}
                 element={def.element}
@@ -132,45 +171,41 @@ export function BaseScreen({
                 defId={h.defId}
                 level={h.level}
                 klass={klassFor(h.star)}
-                width={cardWidth}
-                dead={h.isDead}
-                selected={party.includes(h.instId)}
+                width={partyCardWidth}
+                selected
                 reveal={estimatePotential(h).progress}
-                onClick={() => !h.isDead && onToggleParty(h.instId)}
-              />
-              <button
                 onClick={() => onInspect(h)}
-                disabled={h.isDead}
-                style={{
-                  marginTop: 2,
-                  minHeight: TOUCH_MIN,
-                  minWidth: 64,
-                  padding: '10px 16px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'transparent',
-                  border: 'none',
-                  color: T.dim,
-                  fontSize: 12,
-                  fontFamily: 'inherit',
-                  cursor: h.isDead ? 'default' : 'pointer',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: 3,
-                }}
-              >
-                {h.isDead ? '사망' : '상세'}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+              />
+            );
+          })}
+        </div>
+      )}
 
-      <div style={{ textAlign: 'center', color: T.dim, fontSize: 11, marginBottom: 12 }}>
-        카드를 눌러 편성 · 사망한 영웅은 되살릴 수 없습니다
-      </div>
+      <button
+        onClick={onOpenRoster}
+        style={{
+          marginTop: 6,
+          minHeight: TOUCH_MIN,
+          padding: '10px 16px',
+          background: 'transparent',
+          border: 'none',
+          color: T.dim,
+          fontSize: 12,
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textUnderlineOffset: 3,
+        }}
+      >
+        영웅 전체 ({roster.length}) ▸
+      </button>
 
-      {/* 로스터가 길어지면 버튼이 화면 밖으로 밀린다 → 하단에 고정 */}
+      {/*
+        하단은 주 동선 하나만. 나머지는 전부 마을이 대신한다.
+
+        ⚠️ sticky는 index.css의 `overflow-x: clip`에 의존한다.
+        `hidden`으로 되돌리면 body가 스크롤 컨테이너가 되어 이게 조용히 죽는다.
+      */}
       <div
         style={{
           position: 'sticky',
@@ -181,24 +216,13 @@ export function BaseScreen({
           zIndex: 10,
         }}
       >
-        {/*
-          폭 375px에 6개가 한 줄로는 안 들어간다. small(최소 44px)을 유지한 채
-          wrap으로 여러 줄이 되게 둔다 — 터치 타깃을 줄여 한 줄에 맞추지 말 것.
-        */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Button small onClick={onSummon}>소환</Button>
-          <Button small onClick={onForge}>제단</Button>
-          <Button small onClick={onFacility}>시설</Button>
-          <Button small onClick={onShop}>상점</Button>
-          <Button small onClick={onSmith}>대장간</Button>
-          <Button
-            tone="rare"
-            onClick={onEnter}
-            disabled={party.length === 0 || towerCleared}
-          >
-            {towerCleared ? '등반 완료' : '탑 입장'}
-          </Button>
-        </div>
+        <Button
+          tone="rare"
+          onClick={onEnter}
+          disabled={party.length === 0 || towerCleared}
+        >
+          {towerCleared ? '등반 완료' : '탑 입장'}
+        </Button>
       </div>
     </div>
   );

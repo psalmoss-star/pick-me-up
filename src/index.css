@@ -25,8 +25,17 @@ html, body, #root {
 }
 
 html, body {
-  /* 카드 halo 등 장식이 넘쳐 가로 스크롤이 생기는 것을 차단 */
-  overflow-x: hidden;
+  /*
+    카드 halo 등 장식이 넘쳐 가로 스크롤이 생기는 것을 차단.
+
+    ⚠️ `hidden`이 아니라 `clip`이다. 바꾸지 말 것 —
+    `overflow-x: hidden`은 body를 **스크롤 컨테이너로 만들어** 자손의
+    `position: sticky`를 통째로 죽인다(스크롤 컨테이너 높이 = 콘텐츠 높이라
+    붙을 여백이 없다). 실제로 대기실 하단 액션 바가 이것 때문에 조용히
+    안 붙어서 `탑 입장`이 y=1378에 있었다 — 측정 전까지 아무도 몰랐다.
+    `clip`은 스크롤 컨테이너를 만들지 않아 가로 차단과 sticky를 둘 다 얻는다.
+  */
+  overflow-x: clip;
   /* 전투 관전 중 실수로 당기면 새로고침 → 저장이 없어 진행이 전부 날아간다 */
   overscroll-behavior-y: none;
 }

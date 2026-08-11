@@ -84,7 +84,24 @@ export function BriefScreen({
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
+      {/*
+        과제 문구가 길어지면 진입 버튼이 접힘선 아래로 내려간다 —
+        1층 기준으로도 600px 화면에서 65px 밀렸다(실측). 하단에 고정한다.
+      */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          display: 'flex',
+          gap: 12,
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          marginTop: 26,
+          padding: '14px 0 calc(14px + env(safe-area-inset-bottom))',
+          background: `linear-gradient(180deg,transparent,${T.void} 45%)`,
+          zIndex: 10,
+        }}
+      >
         <Button onClick={onBack}>돌아가기</Button>
         <Button tone="warning" onClick={onStart}>진입</Button>
       </div>

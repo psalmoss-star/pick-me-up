@@ -18,11 +18,36 @@ import { FACILITY_MAX_LEVEL, type FacilityKind } from '../game/data/facilities';
  * 색만 바꾸면 Lv.1과 Lv.3이 구분되지 않는다.
  */
 
-/** 부감 맵에서 고를 수 있는 자리. 무덤은 시설이 아니지만 같은 공간에 산다. */
-export type BaseMapSpot = FacilityKind | 'grave';
+/**
+ * 부감 맵에서 고를 수 있는 자리.
+ *
+ * 시설(레벨이 오르는 것) 외에 무덤·소환소·상점도 같은 공간에 산다.
+ * 셋 다 시설이 아니라 **레벨이 없다** — 그래서 `Building`을 쓰지 않는다.
+ */
+export type BaseMapSpot = FacilityKind | 'grave' | 'summon' | 'shop';
 
 /** 무덤 자리 — 광장 위. 시설(y=92)과 겹치지 않도록 충분히 띄운다. */
 const GRAVE = { x: 160, y: 46 };
+
+/**
+ * 레벨 없는 장소들 — 소환소·상점. 맵 **맨 아래 행**에 둔다.
+ *
+ * ⚠️ 처음에 좌우 중단(y=140)에 뒀다가 위 칸 시설 이름표(y=113)와
+ * 제단 아치 꼭대기(y=98)가 겹쳐 글자가 뭉갰다. 아래로 내렸더니
+ * 이번엔 합성소 이름표(y=198)와 부딪혔다 — **320×216에 7개는 안 들어간다.**
+ * viewBox 높이를 216 → 268로 늘리고 독립된 행을 만들었다.
+ *
+ * viewBox를 바꾸면 **버튼 좌표의 분모도 같이 바뀐다**(아래 MAP_H).
+ * 한쪽만 고치면 터치 영역이 그림에서 밀린다.
+ */
+const PLAIN: Record<'summon' | 'shop', { x: number; y: number; label: string }> = {
+  summon: { x: 96, y: 246, label: '소환소' },
+  shop: { x: 224, y: 246, label: '상점' },
+};
+
+/** viewBox 크기 — 버튼 퍼센트 배치의 분모. SVG와 반드시 같은 값을 쓸 것. */
+const MAP_W = 320;
+const MAP_H = 268;
 
 export interface BaseMapProps {
   facilities: Record<FacilityKind, number>;
@@ -149,17 +174,63 @@ function Grave({ x, y, deaths, dim }: { x: number; y: number; deaths: number; di
   );
 }
 
+/**
+ * 소환소 — 제단형. 레벨이 없으므로 자라지 않는다.
+ *
+ * 시설과 실루엣이 겹치면 "지을 수 있는 것"으로 오독되므로
+ * 사각 건물 대신 **기둥 두 개 + 아치**로 그린다.
+ */
+function SummonAltar({ x, y, dim }: { x: number; y: number; dim: boolean }) {
+  return (
+    <g opacity={dim ? 0.45 : 1} style={{ transition: 'opacity 200ms' }}>
+      <ellipse cx={x} cy={y + 4} rx={24} ry={6} fill="#000" opacity=".45" />
+      <rect x={x - 20} y={y} width={40} height={5} fill="#100D18" stroke={T.frame} strokeWidth="1" />
+      {/* 기둥 */}
+      <rect x={x - 15} y={y - 26} width={7} height={26} fill="#171226" stroke={T.frame} strokeWidth="1.2" />
+      <rect x={x + 8} y={y - 26} width={7} height={26} fill="#171226" stroke={T.frame} strokeWidth="1.2" />
+      {/* 아치 — 두 기둥을 잇는다 */}
+      <path d={`M${x - 15} ${y - 26} Q${x} ${y - 42} ${x + 15} ${y - 26}`} fill="none" stroke={T.frame} strokeWidth="1.4" />
+      {/* 소환광 — 이 자리가 '무언가 나오는 곳'임을 말한다 */}
+      <circle cx={x} cy={y - 14} r={5} fill={T.gold} opacity=".55" />
+    </g>
+  );
+}
+
+/**
+ * 상점 — 차양(천막)형. 역시 레벨이 없다.
+ * 사선 줄무늬 차양으로 건물과 구분한다.
+ */
+function ShopStall({ x, y, dim }: { x: number; y: number; dim: boolean }) {
+  return (
+    <g opacity={dim ? 0.45 : 1} style={{ transition: 'opacity 200ms' }}>
+      <ellipse cx={x} cy={y + 4} rx={24} ry={6} fill="#000" opacity=".45" />
+      <rect x={x - 20} y={y} width={40} height={5} fill="#100D18" stroke={T.frame} strokeWidth="1" />
+      {/* 좌판 */}
+      <rect x={x - 16} y={y - 18} width={32} height={18} fill="#171226" stroke={T.frame} strokeWidth="1.2" />
+      {/* 차양 — 사선 세 칸으로 천막을 만든다 */}
+      <path
+        d={`M${x - 21} ${y - 18} L${x - 14} ${y - 30} L${x + 14} ${y - 30} L${x + 21} ${y - 18} Z`}
+        fill="#1E1730" stroke={T.frame} strokeWidth="1.3"
+      />
+      <line x1={x - 7} y1={y - 30} x2={x - 12} y2={y - 18} stroke={T.frame} strokeWidth="1" opacity=".8" />
+      <line x1={x + 7} y1={y - 30} x2={x + 12} y2={y - 18} stroke={T.frame} strokeWidth="1" opacity=".8" />
+      {/* 동전 표식 */}
+      <circle cx={x} cy={y - 9} r={3.5} fill={T.gold} opacity=".8" />
+    </g>
+  );
+}
+
 export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: BaseMapProps) {
   return (
     <div style={{ position: 'relative', border: `1px solid ${T.panelHi}`, background: '#08070C', overflow: 'hidden' }}>
-      <svg viewBox="0 0 320 216" style={{ display: 'block', width: '100%' }} aria-hidden="true">
+      <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} style={{ display: 'block', width: '100%' }} aria-hidden="true">
         <defs>
           <radialGradient id="baseGlow" cx="50%" cy="46%" r="62%">
             <stop offset="0%" stopColor="#1A1428" />
             <stop offset="100%" stopColor="#07060B" />
           </radialGradient>
         </defs>
-        <rect x="0" y="0" width="320" height="216" fill="url(#baseGlow)" />
+        <rect x="0" y="0" width={MAP_W} height={MAP_H} fill="url(#baseGlow)" />
 
         {/* 광장 — 시설들이 둘러싸는 중심. 여기가 '대기실'이다 */}
         <ellipse cx="160" cy="140" rx="52" ry="24" fill="#0E0B16" stroke={T.panelHi} strokeWidth="1" />
@@ -183,6 +254,15 @@ export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: Base
           x1="160" y1="140" x2={GRAVE.x} y2={GRAVE.y}
           stroke={T.panelHi} strokeWidth="1.4" strokeDasharray="3 4" opacity=".9"
         />
+
+        {/* 광장 → 소환소·상점 길 */}
+        {(['summon', 'shop'] as const).map((k) => (
+          <line
+            key={k}
+            x1="160" y1="140" x2={PLAIN[k].x} y2={PLAIN[k].y}
+            stroke={T.panelHi} strokeWidth="1.4" strokeDasharray="3 4" opacity=".9"
+          />
+        ))}
 
         {ORDER.map((k) => (
           <Building
@@ -218,6 +298,20 @@ export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: Base
         >
           무덤
         </text>
+
+        <SummonAltar x={PLAIN.summon.x} y={PLAIN.summon.y} dim={!!selected && selected !== 'summon'} />
+        <ShopStall x={PLAIN.shop.x} y={PLAIN.shop.y} dim={!!selected && selected !== 'shop'} />
+        {(['summon', 'shop'] as const).map((k) => (
+          <text
+            key={k}
+            x={PLAIN[k].x} y={PLAIN[k].y + 19}
+            textAnchor="middle"
+            fill={selected === k ? T.gold : T.dim}
+            fontSize="10" letterSpacing="1"
+          >
+            {PLAIN[k].label}
+          </text>
+        ))}
       </svg>
 
       {/*
@@ -233,8 +327,8 @@ export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: Base
           style={{
             position: 'absolute',
             // viewBox 높이(216)로 나눈다 — 여기가 SVG와 어긋나면 버튼이 그림에서 밀린다
-            left: `${(SPOT[k].x / 320) * 100}%`,
-            top: `${(SPOT[k].y / 216) * 100}%`,
+            left: `${(SPOT[k].x / MAP_W) * 100}%`,
+            top: `${(SPOT[k].y / MAP_H) * 100}%`,
             transform: 'translate(-50%, -70%)',
             width: 72, height: 56,
             minWidth: 44, minHeight: 44,
@@ -252,8 +346,8 @@ export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: Base
           aria-label={`무덤 (잃은 영웅 ${deathCount})`}
           style={{
             position: 'absolute',
-            left: `${(GRAVE.x / 320) * 100}%`,
-            top: `${(GRAVE.y / 216) * 100}%`,
+            left: `${(GRAVE.x / MAP_W) * 100}%`,
+            top: `${(GRAVE.y / MAP_H) * 100}%`,
             transform: 'translate(-50%, -70%)',
             width: 72, height: 56,
             minWidth: 44, minHeight: 44,
@@ -264,6 +358,26 @@ export function BaseMap({ facilities, onSelect, selected, deathCount = 0 }: Base
           }}
         />
       )}
+
+      {onSelect && (['summon', 'shop'] as const).map((k) => (
+        <button
+          key={k}
+          onClick={() => onSelect(k)}
+          aria-label={PLAIN[k].label}
+          style={{
+            position: 'absolute',
+            left: `${(PLAIN[k].x / MAP_W) * 100}%`,
+            top: `${(PLAIN[k].y / MAP_H) * 100}%`,
+            transform: 'translate(-50%, -70%)',
+            width: 64, height: 56,
+            minWidth: 44, minHeight: 44,
+            background: 'transparent',
+            border: selected === k ? `1px solid ${T.gold}` : '1px solid transparent',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        />
+      ))}
     </div>
   );
 }
