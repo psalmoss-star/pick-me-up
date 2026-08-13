@@ -2,6 +2,10 @@ node_modules/
 dist/
 .vite/
 
+# tsc --noEmit의 증분 빌드 캐시. 산출물이라 커밋 대상이 아닌데
+# 저장소 초기화 때 딸려 들어가 있었다 — 매 typecheck마다 diff에 떴다.
+tsconfig.tsbuildinfo
+
 # 화면 확인용 스크린샷 — 루트에만 적용한다.
 # ⚠️ 전역 `*.png`로 걸지 말 것: src/ui/art/assets/의 게임 에셋이 조용히 누락된다.
 /*.png
