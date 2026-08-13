@@ -186,14 +186,16 @@ src/game/identity.test.ts# 19개
 
 ~~`.gitignore`는 아직 없다~~ → **git 초기화됨, `.gitignore`도 있다**(2026-08-13 확인).
 `*.png`를 전역으로 걸지 말 것 — 나중에 게임 이미지 에셋을 PNG로 추가하면 조용히 누락된다.
-루트 한정(`/*.png`)으로 건다. `src/ui/art/assets/*.jpg` **12장**은 **게임 에셋이니 지우지 말 것**(확인함).
+루트 한정(`/*.png`)으로 건다. `src/ui/art/assets/*.jpg` **72장**(12종 × 6변형)은
+**게임 에셋이니 지우지 말 것**(2026-08-13 실측).
 
-**남은 것** — STEP 16 검증에 쓴 임시 파일. 여전히 안 지워졌고, 문서에 없던 `tmp-seg.mts`가
-하나 더 있다(2026-08-13 실측 — **5개**).
+~~**남은 것** — STEP 16 검증에 쓴 임시 파일 5개~~ → ✅ **삭제 완료 (2026-08-13).**
+`tmp-namecheck.mts` / `tmp-namecheck.txt` / `tmp-after.txt` / `tmp-salt.txt` / `tmp-seg.mts`.
 
-```
-tower-of-picks/tmp-namecheck.mts  tmp-namecheck.txt  tmp-after.txt  tmp-salt.txt  tmp-seg.mts
-```
+> 지우기 전에 세 `.txt`의 내용이 문서에 남아 있는지 확인했다 — 전부 남아 있다:
+> salt 충돌 5건(106·145·158·245·506)은 §STEP 16과 §5-27에, 이름 통계(고유 95/100,
+> 최소 간격 32)와 적·임무·배경 구성은 §STEP 16에 있다.
+> **일회성 스크립트는 출력이 아니라 결론이 문서에 남아야 지울 수 있다.**
 
 ---
 
