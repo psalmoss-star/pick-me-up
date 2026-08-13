@@ -1,6 +1,7 @@
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroPortrait } from '../ui/art/HeroPortrait';
+import { heroVariantOf } from '../ui/art/heroImages';
 import { heroArtOf } from '../ui/artMap';
 import { ELEMENT_KR, T } from '../ui/tokens';
 import { computeAttributes, computeHeroStats, isAtCap, klassFor } from '../game/stats';
@@ -96,7 +97,7 @@ export function DetailModal({ hero, onClose, gear, onEquip, onUnequip }: DetailM
               서야 해서 사진형 이미지를 끼우면 유닛이 다른 바닥에 뜬 것처럼 보인다.
               (HeroPortrait는 이미지가 없거나 로드에 실패하면 알아서 HeroArt로 폴백한다)
             */}
-            <HeroPortrait defId={hero.defId} art={heroArtOf(hero.defId)} element={def.element} size={92} />
+            <HeroPortrait defId={hero.defId} variant={heroVariantOf(hero)} art={heroArtOf(hero.defId)} element={def.element} size={92} />
           </div>
           <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>
             {displayName(hero, gameData.heroes)}({'★'.repeat(hero.star)}) <span style={{ fontSize: 15 }}>Lv.{hero.level}</span>

@@ -18,6 +18,12 @@ import { ELEMENT_TINT } from '../tokens';
 export interface HeroPortraitProps {
   /** 이미지 조회 키. 없으면 항상 SVG로 간다. */
   defId?: string;
+  /**
+   * 변형 슬롯. 호출부가 `heroVariantOf(inst)`로 꺼내 넘긴다 —
+   * 이 컴포넌트는 게임 로직을 모른다(HeroCard의 `reveal`과 같은 방식).
+   * 없으면 0 — seed 이전 세이브와 무덤 기록(FallenRecord)이 여기로 떨어진다.
+   */
+  variant?: number;
   art: HeroArtKind;
   element: string;
   size?: number;
@@ -25,11 +31,21 @@ export interface HeroPortraitProps {
 }
 
 export function HeroPortrait({
-  defId, art, element, size = 74, faded,
+  defId, variant = 0, art, element, size = 74, faded,
 }: HeroPortraitProps) {
-  // 로드 실패를 기억해 무한 재시도를 막는다
-  const [broken, setBroken] = useState(false);
-  const src = defId ? heroImageOf(defId) : undefined;
+  /*
+    로드 실패를 기억해 무한 재시도를 막는다.
+
+    ⚠️ boolean이 아니라 **실패한 URL**을 담는다.
+    boolean이면 한 번 실패한 뒤 다른 초상으로 바뀌어도 계속 true라, 카드가 재사용되며
+    defId·variant가 바뀔 때(소환 연출·로스터 스크롤) **멀쩡한 이미지까지 영원히 가려진다.**
+    URL로 비교하면 "지금 이 src가 실패했는가"만 보므로 다음 이미지는 정상 시도된다.
+    (`<img>`에 key를 주는 방식은 안 통한다 — broken이 참이면 아래에서 SVG를 반환해
+     `<img>` 자체가 렌더 트리에 없고, 그래서 key가 도달하지 못한다.)
+  */
+  const [brokenSrc, setBrokenSrc] = useState<string | undefined>(undefined);
+  const src = defId ? heroImageOf(defId, variant) : undefined;
+  const broken = src !== undefined && src === brokenSrc;
 
   if (!src || broken) {
     return <HeroArt art={art} element={element} size={size} faded={faded} />;
@@ -53,7 +69,7 @@ export function HeroPortrait({
         src={src}
         alt=""
         aria-hidden="true"
-        onError={() => setBroken(true)}
+        onError={() => setBrokenSrc(src)}
         style={{
           width: '100%',
           height: '100%',

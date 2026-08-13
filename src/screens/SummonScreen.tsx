@@ -3,6 +3,7 @@ import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
+import { heroVariantOf } from '../ui/art/heroImages';
 import { STAR_TIERS, T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
@@ -162,6 +163,7 @@ export function SummonScreen({
               element={gameData.heroes[pulled.hero.defId].element}
               art={heroArtOf(pulled.hero.defId)}
               defId={pulled.hero.defId}
+              variant={heroVariantOf(pulled.hero)}
               level={pulled.hero.level}
               klass={klassFor(pulled.star)}
               width={132}

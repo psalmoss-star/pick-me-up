@@ -3,6 +3,7 @@ import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
+import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
@@ -224,6 +225,7 @@ export function ForgeScreen({
                 width={92}
                 selected={isTarget || isSac}
                 reveal={estimatePotential(h).progress}
+                variant={heroVariantOf(h)}
                 onClick={() => {
                   setNotice(null);
                   setConfirming(false);
@@ -277,6 +279,7 @@ function Slot({
         klass={klassFor(hero.star)}
         width={100}
         reveal={estimatePotential(hero).progress}
+        variant={heroVariantOf(hero)}
         onClick={onClear}
       />
       <div style={{ fontSize: 10, color: c, letterSpacing: '.2em', marginTop: 2 }}>{label}</div>

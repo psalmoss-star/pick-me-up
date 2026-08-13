@@ -2,6 +2,7 @@ import { SystemPanel } from '../ui/SystemPanel';
 import { Button } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
+import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
 import { MISSION_LABEL } from '../game/mission';
 import { klassFor } from '../game/stats';
@@ -124,6 +125,7 @@ export function ResultScreen({
               klass={klassFor(mvp.star)}
               width={150}
               reveal={estimatePotential(mvp).progress}
+              variant={heroVariantOf(mvp)}
             />
           </div>
         </div>

@@ -13,6 +13,11 @@ export interface HeroCardProps {
    * 생략해도 카드는 정상 동작한다 — 아트는 선택 사항이다.
    */
   defId?: string;
+  /**
+   * 초상 변형 슬롯. 호출부가 `heroVariantOf(inst)`로 꺼내 넘긴다(reveal과 같은 방식).
+   * 같은 유형이라도 개체마다 다른 얼굴이 되게 하는 값이다.
+   */
+  variant?: number;
   level?: number;
   klass?: string;
   width?: number;
@@ -33,7 +38,7 @@ export interface HeroCardProps {
  * 등급 표현은 STAR_TIERS의 구조 값(corners/lattice/rays/halo)을 반드시 사용할 것.
  */
 export function HeroCard({
-  name, star, element, art, defId, level, klass,
+  name, star, element, art, defId, variant, level, klass,
   width = 130, selected, dead, favorite, reveal, onClick,
 }: HeroCardProps) {
   const tier = STAR_TIERS[star] ?? STAR_TIERS[1];
@@ -125,7 +130,7 @@ export function HeroCard({
         )}
 
         <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1, paddingTop: 12 }}>
-          <HeroPortrait defId={defId} art={art} element={element} size={width * 0.62} />
+          <HeroPortrait defId={defId} variant={variant} art={art} element={element} size={width * 0.62} />
         </div>
 
         <div style={{ textAlign: 'center', padding: '4px 0 2px', zIndex: 1 }}>

@@ -2,6 +2,7 @@ import { HeroCard } from '../ui/HeroCard';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { useViewport } from '../ui/useViewport';
 import { heroArtOf } from '../ui/artMap';
+import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
@@ -72,6 +73,7 @@ export function RosterScreen({
                 dead={h.isDead}
                 selected={party.includes(h.instId)}
                 reveal={estimatePotential(h).progress}
+                variant={heroVariantOf(h)}
                 onClick={() => !h.isDead && onToggleParty(h.instId)}
               />
               <button
