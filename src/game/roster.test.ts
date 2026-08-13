@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { livingHeroes, fallenHeroes } from './roster';
+import {
+  livingHeroes, fallenHeroes, isPreciousSacrifice, PRECIOUS_REVEAL,
+} from './roster';
 import type { HeroInstance, HeroDefId, HeroInstId, Star } from './types';
 
 function hero(id: string, isDead: boolean): HeroInstance {
@@ -41,6 +43,42 @@ describe('livingHeroes', () => {
     const before = roster.length;
     livingHeroes(roster);
     expect(roster.length).toBe(before);
+  });
+});
+
+describe('isPreciousSacrifice', () => {
+  /** 어느 기준에도 안 걸리는 평범한 개체 — 확인 창이 뜨지 않아야 한다 */
+  const plain = (): HeroInstance => ({ ...hero('p', false), star: 2 as Star });
+
+  it('아무 기준에도 안 걸리면 확인 창을 세우지 않는다', () => {
+    expect(isPreciousSacrifice(plain())).toBe(false);
+  });
+
+  /*
+    이 테스트가 진짜로 잠그는 것은 "플래그를 읽는가"이다.
+    ForgeScreen이 favorite를 안 읽던 시절에도 나머지 세 기준 덕에
+    확인 창은 떴다 — 즉 표식이 죽은 채로 통과할 수 있었다.
+  */
+  it('즐겨찾기 표식만으로 확인 창이 선다', () => {
+    expect(isPreciousSacrifice({ ...plain(), favorite: true })).toBe(true);
+  });
+
+  it('표식을 끄면 다시 평범해진다', () => {
+    expect(isPreciousSacrifice({ ...plain(), favorite: false })).toBe(false);
+  });
+
+  it('표식이 없어도 ★4 이상이면 선다 (표식을 안 찍는 사람을 위한 자동 기준)', () => {
+    expect(isPreciousSacrifice({ ...plain(), star: 4 as Star })).toBe(true);
+  });
+
+  it('발굴이 쌓이면 선다', () => {
+    expect(isPreciousSacrifice({ ...plain(), revealProgress: PRECIOUS_REVEAL })).toBe(true);
+    expect(isPreciousSacrifice({ ...plain(), revealProgress: PRECIOUS_REVEAL - 0.01 })).toBe(false);
+  });
+
+  it('파티원이면 선다', () => {
+    expect(isPreciousSacrifice(plain(), ['p'])).toBe(true);
+    expect(isPreciousSacrifice(plain(), ['다른영웅'])).toBe(false);
   });
 });
 

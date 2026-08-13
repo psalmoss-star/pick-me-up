@@ -95,6 +95,22 @@ describe('직렬화', () => {
     expect(back.roster[0].title).toBe('이름을 버린 자');
   });
 
+  it('즐겨찾기 표식이 왕복해도 보존된다', () => {
+    // 표식이 새로고침으로 풀리면 제물 확인 창이 조용히 약해진다.
+    const s = sample();
+    s.roster[0] = { ...s.roster[0], favorite: true };
+    expect(deserialize(serialize(s))!.roster[0].favorite).toBe(true);
+  });
+
+  /** 이 필드 이전 세이브 — 표식이 없으면 즐겨찾기 아님으로 읽힌다 */
+  it('즐겨찾기 이전 옛 세이브도 읽힌다', () => {
+    const raw = JSON.parse(serialize(sample()));
+    for (const h of raw.run.roster) delete h.favorite;
+    const back = deserialize(JSON.stringify(raw));
+    expect(back).not.toBeNull();
+    expect(back!.roster[0].favorite).toBeFalsy();
+  });
+
   /** 이 필드 이전 세이브 — 이름이 없어도 읽히고, 표시는 종류 이름으로 폴백한다 */
   it('이름 없는 옛 세이브도 읽힌다', () => {
     const raw = JSON.parse(serialize(sample()));

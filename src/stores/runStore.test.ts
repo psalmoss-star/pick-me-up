@@ -15,6 +15,13 @@ import type { HeroInstId } from '../game/types';
 /** 시드를 고정한 스토어. 같은 시드면 전투 결과가 같아야 한다. */
 const fixedStore = (seed = 12345) => createRunStore(() => seed);
 
+/** 로스터에서 개체 하나를 꺼낸다. 없으면 테스트를 실패시킨다. */
+const heroOf = (store: ReturnType<typeof fixedStore>, id: HeroInstId) => {
+  const h = store.getState().roster.find((x) => x.instId === id);
+  if (!h) throw new Error(`로스터에 ${id}가 없다`);
+  return h;
+};
+
 describe('파티 편성', () => {
   it('초기 파티는 정원만큼 채워져 있다', () => {
     const s = fixedStore().getState();
@@ -413,6 +420,53 @@ describe('발굴 진행도 (finish)', () => {
       store.getState().finish();
     }
     expect(progressOf(store, fighter)).toBe(1);
+  });
+});
+
+describe('즐겨찾기', () => {
+  it('처음에는 아무도 즐겨찾기가 아니다', () => {
+    const s = fixedStore().getState();
+    expect(s.roster.every((h) => !h.favorite)).toBe(true);
+  });
+
+  it('누르면 켜지고 다시 누르면 꺼진다', () => {
+    const store = fixedStore();
+    const id = store.getState().roster[0].instId;
+
+    store.getState().toggleFavorite(id);
+    expect(heroOf(store, id).favorite).toBe(true);
+
+    store.getState().toggleFavorite(id);
+    expect(heroOf(store, id).favorite).toBe(false);
+  });
+
+  it('한 명을 켜도 다른 영웅은 그대로다', () => {
+    const store = fixedStore();
+    const [a, b] = store.getState().roster;
+    store.getState().toggleFavorite(a.instId);
+    expect(heroOf(store, b.instId).favorite).toBeFalsy();
+  });
+
+  /**
+   * 퍼머데스는 되돌리지 않는다 — 죽은 영웅의 표식을 바꾸게 두면
+   * 무덤 기록이 사후에 편집 가능해진다.
+   */
+  it('죽은 영웅은 즐겨찾기를 바꿀 수 없다', () => {
+    const store = fixedStore();
+    const id = store.getState().roster[0].instId;
+    store.setState((s) => ({
+      roster: s.roster.map((h) => (h.instId === id ? { ...h, isDead: true } : h)),
+    }));
+
+    store.getState().toggleFavorite(id);
+    expect(heroOf(store, id).favorite).toBeFalsy();
+  });
+
+  it('없는 id를 눌러도 아무 일도 없다', () => {
+    const store = fixedStore();
+    const before = store.getState().roster;
+    store.getState().toggleFavorite('없는영웅#99' as HeroInstId);
+    expect(store.getState().roster).toEqual(before);
   });
 });
 

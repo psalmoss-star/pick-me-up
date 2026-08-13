@@ -87,6 +87,7 @@ export function RosterScreen({
                 klass={klassFor(h.star)}
                 width={cardWidth}
                 selected={party.includes(h.instId)}
+                favorite={h.favorite}
                 reveal={estimatePotential(h).progress}
                 variant={heroVariantOf(h)}
                 onClick={() => onToggleParty(h.instId)}

@@ -30,3 +30,27 @@ export function livingHeroes(roster: readonly HeroInstance[]): HeroInstance[] {
 export function fallenHeroes(roster: readonly HeroInstance[]): HeroInstance[] {
   return roster.filter((h) => h.isDead);
 }
+
+/** 제물 확인 창을 한 번 더 세우는 기준값. 밸런스가 아니라 UI 안전장치다. */
+export const PRECIOUS_REVEAL = 0.45;
+
+/**
+ * 제물로 바치기 전에 한 단계 더 물어야 하는 개체인가.
+ *
+ * 합성은 되돌릴 수 없으므로 오조작 한 번이 영구 손실이 된다.
+ * 판정을 화면이 아니라 여기에 두는 이유는 `livingHeroes`와 같다 —
+ * 화면에 흩어지면 한 곳만 어긋나도 아무도 모른다.
+ *
+ * **즐겨찾기가 가장 강한 근거**지만 유일한 근거로 두지는 않는다.
+ * 표식을 한 번도 안 찍은 플레이어에게는 확인 창이 통째로 사라지기 때문이다.
+ * 나머지 셋은 그런 사람을 위한 자동 기준이다.
+ */
+export function isPreciousSacrifice(
+  h: HeroInstance,
+  party: readonly string[] = [],
+): boolean {
+  return h.favorite === true
+    || h.star >= 4
+    || (h.revealProgress ?? 0) >= PRECIOUS_REVEAL
+    || party.includes(h.instId);
+}

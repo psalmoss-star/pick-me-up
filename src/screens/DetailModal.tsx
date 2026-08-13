@@ -21,6 +21,8 @@ export interface DetailModalProps {
   gear?: GearInstance[];
   onEquip?: (gearId: GearInstId) => void;
   onUnequip?: (slot: GearSlot) => void;
+  /** 즐겨찾기 토글. 없으면 버튼을 그리지 않는다(무덤처럼 못 바꾸는 화면). */
+  onToggleFavorite?: () => void;
 }
 
 /** 장비로 올라간 수치는 금색 — 레벨 덕인지 장비 덕인지 구분되어야 한다 */
@@ -29,7 +31,9 @@ function Stat({ v, up }: { v: number; up: boolean }) {
 }
 
 /** 영웅 상세 — 능력치의 현재/상한을 그대로 드러낸다. 상한 도달은 금색. */
-export function DetailModal({ hero, onClose, gear, onEquip, onUnequip }: DetailModalProps) {
+export function DetailModal({
+  hero, onClose, gear, onEquip, onUnequip, onToggleFavorite,
+}: DetailModalProps) {
   const def = gameData.heroes[hero.defId];
   const attrs = computeAttributes(def, hero.star, hero.level, gameData.starScaling);
   const baseStats = computeHeroStats(def, hero.star, hero.level, gameData.starScaling);
@@ -232,7 +236,15 @@ export function DetailModal({ hero, onClose, gear, onEquip, onUnequip }: DetailM
             </div>
           )}
         </SystemPanel>
-        <div style={{ textAlign: 'center', marginTop: 18 }}>
+        <div style={{
+          display: 'flex', justifyContent: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap',
+        }}>
+          {/* 죽은 영웅은 표식이 고정된다 — 스토어도 같은 판정을 한다(이중 방어). */}
+          {onToggleFavorite && !hero.isDead && (
+            <Button onClick={onToggleFavorite} tone={hero.favorite ? 'rare' : 'normal'}>
+              {hero.favorite ? '❖ 표식 해제' : '❖ 표식'}
+            </Button>
+          )}
           <Button onClick={onClose}>닫기</Button>
         </div>
       </div>

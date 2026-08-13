@@ -9,7 +9,7 @@ import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
-import { livingHeroes } from '../game/roster';
+import { livingHeroes, isPreciousSacrifice } from '../game/roster';
 import { gameData } from '../game/data';
 import { canPromote, sacrificeValue, fuseEfficiency, expToNext } from '../game/progression';
 import type { FuseCheck, FuseResult, PromoteCheck, PromoteResult } from '../game/progression';
@@ -57,13 +57,8 @@ export function ForgeScreen({
     reset();
   };
 
-  /**
-   * 되돌릴 수 없는 소멸이므로 한 단계 더 묻는 대상.
-   * 즐겨찾기 플래그가 아직 없으므로, 실제로 잃으면 아픈 것 —
-   * 고등급이거나 발굴이 쌓인 개체 — 를 기준으로 한다.
-   */
-  const isPrecious = (h: HeroInstance) =>
-    h.star >= 4 || (h.revealProgress ?? 0) >= 0.45 || party.includes(h.instId);
+  /** 되돌릴 수 없는 소멸이므로 한 단계 더 묻는 대상. 판정은 game/roster.ts가 정본. */
+  const isPrecious = (h: HeroInstance) => isPreciousSacrifice(h, party);
 
   const doFuse = () => {
     if (!target || !sacrifice) return;
@@ -184,6 +179,16 @@ export function ForgeScreen({
         {confirming ? (
           <SystemPanel tone="death" compact>
             <div style={{ fontSize: 13, lineHeight: 1.9, marginBottom: 12 }}>
+              {/*
+                직접 찍은 표식은 자동 기준(고등급·발굴·파티원)보다 강한 근거다.
+                그걸 안 알려주면 왜 한 번 더 묻는지 모른 채 확인을 누르게 된다.
+              */}
+              {sacrifice?.favorite && (
+                <>
+                  <span style={{ color: T.gold }}>❖ 표식을 남긴 영웅입니다.</span>
+                  <br />
+                </>
+              )}
               {sacrifice && displayName(sacrifice, gameData.heroes)}은(는) 되돌릴 수 없습니다.
               <br />
               정말 제물로 바치겠습니까?
@@ -225,6 +230,7 @@ export function ForgeScreen({
                 klass={klassFor(h.star)}
                 width={92}
                 selected={isTarget || isSac}
+                favorite={h.favorite}
                 reveal={estimatePotential(h).progress}
                 variant={heroVariantOf(h)}
                 onClick={() => {
@@ -279,6 +285,7 @@ function Slot({
         level={hero.level}
         klass={klassFor(hero.star)}
         width={100}
+        favorite={hero.favorite}
         reveal={estimatePotential(hero).progress}
         variant={heroVariantOf(hero)}
         onClick={onClear}

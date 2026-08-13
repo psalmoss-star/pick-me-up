@@ -76,6 +76,7 @@ export default function App() {
   const buyGear = useRunStore((s) => s.buyGear);
   const equipGear = useRunStore((s) => s.equipGear);
   const unequipGear = useRunStore((s) => s.unequipGear);
+  const toggleFavorite = useRunStore((s) => s.toggleFavorite);
   const enhanceGear = useRunStore((s) => s.enhanceGear);
   const potions = useRunStore((s) => s.potions);
   const buyPotion = useRunStore((s) => s.buyPotion);
@@ -378,6 +379,7 @@ export default function App() {
             gear={gear}
             onEquip={(gearId) => equipGear(live.instId, gearId)}
             onUnequip={(slot) => unequipGear(live.instId, slot)}
+            onToggleFavorite={() => toggleFavorite(live.instId)}
             onClose={() => setDetail(null)}
           />
         );

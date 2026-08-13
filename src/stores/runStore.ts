@@ -190,6 +190,11 @@ export interface RunSlice {
 
 export interface RunActions {
   toggleParty: (id: HeroInstId) => void;
+  /**
+   * 즐겨찾기 표식을 켜고 끈다. 죽은 영웅과 없는 id는 무시한다.
+   * 전투·밸런스에 영향이 없다 — 제물 확인 창의 기준일 뿐이다.
+   */
+  toggleFavorite: (id: HeroInstId) => void;
   /** 전투 시작. 파티가 비어 있으면 아무 일도 하지 않고 false를 반환한다. */
   start: () => boolean;
   /** 개입 — 같은 시드로 재시뮬레이션한다. */
@@ -330,6 +335,18 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
             ? s.party
             : [...s.party, id],
       })),
+
+    toggleFavorite: (id) => {
+      const hero = get().roster.find((h) => h.instId === id);
+      // 죽은 자의 표식은 고정된다 — 무덤 기록이 사후에 편집되면 안 된다.
+      if (!hero || hero.isDead) return;
+
+      set((s) => ({
+        roster: s.roster.map((h) => (h.instId === id ? { ...h, favorite: !h.favorite } : h)),
+      }));
+      // 제물 확인 창의 기준이라, 새로고침으로 풀리면 안전장치가 조용히 사라진다.
+      saveRun(get());
+    },
 
     start: () => {
       const { party, roster, floorIndex, potions } = get();
