@@ -53,7 +53,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 519개 통과)
+npm test           # Vitest 1회 실행 (현재 542개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -96,6 +96,7 @@ src/
 │  ├─ quest.ts       # 층 돌파 과제 — 전투 기록 재판정 (전투를 다시 돌리지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
+│  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
 │  ├─ reveal.ts        # 발굴 — 잠재치 구간 추정, 전투로 진행도 상승
 │  ├─ encounter.ts    # runEncounter — 로스터/MVP 조립
 │  ├─ intervention.ts # 개입(집중/수호/후퇴)
@@ -123,6 +124,9 @@ src/
 │  ├─ Button.tsx
 │  ├─ useViewport.ts  # 반응형 훅 (분기점 480px 하나)
 │  └─ art/            # HeroArt / EnemyArt / GuardArt / Scene (전부 SVG)
+│     ├─ HeroPortrait.tsx  # 생성 일러스트 우선 + SVG 폴백 (카드 전용)
+│     ├─ heroImages.ts     # assets/ glob → defId별 변형 URL 배열
+│     └─ variantNaming.ts  # 변형 파일명 규칙(순수 파서). gen-art.mts와 반드시 일치
 ├─ screens/           # BaseScreen / BriefScreen / BattleScreen / ResultScreen
 │                     # / SummonScreen / ForgeScreen / FacilityScreen
 │                     # / ShopScreen / SmithScreen / DetailModal
