@@ -45,6 +45,7 @@ export const STREAM = {
   REVEAL: 9,    // 발굴 추정 노이즈
   LOOT: 17,     // 전투 후 전리품 — 장비 드롭·사망 시 회수 판정
   QUEST: 23,    // 과제 보상 (등급만 정해진 장비의 종류 추첨)
+  VARIANT: 31,  // 초상 변형 — 개체별 아트 슬롯. 겉모습만, 전투 수치 영향 없음
 } as const;
 
 export type StreamId = (typeof STREAM)[keyof typeof STREAM];
