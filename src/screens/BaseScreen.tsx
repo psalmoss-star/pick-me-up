@@ -4,6 +4,7 @@ import { T } from '../ui/tokens';
 import type { FacilityKind } from '../game/data/facilities';
 import type { FloorSpec } from '../game/data/floors';
 import type { HeroInstId, HeroInstance } from '../game/types';
+import { livingHeroes } from '../game/roster';
 
 export const PARTY_LIMIT = 3;
 
@@ -44,7 +45,7 @@ export function BaseScreen({
   onGoTo, onTab,
   towerCleared = false, deathCount,
 }: BaseScreenProps) {
-  const alive = roster.filter((h) => !h.isDead);
+  const alive = livingHeroes(roster);
 
   return (
     // flex:1 — App의 flex column 안에서 남은 높이를 받아 탭 바를 바닥에 붙인다

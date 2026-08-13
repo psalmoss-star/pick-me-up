@@ -9,6 +9,7 @@ import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
+import { livingHeroes } from '../game/roster';
 import { gameData } from '../game/data';
 import { canPromote, sacrificeValue, fuseEfficiency, expToNext } from '../game/progression';
 import type { FuseCheck, FuseResult, PromoteCheck, PromoteResult } from '../game/progression';
@@ -40,7 +41,7 @@ export function ForgeScreen({
   const [confirming, setConfirming] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const alive = roster.filter((h) => !h.isDead);
+  const alive = livingHeroes(roster);
   const target = alive.find((h) => h.instId === targetId) ?? null;
   const sacrifice = alive.find((h) => h.instId === sacrificeId) ?? null;
 

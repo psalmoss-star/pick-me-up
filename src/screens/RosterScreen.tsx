@@ -1,4 +1,5 @@
 import { HeroCard } from '../ui/HeroCard';
+import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { useViewport } from '../ui/useViewport';
 import { heroArtOf } from '../ui/artMap';
@@ -7,6 +8,7 @@ import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
+import { livingHeroes } from '../game/roster';
 import { estimatePotential } from '../game/reveal';
 import { gameData } from '../game/data';
 import type { HeroInstId, HeroInstance } from '../game/types';
@@ -33,7 +35,7 @@ export interface RosterScreenProps {
 export function RosterScreen({
   roster, party, partyLimit, onToggleParty, onInspect, onBack,
 }: RosterScreenProps) {
-  const alive = roster.filter((h) => !h.isDead);
+  const alive = livingHeroes(roster);
   const { width } = useViewport();
   // 대기실과 같은 산식 — 두 화면의 카드 크기가 갈리면 같은 영웅이 달라 보인다.
   const cardWidth = Math.max(112, Math.min(150, Math.floor((Math.min(width, 480) - 42) / 2)));
@@ -48,6 +50,20 @@ export function RosterScreen({
 
       <SectionLabel>파티 편성 ({party.length}/{partyLimit})</SectionLabel>
 
+      {/*
+        전멸 상태. 안내 없이 그리드만 비면 화면이 고장난 것으로 읽힌다.
+        (사망자를 목록에서 뺐으므로 이제 실제로 도달 가능한 상태다)
+      */}
+      {alive.length === 0 && (
+        <SystemPanel>
+          <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, padding: '10px 0' }}>
+            살아있는 영웅이 없습니다.
+            <br />
+            소환소에서 새 영웅을 맞이하십시오.
+          </div>
+        </SystemPanel>
+      )}
+
       <div
         style={{
           display: 'grid',
@@ -57,7 +73,7 @@ export function RosterScreen({
           marginBottom: 10,
         }}
       >
-        {roster.map((h) => {
+        {alive.map((h) => {
           const def = gameData.heroes[h.defId];
           return (
             <div key={h.instId} style={{ textAlign: 'center' }}>
@@ -70,15 +86,13 @@ export function RosterScreen({
                 level={h.level}
                 klass={klassFor(h.star)}
                 width={cardWidth}
-                dead={h.isDead}
                 selected={party.includes(h.instId)}
                 reveal={estimatePotential(h).progress}
                 variant={heroVariantOf(h)}
-                onClick={() => !h.isDead && onToggleParty(h.instId)}
+                onClick={() => onToggleParty(h.instId)}
               />
               <button
                 onClick={() => onInspect(h)}
-                disabled={h.isDead}
                 style={{
                   marginTop: 2,
                   minHeight: TOUCH_MIN,
@@ -92,20 +106,27 @@ export function RosterScreen({
                   color: T.dim,
                   fontSize: 12,
                   fontFamily: 'inherit',
-                  cursor: h.isDead ? 'default' : 'pointer',
+                  cursor: 'pointer',
                   textDecoration: 'underline',
                   textUnderlineOffset: 3,
                 }}
               >
-                {h.isDead ? '사망' : '상세'}
+                상세
               </button>
             </div>
           );
         })}
       </div>
 
-      <div style={{ textAlign: 'center', color: T.dim, fontSize: 11, marginBottom: 12 }}>
-        카드를 눌러 편성 · 사망한 영웅은 되살릴 수 없습니다
+      {/*
+        사망자를 여기서 뺐으므로 어디로 갔는지 반드시 말해줘야 한다.
+        말 없이 사라지면 "내 영웅이 없어졌다"로 읽힌다 — 퍼머데스는
+        숨기는 것이 아니라 무덤에 남기는 것이다.
+      */}
+      <div style={{ textAlign: 'center', color: T.dim, fontSize: 11, marginBottom: 12, lineHeight: 1.8 }}>
+        카드를 눌러 편성
+        <br />
+        사망한 영웅은 되살릴 수 없으며 무덤에 기록됩니다
       </div>
 
       {/* 로스터가 길어져도 돌아갈 길은 항상 보여야 한다 */}
