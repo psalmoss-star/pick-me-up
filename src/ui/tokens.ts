@@ -47,6 +47,53 @@ export const V = {
   label: '#2A2350',
 } as const;
 
+/**
+ * 아이소메트릭 마을 전용 팔레트.
+ *
+ * ── 왜 V로 부족한가 ───────────────────────────────────
+ * V는 사이드뷰용이라 면이 둘(벽·지붕)뿐이었다. 아이소메트릭은 한 덩어리에
+ * **윗면·오른면·왼면 셋**이 동시에 보이므로, 같은 재질의 밝기 3단계가 있어야
+ * 입체로 읽힌다. 셋을 같은 색으로 두면 도형이 납작해진다(색이 아니라 명도가 형태를 만든다).
+ *
+ * ⚠️ 레퍼런스는 밝은 파스텔이지만 이 프로젝트는 **어두운 배경이 절대 규칙**이라
+ * 명도를 통째로 내렸다. 대비(윗면 vs 왼면)는 레퍼런스와 같은 비율로 유지한다 —
+ * 어둡게 만들면서 대비까지 줄이면 형태가 사라진다.
+ */
+export const ISO = {
+  /** 하늘 — 위에서 아래로. 밤이지만 지면 쪽이 살짝 밝아 지평선이 생긴다 */
+  skyTop: '#0B0918',
+  skyBottom: '#1B1540',
+
+  /** 섬 지면 (윗면 / 측면 / 바닥 그림자) */
+  turfTop: '#2E2560',
+  turfSide: '#231C4C',
+  rock: '#191338',
+
+  /** 석재 — 성벽·주요 건물. 3면 */
+  stoneTop: '#4A3E86',
+  stoneR: '#3A2F6E',
+  stoneL: '#2C2354',
+
+  /** 목재 — 부속 건물. 3면 */
+  woodTop: '#5A4270',
+  woodR: '#463358',
+  woodL: '#342644',
+
+  /** 지붕 — 계열을 나눠 건물 종류가 실루엣 밖에서도 구분되게 */
+  roofWarm: '#7A3F5E',
+  roofWarmD: '#5A2C45',
+  roofCool: '#2F5D6E',
+  roofCoolD: '#224553',
+  roofRoyal: '#4A3A90',
+  roofRoyalD: '#362A6C',
+
+  /** 발광 — 창·소환진·탑. 어두운 배경에서 시선을 끄는 유일한 수단 */
+  glow: '#F0A93B',
+  glowAlt: '#4ED3A0',
+  arcane: '#8B7BE8',
+  outline: '#0A0818',
+} as const;
+
 export type Tone = 'normal' | 'rare' | 'warning' | 'death';
 
 export const TONES: Record<Tone, { line: string; glow: string; text: string }> = {

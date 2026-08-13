@@ -53,7 +53,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 562개 통과)
+npm test           # Vitest 1회 실행 (현재 583개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -120,6 +120,9 @@ src/
 │  ├─ SystemPanel.tsx # 시그니처 컴포넌트
 │  ├─ HeroCard.tsx    # 타로카드형
 │  ├─ OrnateCorner.tsx
+│  ├─ iso.ts          # 아이소메트릭 투영(순수). 그리기 순서 = depth(x+y)
+│  ├─ IsoVillage.tsx  # 대기실 주 화면 — 섬 부감도. 건물과 라벨이 같은 좌표에서 나온다
+│  ├─ BaseHud.tsx     # 상단 HUD (층·영웅수·재화). 마을 위에 겹친다
 │  ├─ BaseMap.tsx     # 거점 부감 맵 — 시설 레벨을 건물 구조로 표현
 │  ├─ Button.tsx
 │  ├─ useViewport.ts  # 반응형 훅 (분기점 480px 하나)

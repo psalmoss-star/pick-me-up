@@ -12,7 +12,7 @@ import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
-import type { VillageSpot } from './ui/VillageScene';
+import type { VillageSpot } from './ui/iso';
 import type { TabKey } from './ui/TabBar';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
@@ -129,7 +129,7 @@ export default function App() {
       case 'training': setScreen('facility'); break;
       /*
         탑 — 등반 시작. 파티가 비었으면 브리핑으로 보내지 않는다.
-        VillageScene이 잠긴 모습으로 그리지만 클릭 자체는 들어오므로 여기서도 막는다
+        IsoVillage가 잠긴 모습으로 그리지만 클릭 자체는 들어오므로 여기서도 막는다
         (그림만 믿고 가드를 빼면 나중에 스타일이 바뀔 때 조용히 뚫린다).
       */
       case 'tower':
@@ -141,12 +141,22 @@ export default function App() {
   /**
    * 하단 탭 → 화면.
    *
-   * 탭은 하나뿐이다. 나머지는 전부 마을 건물이 담당한다 —
-   * 같은 곳으로 가는 입구를 둘 두면 사용자가 다른 곳인 줄 알고 양쪽을 눌러본다.
+   * ⚠️ **소환·파티는 마을에도 입구가 있다(의도된 중복).**
+   * 예전 규칙은 "입구는 하나"였지만, 실제로 문제였던 것은 중복이 아니라
+   * **이름이 다른 중복**이었다. 지금은 탭과 마을 라벨의 목적지가 정확히 같다 —
+   * 부감도에서 작은 건물을 조준하는 것보다 하단 탭이 빠르므로 둘 다 둔다.
+   * 탭을 늘릴 때는 마을 라벨과 목적지가 어긋나지 않는지 확인할 것 (TabBar 주석).
+   *
+   * '상태창'은 로스터와 같은 화면으로 간다 — 개체 상세는 거기서 카드를 눌러 연다.
+   * 별도 화면을 새로 만들면 같은 정보가 두 곳에 생겨 유지보수가 갈린다.
    */
   const goToTab = (tab: TabKey) => {
     switch (tab) {
-      case 'heroes': setScreen('roster'); break;
+      case 'home': setScreen('base'); break;
+      case 'heroes':
+      case 'status':
+      case 'party': setScreen('roster'); break;
+      case 'summon': setScreen('summon'); break;
     }
   };
 
@@ -216,6 +226,7 @@ export default function App() {
             roster={roster}
             party={party}
             facilities={facilities}
+            wallet={wallet}
             onGoTo={goToSpot}
             onTab={goToTab}
             towerCleared={towerCleared}
