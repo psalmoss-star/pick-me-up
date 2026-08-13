@@ -63,6 +63,7 @@ export default function App() {
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
+  const grantTestFunds = useRunStore((s) => s.grantTestFunds);
   const runNo = useRunStore((s) => s.runNo);
   const startNewRun = useRunStore((s) => s.startNewRun);
   const summon = useRunStore((s) => s.summon);
@@ -92,7 +93,13 @@ export default function App() {
   useEffect(() => {
     const saved = loadRun();
     if (saved) hydrate(saved);
-  }, [hydrate]);
+    /*
+      테스트용 재화 지급 — 개발 모드에서만 동작한다(프로덕션 빌드에서는 no-op).
+      ⚠️ 반드시 hydrate **다음**이어야 한다. 로드가 지갑을 통째로 덮어쓰므로
+      순서가 뒤집히면 지급분이 조용히 사라진다.
+    */
+    grantTestFunds();
+  }, [hydrate, grantTestFunds]);
 
   const floor = floorAt(floorIndex);
 

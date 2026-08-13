@@ -17,6 +17,7 @@ import type { Intervention } from '../game/intervention';
 import { klassFor, statsOfInstance } from '../game/stats';
 import { advanceReveal } from '../game/reveal';
 import { saveRun, type SavedRun } from './save';
+import { grantDevWallet, isDevMode } from './devWallet';
 import { gameData, FLOORS, floorAt, HERO } from '../game/data';
 import { floorRewards, isFinalFloor } from '../game/data/floors';
 import {
@@ -239,6 +240,11 @@ export interface RunActions {
   hydrate: (saved: SavedRun) => void;
   /** 테스트/신규 런용 초기화 */
   reset: (seedSource?: SeedSource) => void;
+  /**
+   * 테스트용 재화 지급. 개발 모드 전용이며 프로덕션에서는 아무 일도 하지 않는다.
+   * 세부 사항은 `devWallet.ts` 참조.
+   */
+  grantTestFunds: () => void;
 }
 
 export type RunStore = RunSlice & RunActions;
@@ -936,6 +942,23 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
     markLegendarySeen: () => {
       if (get().seenFirstLegendary) return;
       set({ seenFirstLegendary: true });
+      saveRun(get());
+    },
+
+    /**
+     * 테스트용 재화 지급.
+     *
+     * ⚠️ **반드시 hydrate 이후에 불러야 한다.** 세이브 로드가 지갑을 통째로
+     * 덮어쓰므로, 먼저 부르면 지급분이 조용히 사라진다. App.tsx의 기동 effect가
+     * 로드 다음 줄에서 부르는 이유다.
+     *
+     * 저장까지 하는 이유: 저장을 안 하면 새로고침마다 지급이 반복돼
+     * "재화가 늘었다 줄었다" 하는 것처럼 보인다. 지급 결과가 세이브에 고정돼야
+     * 그 다음부터는 평범한 지갑처럼 움직인다.
+     */
+    grantTestFunds: () => {
+      if (!isDevMode()) return;
+      set((s) => ({ wallet: grantDevWallet(s.wallet) }));
       saveRun(get());
     },
 
