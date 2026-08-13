@@ -103,7 +103,11 @@ src/
 │  ├─ beats.ts        # 이벤트 비트 (확인 창 트리거)
 │  ├─ sim.ts          # 밸런싱용 CLI
 │  └─ data/
-│     ├─ sample.ts    # 영웅·적·스킬·상성표 (→ JSON으로 분리 예정)
+│     ├─ sample.ts    # 재export 배럴만. 새 데이터는 아래 4개 파일에 넣는다
+│     ├─ elements.ts  # 상성표(순환 규칙에서 파생) + 등급 스케일링
+│     ├─ skills.ts    # 스킬 15종
+│     ├─ heroes.ts    # 영웅 12종 + HERO 상수
+│     ├─ enemies.ts   # 적 19종 + ENEMY 상수. 보스 수치 주석 = 밸런스 도출 근거
 │     ├─ floors.ts    # 층 정의 — 손으로 짠 1~20층 + 생성분 21~100층
 │     ├─ floorgen.ts  # 층 생성기(21~) + 적 깊이 배수. 결정적이어야 한다
 │     ├─ potential.ts # 잠재치/발굴 튜닝 상수 단일 출처
