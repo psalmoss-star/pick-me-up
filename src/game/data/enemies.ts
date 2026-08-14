@@ -233,6 +233,46 @@ export const enemies: Record<EnemyDefId, EnemyDef> = Object.fromEntries(
       skillIds: ['sk_bulwark', 'sk_rally', 'sk_maul'] as SkillId[],
       isBoss: true,
     },
+    {
+      id: 'e_ashking',
+      name: '재를 쓰는 왕',
+      element: 'fire',
+      role: 'breaker',
+      /**
+       * **100층 전용 최종 보스.**
+       *
+       * ── 왜 전용 보스가 필요했나 ──────────────────────────
+       * 100층이 90층과 **같은 적(재의 군주)**을 썼다. 깊이 배수만 다른 셈이라
+       * 최종 보스에 새로울 게 없었고, 보스 감쇠를 0.45로 낮추자
+       * **100층이 97%·사망 0.36으로 90층(78%·1.13)보다 쉬워지는 역전**이 났다.
+       * 한쪽만 조절할 수 없는 구조였으므로 층을 갈랐다.
+       *
+       * ── 무엇을 묻는 보스인가 ────────────────────────────
+       * 기존 보스는 각자 다른 질문을 한다: 교주=회복(빨리 끝내라) ·
+       * 창궐=도트(끌지 마라) · 전열=결계(화력으로 뚫어라) · 군주=둘 다.
+       * 이 보스는 **파티의 강점을 빼앗는다** — `sk_sap`이 제일 센 아군의 공격력을
+       * 정확히 깎고(highestAtk), `sk_mire`가 둘의 속도를 늦춘다.
+       * 그래서 "한 명에게 몰아준 파티"가 가장 크게 흔들린다 —
+       * 100층까지 올라온 플레이어가 대개 그렇게 짜므로 마지막에 그것을 되묻는다.
+       *
+       * ⚠️ **자힐·결계를 주지 않았다.** 군주(15.4턴)·교주(19.1턴)·전열(15.3턴)이
+       * 전부 "어려운 게 아니라 **긴**" 함정을 밟았다(§STEP 9). 여기에 회복까지 얹으면
+       * 같은 실수를 최종 보스에서 반복한다. 무게는 화력과 디버프로 내고 길이는 짧게 둔다.
+       *
+       * 수치는 실측으로 잡았다 — `scripts/floor-tune.mts`가 보스 층은 안 건드리므로
+       * 여기 값이 곧 100층의 난이도다. 90층보다 확실히 무거워야 한다.
+       *
+       * 실측 (기준 파티 / 대체 파티, 300회):
+       *   hp 8200·atk 300 → 73%·사망 0.94·**16.3턴**  ← 길다
+       *   hp 7000·atk 330 → 66%·사망 1.19·15.3턴
+       *   **hp 6200·atk 345 → 65%·사망 1.26·14.7턴 / 53%·1.79**  ★채택
+       * HP를 깎고 화력을 올릴수록 짧고 무거워진다 — 교주·전열에서 쓴 방법 그대로다.
+       * 90층(82%·0.92)보다 어렵고, 이기면 한 명 이상 값을 치른다.
+       */
+      stats: { hp: 6200, atk: 345, def: 74, spd: 72, crit: 0.16 },
+      skillIds: ['sk_maul', 'sk_sap', 'sk_mire'] as SkillId[],
+      isBoss: true,
+    },
   ] as EnemyDef[]).map((e) => [e.id, e]),
 ) as Record<EnemyDefId, EnemyDef>;
 
@@ -256,4 +296,5 @@ export const ENEMY = {
   hierophant: id<EnemyDefId>('e_hierophant'),
   blightlord: id<EnemyDefId>('e_blightlord'),
   warcaller: id<EnemyDefId>('e_warcaller'),
+  ashking: id<EnemyDefId>('e_ashking'),
 };

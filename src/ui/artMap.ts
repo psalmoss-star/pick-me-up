@@ -53,6 +53,7 @@ const ENEMY_ART: Record<string, EnemyArtKind> = {
   e_hierophant: 'hierophant',
   e_blightlord: 'blightlord',
   e_warcaller: 'warcaller',
+  e_ashking: 'ashking',
 };
 
 const GUARD_ART: Record<string, GuardArtKind> = {

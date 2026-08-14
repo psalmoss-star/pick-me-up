@@ -403,6 +403,17 @@ export function buildEnemyVariant(floorId: number, tier: Tier, variant: number):
 function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[] {
   if (isBoss) {
     /**
+     * 최상층은 **전용 보스**를 쓴다.
+     *
+     * 그러지 않으면 90·100층이 같은 구간이라 `tier.boss`(재의 군주)를 공유해
+     * "깊이 배수만 다른 같은 적"이 된다. 엔딩 연출이 붙는 층인데 새로울 게 없고,
+     * 보스 감쇠를 낮추자 **100층이 90층보다 쉬워지는 역전**까지 났다
+     * (97%·사망 0.36 vs 78%·1.13). 한쪽만 조절할 수 없어서 층을 갈랐다.
+     */
+    if (floorId === TOWER_HEIGHT) {
+      return [ENEMY.ashking, ENEMY.stonewarden, ENEMY.seraph];
+    }
+    /**
      * 보스 + 호위.
      *
      * ⚠️ 호위를 pool에서만 뽑으면 **보스와 호위가 둘 다 breaker**인 층이 생긴다.

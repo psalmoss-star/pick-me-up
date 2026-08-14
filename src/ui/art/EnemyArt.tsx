@@ -5,7 +5,7 @@ export type EnemyArtKind =
   | 'wisp' | 'warden' | 'revenant' | 'tyrant'
   | 'seraph' | 'colossus' | 'wraith' | 'sovereign'
   | 'hexweaver' | 'grovekeeper' | 'plaguebearer' | 'direwolf' | 'stonewarden'
-  | 'hierophant' | 'blightlord' | 'warcaller';
+  | 'hierophant' | 'blightlord' | 'warcaller' | 'ashking';
 
 export function EnemyArt({
   art, element, size = 78, faded,
@@ -19,6 +19,7 @@ export function EnemyArt({
         rx={art === 'wisp' ? 9 : art === 'revenant' || art === 'wraith' ? 12
           : art === 'seraph' || art === 'hexweaver' ? 14
           : art === 'tyrant' || art === 'sovereign' || art === 'blightlord' ? 24
+          : art === 'ashking' ? 27
           : art === 'colossus' ? 26
           : art === 'grovekeeper' || art === 'stonewarden' || art === 'warcaller' ? 23
           : art === 'hierophant' ? 22 : 20}
@@ -161,6 +162,32 @@ export function EnemyArt({
           {/* 좌우로 흘러내리는 화염 망토 */}
           <path d="M14 34 Q2 46 6 68 Q12 56 16 54" fill={c} opacity=".45" />
           <path d="M66 34 Q78 46 74 68 Q68 56 64 54" fill={c} opacity=".45" />
+        </g>
+      )}
+      {/*
+        재를 쓰는 왕 — 100층 전용. 군주와 **같은 왕좌 계보**지만 실루엣이 갈려야 한다.
+        군주는 5갈래 왕관에 화염 망토, 이쪽은 **부서진 관과 흘러내리는 재**다.
+        어깨를 가장 넓게(그림자 27) 잡아 최종 보스임을 크기로도 말한다.
+      */}
+      {art === 'ashking' && (
+        <g>
+          {/* 어깨가 벌어진 몸통 — 사다리꼴이라 군주의 직립 실루엣과 구분된다 */}
+          <path d="M10 72 L16 34 Q22 20 40 18 Q58 20 64 34 L70 72 Z" fill="#1E1418" stroke={c} strokeWidth="2.6" />
+          {/* 부서진 관 — 가운데가 꺾여 나갔다. 왕관이되 온전하지 않다 */}
+          <path d="M22 18 L18 2 L28 11 L34 3 L38 12 L46 4 L50 13 L58 3 L58 18 Z" fill="#1E1418" stroke={c} strokeWidth="2" />
+          <path d="M38 12 L42 6" stroke={c} strokeWidth="1.6" opacity=".7" />
+          {/* 눈 — 군주(둥근 2점)와 달리 가늘게 그어 냉정함을 준다 */}
+          <path d="M28 33 L36 35" stroke="#FFD9A0" strokeWidth="3" strokeLinecap="round" />
+          <path d="M52 33 L44 35" stroke="#FFD9A0" strokeWidth="3" strokeLinecap="round" />
+          {/* 가슴의 균열 — 안에서 불이 새어나온다 */}
+          <path d="M40 44 L36 54 L42 58 L38 68" fill="none" stroke="#FFB47A" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M30 50 L26 60" fill="none" stroke="#FFB47A" strokeWidth="1.4" opacity=".7" />
+          <path d="M50 50 L54 60" fill="none" stroke="#FFB47A" strokeWidth="1.4" opacity=".7" />
+          {/* 흘러내리는 재 — 망토가 아니라 부스러져 떨어지는 결 */}
+          <g stroke={c} strokeWidth="1.6" opacity=".5" strokeLinecap="round">
+            <path d="M14 40 L8 58" /><path d="M10 48 L5 66" />
+            <path d="M66 40 L72 58" /><path d="M70 48 L75 66" />
+          </g>
         </g>
       )}
       {/* 주술을 엮는 자 — 팔이 길고 손끝에 실이 걸려 있다. 직접 때리지 않는 실루엣 */}
