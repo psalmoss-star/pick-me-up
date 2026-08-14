@@ -64,3 +64,44 @@ export function pts(list: readonly Pt[]): string {
 export function depth(x: number, y: number): number {
   return x + y;
 }
+
+/**
+ * viewBox 좌표 → 래퍼 기준 픽셀. **핀(HTML 버튼)을 그림 위에 얹는 유일한 관문.**
+ *
+ * ── 왜 %배치로는 안 되는가 (실측으로 드러난 버그) ─────────
+ * SVG는 `preserveAspectRatio="xMidYMid slice"`로 그려진다. 즉 상자 비율이
+ * viewBox 비율과 다르면 **그림이 상자보다 커지고 넘치는 만큼 잘린다.**
+ * 그런데 핀은 `top: (py/H)*100%`로 **래퍼 기준** %를 썼다 — 잘린 그림과
+ * 안 잘린 상자는 좌표계가 다르므로 둘이 어긋난다.
+ *
+ * 실측(375×667): 상자 609px에 그림이 731px로 그려져 위아래 **61px씩 잘렸고**,
+ * 그만큼 핀이 건물에서 밀렸다(무기창고 라벨이 지붕 아래로 내려감).
+ * 390px 폭에서는 비율이 우연히 일치해 offY=0이라 **STEP 23이 못 봤다.**
+ *
+ * `slice`와 같은 규칙을 여기서 그대로 재현한다:
+ * 배율은 두 축 중 **큰 쪽**(cover), 남는 쪽은 가운데 정렬(xMidYMid).
+ */
+export function projectPin(
+  px: number, py: number,
+  boxW: number, boxH: number,
+  vbW: number, vbH: number,
+  /**
+   * 세로 정렬 — 0=위 맞춤(Min), 0.5=가운데(Mid), 1=아래 맞춤(Max).
+   *
+   * 기본을 **0(YMin)**으로 둔다. 가운데(0.5)로 자르면 섬 꼭대기가 위로 올라가
+   * **HUD(상단 96px)와 겹친다** — 실제로 `탑 입장` 핀이 재화 칩 위로 23px 파고들었다.
+   * 위 맞춤이면 잘리는 곳이 전부 아래쪽 하늘·바위라 잃는 정보가 없다
+   * (섬은 viewBox 위쪽 절반에 있다 — `OY` 주석 참조).
+   *
+   * ⚠️ 이 값은 SVG의 `preserveAspectRatio`와 **반드시 같아야 한다.**
+   * 한쪽만 바꾸면 핀과 그림이 즉시 어긋난다.
+   */
+  alignY = 0,
+): Pt {
+  // slice = cover. contain(=meet)과 반대로 큰 배율을 쓴다
+  const scale = Math.max(boxW / vbW, boxH / vbH);
+  // 가로는 가운데(xMid) 고정 — 섬이 좌우로 치우치면 즉시 눈에 띈다
+  const offX = (boxW - vbW * scale) / 2;
+  const offY = (boxH - vbH * scale) * alignY;
+  return [px * scale + offX, py * scale + offY];
+}

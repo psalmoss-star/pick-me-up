@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { ISO, T } from './tokens';
 import { TOUCH_MIN } from './Button';
-import { iso, pts, depth, OX, type Pt, type VillageSpot } from './iso';
+import { iso, pts, depth, OX, projectPin, type Pt, type VillageSpot } from './iso';
 import { FACILITY_MAX_LEVEL, type FacilityKind } from '../game/data/facilities';
 
 /**
@@ -277,6 +278,28 @@ export function IsoVillage({
   const facTop = (k: FacilityKind) => Math.min(3, fac(k) + 1) * 0.62 + 0.7;
 
   /*
+    ── 핀을 그림에 맞추려면 상자의 **실측 크기**가 필요하다 ──
+    `slice`가 얼마나 잘라내는지는 상자 비율에 달렸고, 그 비율은 뷰포트마다 다르다.
+    상수로 둘 수 없으므로(§5-35: 레이아웃 수치는 계산하지 말고 브라우저에 맡길 것)
+    ResizeObserver로 실제 크기를 받아 `projectPin`에 넘긴다.
+
+    측정 전(0×0)에는 핀을 그리지 않는다 — 좌표를 모르는 상태로 한 프레임
+    엉뚱한 자리에 찍히면 그게 눈에 보이는 깜빡임이 된다.
+  */
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => {
+      const r = e.contentRect;
+      setBox({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /*
     ── 배치 ──────────────────────────────────────────────
     탑은 가장 안쪽(x,y 작음)에 둔다 — 부감도에서 안쪽이 '멀리·높이'로 읽히고,
     앞줄에 두면 다른 건물을 전부 가린다.
@@ -355,17 +378,35 @@ export function IsoVillage({
       어긋나지 않는다 — 상자를 나누면 letterbox 때문에 즉시 어긋난다.
     */
     <div
+      ref={boxRef}
       style={{
-        position: 'relative',
-        width: '100%',
-        height: '100%',
+        /*
+          ⚠️ `position: absolute` + inset:0이어야 한다. `height: '100%'`로는 안 된다.
+
+          부모(`BaseScreen`의 `flex:1` 래퍼)는 높이가 **불확정**이라
+          자식의 `height:100%`가 `auto`로 풀린다. 그러면 SVG가 남은 높이가 아니라
+          **viewBox 비율(390:760)**로 자기 높이를 정하고, 그 높이가 부모를 밀어낸다.
+          375×667에서 SVG가 702px가 되어 **탭 바 5개가 통째로 화면 밖(93px)으로 밀렸다.**
+          390px 폭에서만 우연히 760이 나와 STEP 23 실측(390×844)이 이걸 못 봤다.
+
+          absolute는 부모의 **패딩 박스**를 기준으로 잡으므로 높이가 확정되고,
+          SVG는 그 안에서 `slice`로 잘린다 — 비율이 화면을 밀어내는 경로가 끊긴다.
+          핀(아래 `projectPin` 배치)이 SVG와 **같은 상자**를 공유하는 것도 이 방식이라야 유지된다.
+        */
+        position: 'absolute',
+        inset: 0,
         overflow: 'hidden',
         background: `linear-gradient(180deg, ${ISO.skyTop}, ${ISO.skyBottom})`,
       }}
     >
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="xMidYMid slice"
+        /*
+          ⚠️ `YMin`(위 맞춤)이며 `projectPin`의 alignY 기본값 0과 **짝이다.**
+          한쪽만 바꾸면 핀이 건물에서 떨어진다.
+          Mid(가운데)로 두면 섬이 위로 올라가 상단 HUD와 겹친다(실측 23px).
+        */
+        preserveAspectRatio="xMidYMin slice"
         style={{ display: 'block', width: '100%', height: '100%' }}
         aria-hidden="true"
       >
@@ -424,11 +465,18 @@ export function IsoVillage({
       {/*
         핀은 SVG 밖 HTML 버튼이다.
         안에 넣으면 터치 타깃이 그림 크기에 묶여 44px을 못 지킨다(TOUCH_MIN 규칙).
-        퍼센트 배치라 어떤 뷰포트에서도 그림 위 같은 자리에 남는다.
+
+        ⚠️ 예전 주석은 "퍼센트 배치라 어떤 뷰포트에서도 그림 위 같은 자리에 남는다"고
+        적혀 있었는데 **틀렸다.** %는 래퍼 기준이고 그림은 `slice`로 잘리므로,
+        상자 비율이 viewBox 비율(390:760)과 다른 순간 둘이 갈라진다.
+        390px 폭에서만 우연히 일치해 오래 안 드러났다 — `projectPin`으로 같은
+        변환을 재현해 맞춘다(근거는 `iso.ts`의 주석).
       */}
-      {lots.map((p) => {
+      {box.w > 0 && lots.map((p) => {
         // 건물과 같은 좌표에서 파생한다 — 손으로 맞추지 않으므로 어긋날 수 없다
-        const [px, py] = iso(p.x + 0.75, p.y + 0.6, p.lz);
+        const [vx, vy] = iso(p.x + 0.75, p.y + 0.6, p.lz);
+        // viewBox 좌표를 그림이 실제로 그려진 자리로 옮긴다
+        const [px, py] = projectPin(vx, vy, box.w, box.h, W, H);
         return (
           /*
             ⚠️ 터치 타깃 44px과 '작은 라벨'은 충돌한다.
@@ -441,8 +489,9 @@ export function IsoVillage({
             onClick={() => onSelect(p.spot)}
             style={{
               position: 'absolute',
-              left: `${(px / W) * 100}%`,
-              top: `${(py / H) * 100}%`,
+              // px 단위 — projectPin이 이미 상자 기준 픽셀로 변환했다
+              left: px,
+              top: py,
               transform: 'translate(-50%, -50%)',
               minHeight: TOUCH_MIN,
               display: 'flex',
