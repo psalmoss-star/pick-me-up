@@ -34,6 +34,40 @@ export interface HeroCardProps {
 }
 
 /**
+ * 발굴 바의 기하 — **한 곳에서 정한다.**
+ * 바는 absolute라 흐름에 자리를 안 차지하므로, 메타 줄이 이만큼 아래를 비워야
+ * 글자와 바가 안 겹친다. 둘을 따로 적으면 한쪽만 고쳐져 다시 겹친다.
+ */
+const REVEAL_BAR_INSET = 5;
+const REVEAL_BAR_HEIGHT = 2;
+/** 메타 줄이 확보해야 하는 하단 여백 = 바 아래여백 + 바 높이 + 글자와의 간격 2px */
+const REVEAL_BAR_SPACE = REVEAL_BAR_INSET + REVEAL_BAR_HEIGHT + 2;
+
+/** `≪ ` + ` ≫`가 먹는 폭 — 글자 수 환산(실측). */
+const ORNAMENT_COST_CHARS = 4;
+/** 이름 밴드가 좌우 여백(margin+padding)으로 쓰는 폭. */
+const NAME_BAND_CHROME = 20;
+
+/**
+ * 이 이름에 `≪ ≫` 장식을 붙여도 잘리지 않는가.
+ *
+ * ⚠️ **폭만으로 판단하면 틀린다.** 글자 크기가 카드 폭에 비례하므로
+ * (`nameSize = 12 * width/130`) 카드를 키워도 장식 비용이 싸지지 않는다.
+ * 실측: 최장 이름 `모래바람의 아이비`는 92px에서도 150px에서도 장식이 안 들어간다.
+ * 처음에 `width >= 112`로 뒀다가 150px 카드에서 `≪ 가문비의 아이비 ≫`가 잘렸다.
+ *
+ * 글자 수만으로도 틀린다 — 8글자는 130/150px엔 들어가고 92/100px엔 안 들어간다.
+ * **길이와 폭을 함께** 봐야 한다.
+ *
+ * 한글은 글자 폭이 사실상 균일해 `글자수 × nameSize`로 근사된다.
+ * 24개 조합(6가지 길이 × 4가지 폭) 실측에서 **장식을 켰는데 실제로 넘치는 경우 0건**임을
+ * 확인했다(보수적으로 틀리는 쪽 — 장식이 빠지는 건 안 보이지만 이름이 잘리면 정체성을 잃는다).
+ */
+export function fitsOrnament(name: string, width: number, nameSize: number): boolean {
+  return (name.length + ORNAMENT_COST_CHARS) * nameSize <= width - NAME_BAND_CHROME;
+}
+
+/**
  * 타로카드형 영웅 표시. 사각 썸네일 금지.
  * 등급 표현은 STAR_TIERS의 구조 값(corners/lattice/rays/halo)을 반드시 사용할 것.
  */
@@ -50,6 +84,9 @@ export function HeroCard({
   // 카드가 작아져도 안 읽히면 의미가 없다.
   const s = width / 130;
   const nameSize = Math.max(11, Math.round(12 * s));
+
+  // 장식은 이름이 자리를 요구하면 뗀다 — 판정 근거는 fitsOrnament 주석 참조
+  const ornate = fitsOrnament(name, width, nameSize);
   const metaSize = Math.max(10, Math.round(10 * s));
   const starSize = Math.max(10, Math.round((star >= 5 ? 10 : 12) * s));
   const haloInset = Math.round(14 * s);
@@ -141,7 +178,13 @@ export function HeroCard({
 
         <div
           style={{
-            margin: '0 6px 6px',
+            /*
+              좁은 카드에서는 밴드 좌우 여백을 6 → 2로 줄여 이름에 8px를 더 준다.
+              장식을 떼고도 최장 이름(`가문비의 아이비` 80px)이 75px에 안 들어가서,
+              남은 차이를 여백에서 회수한다. 기본 카드(130px)는 6px 그대로 —
+              여유가 있는 곳에서까지 밴드를 카드 끝에 붙일 이유가 없다.
+            */
+            margin: ornate ? '0 6px 6px' : '0 2px 6px',
             zIndex: 1,
             background: luminous
               ? `linear-gradient(90deg,transparent,${tier.ring}22 10%,#000000DD 30%,#000000DD 70%,${tier.ring}22 90%,transparent)`
@@ -151,8 +194,12 @@ export function HeroCard({
             padding: '4px 2px',
           }}
         >
-          {/* 긴 이름이 밴드를 넘치면 부모의 overflow:hidden에 잘린다 → ellipsis로 처리 */}
+          {/*
+            ellipsis는 **최후 수단으로만** 남긴다. 좁은 카드에서 장식을 뗀 뒤에도
+            넘치는 아주 긴 이름이 있으면 잘리되, 성씨만 남는 일은 없어야 한다.
+          */}
           <span
+            title={name}
             style={{
               display: 'block',
               color: luminous ? hi : T.text,
@@ -163,11 +210,18 @@ export function HeroCard({
               padding: '0 2px',
             }}
           >
-            ≪ {name} ≫
+            {ornate ? `≪ ${name} ≫` : name}
           </span>
         </div>
 
-        <div style={{ textAlign: 'center', color: T.dim, fontSize: metaSize, paddingBottom: 5, zIndex: 1 }}>
+        {/*
+          ⚠️ 아래 발굴 바는 `absolute; bottom:5; height:2`라 **흐름에 자리를 안 차지한다.**
+          paddingBottom을 5로 두면 글자 하단과 바가 겹쳐 **글자가 잘린 것처럼 보인다**
+          (실측: 진행도 있는 카드 4장에서 5~6px이 가려졌고, 없는 5장은 멀쩡했다 —
+           폰 스크린샷에서 `Lv.30 · 기사`가 잘려 보인 것이 이것이다).
+          바가 차지하는 높이(bottom 5 + height 2)만큼 아래를 비워 둔다.
+        */}
+        <div style={{ textAlign: 'center', color: T.dim, fontSize: metaSize, paddingBottom: REVEAL_BAR_SPACE, zIndex: 1 }}>
           {level != null ? `Lv.${level}` : ''}{klass ? ` · ${klass}` : ''}
         </div>
 
@@ -177,7 +231,7 @@ export function HeroCard({
           다 밝혀진 개체만 금색이 되어 눈에 띈다.
         */}
         {reveal != null && reveal > 0 && !dead && (
-          <div style={{ position: 'absolute', left: 5, right: 5, bottom: 5, height: 2, background: '#00000066', zIndex: 1 }}>
+          <div style={{ position: 'absolute', left: REVEAL_BAR_INSET, right: REVEAL_BAR_INSET, bottom: REVEAL_BAR_INSET, height: REVEAL_BAR_HEIGHT, background: '#00000066', zIndex: 1 }}>
             <div
               style={{
                 width: `${Math.round(Math.min(1, reveal) * 100)}%`,
