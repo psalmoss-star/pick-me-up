@@ -56,6 +56,36 @@ const highParty = (): HeroInstance[] => [
   hero(HERO.bolt, 4, 50, 5),
 ];
 
+/**
+ * 생성 구간(21~100) 기준 파티 — **`sim.ts`의 `genParty`와 같은 전력**이어야 한다.
+ *
+ * sim 표와 이 표를 나란히 놓고 "층별로는 되는데 이어서 오르면 안 된다"를 판단하는 게
+ * 목적이므로, 두 도구의 전력 가정이 다르면 비교 자체가 성립하지 않는다.
+ * 다만 여기서는 뒤에 **대기 2인**을 붙인다 — 사망 시 빈자리를 채우는 실제 플레이를
+ * 반영하지 않으면 완주율이 실제보다 훨씬 낮게 나온다(위 `party` 주석 참조).
+ *
+ * ⚠️ `sim.ts`의 `genParty`를 고치면 여기도 같이 고칠 것. 값을 복제하는 이유는
+ * sim이 CLI 전용 모듈이라 import하면 순환이 생기기 때문이다.
+ */
+const genParty = (floorId: number): HeroInstance[] => {
+  if (floorId <= 40) return [
+    hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3),
+    hero(HERO.gale, 5, 60, 4), hero(HERO.bolt, 5, 60, 5),
+  ];
+  if (floorId <= 60) return [
+    hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3),
+    hero(HERO.gale, 5, 75, 4), hero(HERO.bolt, 5, 75, 5),
+  ];
+  if (floorId <= 80) return [
+    hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3),
+    hero(HERO.gale, 6, 85, 4), hero(HERO.bolt, 6, 85, 5),
+  ];
+  return [
+    hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3),
+    hero(HERO.gale, 6, 95, 4), hero(HERO.bolt, 6, 99, 5),
+  ];
+};
+
 const maxHpOf = (h: HeroInstance): number =>
   statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
 
@@ -184,6 +214,18 @@ const SEGMENTS = [
   { name: '저층 1~6', from: 0, count: 6, make: party },
   { name: '중층 7~12', from: 6, count: 6, make: midParty },
   { name: '상층 13~20', from: 12, count: 8, make: highParty },
+  /*
+    생성 구간(21~100) — **여기는 지금까지 한 번도 이어서 재본 적이 없다.**
+    `npm run sim`이 층별 승률만 재고(독립), 이 스크립트는 20층에서 끊겨 있었다.
+    즉 80개 층이 "이어서 오를 수 있는가"라는 질문을 아무도 안 던진 상태였다.
+
+    구간은 `genParty`의 전력 경계(40/60/80/100)와 같게 끊는다 —
+    경계를 걸쳐서 재면 어느 쪽 전력으로 판단해야 할지 알 수 없다.
+  */
+  { name: '생성 21~40', from: 20, count: 20, make: () => genParty(40) },
+  { name: '생성 41~60', from: 40, count: 20, make: () => genParty(60) },
+  { name: '생성 61~80', from: 60, count: 20, make: () => genParty(80) },
+  { name: '생성 81~100', from: 80, count: 20, make: () => genParty(100) },
 ] as const;
 for (const seg of SEGMENTS) {
   const rate = restHealRate(FACILITY_MAX_LEVEL);
