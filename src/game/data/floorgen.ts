@@ -19,6 +19,7 @@
 import type { EnemyDefId } from '../types';
 import type { GuardDef, Mission, MissionKind } from '../mission';
 import { ENEMY } from './sample';
+import { FLOOR_VARIANT } from './floorVariants';
 import type { FloorScene, FloorSpec } from './floors';
 
 /** 손으로 짠 층의 마지막 번호. 여기까지는 floors.ts의 배열이 정본이다. */
@@ -332,6 +333,62 @@ function pickEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[]
   return result;
 }
 
+/**
+ * 뽑을 수 있는 변형의 개수.
+ *
+ * 중복 회피(아래)와 승률 조정(`scripts/floor-tune.mts`)이 **같은 변형 목록**을 쓴다.
+ * 둘이 다른 범위를 보면 튜닝 도구가 고른 번호를 생성기가 못 만들어낸다.
+ *
+ * ⚠️ **6에서 24로 늘렸다.** 정상 구간(81~100)은 깊이 배수가 2.8~3.2배라
+ * 어지간한 조합은 전부 전멸한다 — 6개 중에 합격이 하나도 없는 층이 6개 있었다
+ * (89·96·99층은 6변형 전부 승률 0~36%). 후보를 늘리면 그 안에 통과하는 조합이 생긴다.
+ *
+ * 늘려도 **런타임 비용은 0이다.** 생성기는 표(`floorVariants.ts`)에 적힌 번호 하나만
+ * 만들고, 24개를 전부 돌려보는 것은 빌드 타임 스크립트뿐이다.
+ * 중복 회피 루프도 대개 첫 후보에서 끝나므로 실질 비용이 없다.
+ */
+export const VARIANT_COUNT = 24;
+
+/**
+ * 중복 회피가 훑는 범위 — **원래 값(6)에서 늘리지 말 것.**
+ * 이 값을 키우면 지금 v0으로 확정된 층들이 다른 구성으로 갈아타 기존 승률이 흔들린다.
+ * `VARIANT_COUNT`와 분리해 둔 이유가 그것이다.
+ */
+const DEDUPE_VARIANTS = 6;
+
+/**
+ * 한 층의 적 구성을 만든다 — 변형 번호로 여러 후보를 낼 수 있다.
+ *
+ * 규칙(전부 이미 밟은 함정에서 나온 것이다):
+ *  - **도발 적을 반드시 하나 넣는다**(§5-11).
+ *  - **같은 적을 3기 이상 넣지 않는다**(§STEP 9).
+ *
+ * ⚠️ 이 두 규칙만으로는 **승률이 보장되지 않는다.** 2026-08-14 전수 측정에서
+ * 규칙을 다 지킨 층 28개가 승률 50% 미만이었다(12개는 0~7%).
+ * 원인은 수치 총량이 아니라 **적 조합 × 임무의 상호작용**이라 생성 규칙으로는 못 막는다.
+ * 그래서 `floorVariants.ts`가 실측으로 고른 변형 번호를 덮어쓴다.
+ *
+ * 순수 함수로 export하는 이유는 튜닝 스크립트가 같은 구성을 재현해야 하기 때문이다 —
+ * 스크립트가 자체 구현을 두면 생성기와 조용히 갈라진다(§5-28과 같은 성격).
+ */
+export function buildEnemyVariant(floorId: number, tier: Tier, variant: number): EnemyDefId[] {
+  const [lo, hi] = tier.count;
+  const n = lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1));
+
+  const out: EnemyDefId[] = [pickOne(tier.taunts, floorId, 2 + variant * 100)];
+  const counts = new Map<EnemyDefId, number>([[out[0], 1]]);
+  for (let i = 1; i < n; i++) {
+    // 같은 적이 2기를 넘지 않도록 최대 3번 다시 뽑는다.
+    let cand = pickOne(tier.pool, floorId, 3 + i + variant * 100);
+    for (let retry = 0; retry < 3 && (counts.get(cand) ?? 0) >= 2; retry++) {
+      cand = pickOne(tier.pool, floorId, 30 + i * 7 + retry + variant * 100);
+    }
+    out.push(cand);
+    counts.set(cand, (counts.get(cand) ?? 0) + 1);
+  }
+  return out;
+}
+
 function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[] {
   if (isBoss) {
     /**
@@ -366,23 +423,7 @@ function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefI
     return [tier.boss, guardEscort, third];
   }
 
-  const [lo, hi] = tier.count;
-  const n = lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1));
-
-  const build = (variant: number): EnemyDefId[] => {
-    const out: EnemyDefId[] = [pickOne(tier.taunts, floorId, 2 + variant * 100)];
-    const counts = new Map<EnemyDefId, number>([[out[0], 1]]);
-    for (let i = 1; i < n; i++) {
-      // 같은 적이 2기를 넘지 않도록 최대 3번 다시 뽑는다.
-      let cand = pickOne(tier.pool, floorId, 3 + i + variant * 100);
-      for (let retry = 0; retry < 3 && (counts.get(cand) ?? 0) >= 2; retry++) {
-        cand = pickOne(tier.pool, floorId, 30 + i * 7 + retry + variant * 100);
-      }
-      out.push(cand);
-      counts.set(cand, (counts.get(cand) ?? 0) + 1);
-    }
-    return out;
-  };
+  const build = (variant: number): EnemyDefId[] => buildEnemyVariant(floorId, tier, variant);
 
   /**
    * 최근 층과 같은 구성이면 다시 뽑는다.
@@ -406,7 +447,24 @@ function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefI
     recent.add([...pickEnemies(prev, tierOf(prev), false)].sort().join(','));
   }
 
-  for (let v = 0; v < 6; v++) {
+  /*
+    실측으로 고른 변형이 있으면 그것을 **우선한다**.
+
+    승률은 생성 규칙으로 표현할 수 없어서(조합×임무의 상호작용) 밖에서 재고
+    결과만 표로 들여온다 — `scripts/floor-tune.mts` 참조.
+    중복 회피보다 앞에 두는 이유: 같은 구성이 멀리서 한 번 더 나오는 것보다
+    **승률 0%인 층이 남는 것이 훨씬 나쁘다.**
+  */
+  const tuned = FLOOR_VARIANT[floorId];
+  if (tuned != null) return build(tuned);
+
+  /*
+    ⚠️ 중복 회피는 **원래 범위(6)만 훑는다.** `VARIANT_COUNT`(24)를 쓰면
+    지금까지 v0으로 확정돼 있던 층들이 다른 변형으로 갈아타면서
+    **이미 합격한 층의 승률까지 통째로 움직인다.** 후보를 늘린 목적은
+    "합격 변형이 없던 층을 구제"하는 것뿐이므로, 그 탐색은 튜닝 도구에만 맡긴다.
+  */
+  for (let v = 0; v < DEDUPE_VARIANTS; v++) {
     const cand = build(v);
     if (!recent.has([...cand].sort().join(','))) return cand;
   }

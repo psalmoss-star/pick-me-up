@@ -61,7 +61,13 @@ npm run typecheck
 
 ```bash
 npx tsx climb-check.mts   # 연속 등반 — 층간 HP·숙소 레벨별 도달 층 + 구간별 완주율
+npx tsx scripts/floor-tune.mts          # 생성 층(21~100) 승률 점검
+npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
 ```
+
+⚠️ **적 수치·깊이 배수·기준 파티를 만졌으면 `floor-tune`을 다시 돌릴 것.**
+`floorVariants.ts`는 실측으로 고른 변형 번호 표라서, 입력이 바뀌면 조용히 낡는다
+(생성기가 옛 판단을 그대로 쓴다).
 
 **실기기(폰) 확인** — `vite.config.ts`에 `server.host`가 켜져 있어 `npm run dev` 출력의
 `Network: http://<LAN IP>:5173/` 주소로 같은 WiFi의 폰에서 접속된다.
