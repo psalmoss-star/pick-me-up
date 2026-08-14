@@ -16,6 +16,12 @@
  *   npx tsx scripts/floor-tune.mts          # 측정만 (현재 상태 진단)
  *   npx tsx scripts/floor-tune.mts --write  # data/floorVariants.ts 갱신
  *
+ * ⚠️ **"변형으로 해결 0"이 나올 때까지 반복해서 돌릴 것.**
+ * 한 층의 선택이 이웃의 중복 회피 조건을 바꾸므로 한 번에 수렴하지 않는다 —
+ * 실제로 91층은 1회차에 이웃(92·96)이 아직 옛 구성이라 합격 변형이 전부 충돌로 보였고,
+ * 2회차에 v1(0%→83%)이 열렸다. 표를 이어받아 누적되므로 여러 번 돌려도 안전하다.
+ * 처음부터 다시 계산하려면 `floorVariants.ts`의 목록을 비우고 시작한다.
+ *
  * ⚠️ 적 수치·깊이 배수·파티 기준을 만졌으면 **반드시 다시 돌릴 것.** 표가 낡으면
  * 생성기가 옛 판단을 그대로 쓴다.
  */
@@ -31,6 +37,7 @@ import {
   HANDCRAFTED_UNTIL, TOWER_HEIGHT, BOSS_EVERY, MIN_REPEAT_GAP,
   buildEnemyVariant, VARIANT_COUNT, tierOf, generateFloor,
 } from '../src/game/data/floorgen';
+import { FLOOR_VARIANT } from '../src/game/data/floorVariants';
 import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance, Star } from '../src/game/types';
 
 const hero = (defId: HeroDefId, star: Star, level: number, n: number): HeroInstance => ({
@@ -75,27 +82,67 @@ const MAX_DEATH = 1.2;
  */
 const tooHard = (m: { win: number; death: number }) => m.win < MIN_WIN || m.death > MAX_DEATH;
 
-const N = Number(process.env.TUNE_N ?? 120);
+/**
+ * 편성마다 N회씩 돌리므로 실제 전투 수는 2N이다.
+ * 80을 쓰면 층당 160회 — 승률 오차가 ±5%p 안쪽이라 55%/96% 경계 판정에 충분하다.
+ * 정밀하게 보려면 `TUNE_N=200 npx tsx ...`처럼 올릴 것.
+ */
+const N = Number(process.env.TUNE_N ?? 80);
 
+/**
+ * 대체 편성 — 등반 중 실제로 나가게 되는 **다른 3인**.
+ *
+ * ⚠️ 기준 파티(탱+딜+힐)만으로 재면 안 된다. 연속 등반은 HP가 높은 순으로 3인을
+ * 뽑으므로, 누가 다치면 **힐러나 탱커가 빠진 편성**이 나간다.
+ * 실제로 53층은 기준 파티에서 97%인데 딜러 위주 편성에서는 **43%**였다 —
+ * 튜너는 합격으로 봤지만 등반에서는 26%가 여기서 막혔다.
+ */
+const altParty = (fid: number): HeroInstance[] => {
+  if (fid <= 40) return [hero(HERO.gale, 5, 60, 4), hero(HERO.bolt, 5, 60, 5), hero(HERO.tide, 5, 65, 3)];
+  if (fid <= 60) return [hero(HERO.gale, 5, 75, 4), hero(HERO.bolt, 5, 75, 5), hero(HERO.tide, 5, 80, 3)];
+  if (fid <= 80) return [hero(HERO.gale, 6, 85, 4), hero(HERO.bolt, 6, 85, 5), hero(HERO.tide, 6, 90, 3)];
+  return [hero(HERO.gale, 6, 95, 4), hero(HERO.bolt, 6, 99, 5), hero(HERO.tide, 6, 99, 3)];
+};
+
+/**
+ * 승률·사망을 잰다. **두 편성 중 나쁜 쪽**을 돌려준다.
+ *
+ * 층이 "어떤 편성으로도 통과 가능한가"를 물어야 등반에서 안 막힌다.
+ * 좋은 쪽만 보면 기준 파티가 온전할 때만 성립하는 층을 합격시킨다.
+ */
 function measure(fid: number, enemyIds: readonly EnemyDefId[]) {
   /*
     층의 나머지(임무·이름·보호 대상)는 생성기가 만든 그대로 두고 **적 구성만** 바꾼다.
     임무까지 바꾸면 이 도구가 층을 새로 설계하는 셈이라 생성기와 판단이 갈린다.
   */
   const floor = { ...generateFloor(fid), enemyIds: [...enemyIds] };
-  let w = 0, d = 0;
-  for (let s = 0; s < N; s++) {
-    const r = runEncounter({ party: genParty(fid), floor, data: gameData, rng: createRng(s) });
-    if (r.outcome === 'victory') w++;
-    d += r.casualties.length;
-  }
-  return { win: (w / N) * 100, death: d / N };
+  const one = (make: (f: number) => HeroInstance[]) => {
+    let w = 0, d = 0;
+    for (let s = 0; s < N; s++) {
+      const r = runEncounter({ party: make(fid), floor, data: gameData, rng: createRng(s) });
+      if (r.outcome === 'victory') w++;
+      d += r.casualties.length;
+    }
+    return { win: (w / N) * 100, death: d / N };
+  };
+  const a = one(genParty), b = one(altParty);
+  return a.win <= b.win ? a : b;
 }
 
 /** 합격 = 너무 어렵지 않다. 쉬운 쪽은 위 주석대로 건드리지 않는다. */
 const ok = (m: { win: number; death: number }) => !tooHard(m);
 
-const chosen: Record<number, number> = {};
+/**
+ * ⚠️ **기존 표를 이어받아 시작한다.**
+ *
+ * 빈 객체에서 시작하면 이번 실행에서 "손 안 댄" 층이 표에서 **사라진다** —
+ * 그 층이 합격인 이유가 바로 지난 실행이 골라준 변형인데도 그렇다.
+ * 실제로 그렇게 짰다가 표가 29개에서 4개로 줄었고, 되돌아간 25개 층이 다시 0%가 됐다.
+ *
+ * 표를 이어받으면 실행이 **누적**된다 — 이번에 새로 찾은 것만 얹힌다.
+ * 처음부터 다시 계산하려면 `floorVariants.ts`를 비우고 돌릴 것.
+ */
+const chosen: Record<number, number> = { ...FLOOR_VARIANT };
 const report: string[] = [];
 const tooEasy: string[] = [];
 let fixed = 0, failed = 0, untouched = 0;
@@ -182,12 +229,16 @@ for (let fid = HANDCRAFTED_UNTIL + 1; fid <= TOWER_HEIGHT; fid++) {
 }
 
 /*
-  ── 마무리: 남은 충돌을 없앤다 ─────────────────────────
-  위 루프는 층을 한 번씩만 훑으므로, **나중 층이 앞 층의 판단을 무효로 만들 수 있다**
-  (76을 정한 뒤 72가 바뀌어 둘이 같아진 실제 사례). 한 번 더 훑어 충돌이 남아 있으면
-  다른 변형으로 갈아탄다. 변화가 없을 때까지 반복하면 수렴한다.
+  ── 마무리: 수렴할 때까지 다시 훑는다 ──────────────────
+  위 루프는 층을 한 번씩만 훑으므로 **나중 층이 앞 층의 판단을 무효로 만든다.**
+  두 가지가 남는다:
+   1. 충돌 — 76을 정한 뒤 72가 바뀌어 둘이 같아진 사례.
+   2. **놓친 층** — 91층은 처음 훑을 때 이웃(92·96)이 아직 옛 구성이라
+      합격 변형이 전부 충돌로 보였다. 이웃이 정해진 뒤 다시 보면 v1(83%)이 열린다.
+      실제로 이것 때문에 승률 0%인 층이 표에서 빠진 채 남아 있었다.
+  변화가 없을 때까지 반복하면 수렴한다.
 */
-for (let pass = 0; pass < 5; pass++) {
+for (let pass = 0; pass < 6; pass++) {
   let changed = 0;
   for (let fid = HANDCRAFTED_UNTIL + 1; fid <= TOWER_HEIGHT; fid++) {
     if (fid % BOSS_EVERY === 0) continue;
@@ -198,7 +249,15 @@ for (let pass = 0; pass < 5; pass++) {
       if (prev <= HANDCRAFTED_UNTIL || prev % BOSS_EVERY === 0) continue;
       if (composition(prev) === key) clash = true;
     }
-    if (!clash) continue;
+    /*
+      충돌뿐 아니라 **아직 너무 어려운 층**도 다시 본다.
+      이웃이 확정되면서 막혀 있던 변형이 열릴 수 있기 때문이다.
+    */
+    const cur = chosen[fid] != null
+      ? buildEnemyVariant(fid, tierOf(fid), chosen[fid])
+      : generateFloor(fid).enemyIds;
+    const stillHard = tooHard(measure(fid, cur));
+    if (!clash && !stillHard) continue;
 
     // 충돌하지 않으면서 합격하는 변형을 다시 찾는다
     for (let v = 0; v < VARIANT_COUNT; v++) {
@@ -213,14 +272,17 @@ for (let pass = 0; pass < 5; pass++) {
         }
       }
       if (bad) continue;
-      if (!ok(measure(fid, ids))) continue;
+      const m = measure(fid, ids);
+      if (!ok(m)) continue;
+      if (chosen[fid] === v) break; // 이미 그 변형이다 — 바뀐 게 없다
       chosen[fid] = v;
       changed++;
+      report.push(`  ${String(fid).padStart(3)}층 (재선택) → v${v} ${m.win.toFixed(0)}%/${m.death.toFixed(2)}`);
       break;
     }
   }
   if (changed === 0) break;
-  console.log(`  (충돌 정리 ${pass + 1}회차: ${changed}개 층 재선택)`);
+  console.log(`  (정리 ${pass + 1}회차: ${changed}개 층 재선택)`);
 }
 
 console.log(`\n  합격 구간 ${MIN_WIN}~${MAX_WIN}% · 사망 ${MAX_DEATH} 이하 · ${N}회\n`);
