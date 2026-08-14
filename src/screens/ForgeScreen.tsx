@@ -23,7 +23,6 @@ export interface ForgeScreenProps {
   wallet: Wallet;
   onFuse: (targetId: HeroInstId, sacrificeId: HeroInstId) => FuseResult | FuseCheck;
   onPromote: (id: HeroInstId) => PromoteResult | PromoteCheck;
-  onBack: () => void;
 }
 
 /**
@@ -33,7 +32,7 @@ export interface ForgeScreenProps {
  * 그 사실을 화면이 숨기면 퍼머데스의 무게가 사라진다 (CLAUDE.md).
  */
 export function ForgeScreen({
-  roster, party, wallet, onFuse, onPromote, onBack,
+  roster, party, wallet, onFuse, onPromote,
 }: ForgeScreenProps) {
   const [mode, setMode] = useState<Mode>('fuse');
   const [targetId, setTargetId] = useState<HeroInstId | null>(null);
@@ -106,7 +105,7 @@ export function ForgeScreen({
     <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>제단</span>
-        <span>승급석 {wallet.promotionStones} · 각성석 {wallet.awakeningStones}</span>
+        <span>승급석 {wallet.promotionStones.toLocaleString()} · 각성석 {wallet.awakeningStones.toLocaleString()}</span>
       </div>
 
       {/* 모드 전환 */}
@@ -257,7 +256,7 @@ export function ForgeScreen({
         })}
       </div>
 
-      <Button onClick={onBack}>대기실로</Button>
+      {/* 돌아갈 길은 App.tsx의 상시 탭 바('대기실')가 맡는다 */}
     </div>
   );
 }

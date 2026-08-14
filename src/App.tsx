@@ -13,7 +13,7 @@ import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
 import type { VillageSpot } from './ui/iso';
-import type { TabKey } from './ui/TabBar';
+import { TabBar, type TabKey } from './ui/TabBar';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
@@ -161,6 +161,29 @@ export default function App() {
   };
 
   /**
+   * 탭 바를 띄우는 화면들 — **거점(hub)**.
+   *
+   * ── 왜 화면마다 안 넣고 여기서 한 번에 다는가 ──────────
+   * 탭 바는 화면의 내용이 아니라 **거점의 상시 동선**이다. 화면마다 넣으면
+   * 새 화면이 생길 때마다 빠뜨리고, 실제로 그렇게 돼 있었다 —
+   * 대기실에만 탭이 있고 영웅·소환으로 들어가면 **탭이 사라져서**
+   * "탭으로 들어간 화면에 탭이 없는" 상태였다(폰 스크린샷에서 발견).
+   *
+   * ⚠️ **전투 흐름(brief/battle/result)에는 두지 않는다.** 등반 중에 탭으로
+   * 빠져나갈 수 있으면 퍼머데스의 긴장이 풀리고, 전투 화면은 세로 공간이
+   * 이미 빠듯하다(§STEP 19에서 667px 기준 넘침 0으로 맞춰둔 상태).
+   * 무덤(grave)도 제외한다 — 엔딩·기록 화면이라 거점이 아니다.
+   */
+  const HUB_SCREENS = ['base', 'roster', 'summon', 'facility', 'shop', 'smith', 'forge'] as const;
+  const showTabs = (HUB_SCREENS as readonly string[]).includes(screen);
+
+  /** 지금 화면이 어느 탭에 해당하는가 — 선택 표시가 실제 위치와 맞아야 한다 */
+  const activeTab: TabKey =
+    screen === 'roster' ? 'heroes'
+    : screen === 'summon' ? 'summon'
+    : 'home';
+
+  /**
    * 결과 화면에 보여줄 과제 달성 목록을 **미리** 판정한다.
    *
    * 결과 화면은 finish()보다 먼저 뜨므로 스토어의 questGrants는 아직 비어 있다.
@@ -228,7 +251,6 @@ export default function App() {
             facilities={facilities}
             wallet={wallet}
             onGoTo={goToSpot}
-            onTab={goToTab}
             towerCleared={towerCleared}
             deathCount={deathCount}
           />
@@ -240,7 +262,6 @@ export default function App() {
             partyLimit={PARTY_LIMIT}
             onToggleParty={toggleParty}
             onInspect={setDetail}
-            onBack={() => setScreen('base')}
           />
         )}
         {screen === 'facility' && (
@@ -299,7 +320,6 @@ export default function App() {
             wallet={wallet}
             onFuse={fuse}
             onPromote={promote}
-            onBack={() => setScreen('base')}
           />
         )}
         {screen === 'summon' && (
@@ -309,7 +329,6 @@ export default function App() {
             seenFirstLegendary={seenFirstLegendary}
             onSummon={summon}
             onLegendarySeen={markLegendarySeen}
-            onBack={() => setScreen('base')}
           />
         )}
         {screen === 'brief' && (
@@ -376,6 +395,12 @@ export default function App() {
             }}
           />
         )}
+
+        {/*
+          거점 화면의 상시 탭 바. `BaseScreen`이 자기 안에 또 두면 두 줄이 되므로
+          거기서는 뺐다 — 탭 바의 소유자는 이제 여기 한 곳뿐이다.
+        */}
+        {showTabs && <TabBar onSelect={goToTab} active={activeTab} />}
       </div>
       {/*
         detail은 열 때의 스냅샷이라 착용 직후 갱신되지 않는다.

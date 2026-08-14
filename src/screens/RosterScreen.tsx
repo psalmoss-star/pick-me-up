@@ -1,6 +1,6 @@
 import { HeroCard } from '../ui/HeroCard';
 import { SystemPanel } from '../ui/SystemPanel';
-import { Button, TOUCH_MIN } from '../ui/Button';
+import { TOUCH_MIN } from '../ui/Button';
 import { useViewport } from '../ui/useViewport';
 import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
@@ -19,7 +19,6 @@ export interface RosterScreenProps {
   partyLimit: number;
   onToggleParty: (id: HeroInstId) => void;
   onInspect: (hero: HeroInstance) => void;
-  onBack: () => void;
 }
 
 /**
@@ -33,7 +32,7 @@ export interface RosterScreenProps {
  * 그래서 화면을 나눈다. 여기서는 길어져도 된다. 이 화면의 목적이 그것이므로.
  */
 export function RosterScreen({
-  roster, party, partyLimit, onToggleParty, onInspect, onBack,
+  roster, party, partyLimit, onToggleParty, onInspect,
 }: RosterScreenProps) {
   const alive = livingHeroes(roster);
   const { width } = useViewport();
@@ -130,19 +129,12 @@ export function RosterScreen({
         사망한 영웅은 되살릴 수 없으며 무덤에 기록됩니다
       </div>
 
-      {/* 로스터가 길어져도 돌아갈 길은 항상 보여야 한다 */}
-      <div
-        style={{
-          position: 'sticky',
-          bottom: 0,
-          textAlign: 'center',
-          padding: '14px 0 calc(14px + env(safe-area-inset-bottom))',
-          background: `linear-gradient(180deg,transparent,${T.void} 45%)`,
-          zIndex: 10,
-        }}
-      >
-        <Button onClick={onBack}>대기실로</Button>
-      </div>
+      {/*
+        ⚠️ 여기 있던 sticky `대기실로` 버튼을 뺐다.
+        하단에 떠 있어서 **마지막 줄 카드를 덮고 있었다**(폰 스크린샷에서 발견) —
+        스크롤을 내려도 따라오므로 가려진 카드는 영영 안 보였다.
+        돌아갈 길은 이제 `App.tsx`의 상시 탭 바('대기실')가 대신한다.
+      */}
     </div>
   );
 }

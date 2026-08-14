@@ -35,11 +35,10 @@ export interface SummonScreenProps {
   seenFirstLegendary: boolean;
   onSummon: (kind: BannerKind) => PullResult;
   onLegendarySeen: () => void;
-  onBack: () => void;
 }
 
 export function SummonScreen({
-  wallet, gacha, seenFirstLegendary, onSummon, onLegendarySeen, onBack,
+  wallet, gacha, seenFirstLegendary, onSummon, onLegendarySeen,
 }: SummonScreenProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [pulled, setPulled] = useState<PullSuccess | null>(null);
@@ -120,7 +119,12 @@ export function SummonScreen({
     <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 18 }}>
         <span>소환</span>
-        <span>젬 {wallet.gems} · 금 {wallet.gold}</span>
+        {/*
+          천단위 구분자는 `BaseHud`와 같은 `toLocaleString()`을 쓴다.
+          여기만 raw 숫자라 `9999999`로 나와서 대기실의 `9,999,999`와 달라 보였다 —
+          같은 재화가 화면마다 다른 표기를 가지면 다른 값으로 읽힌다.
+        */}
+        <span>젬 {wallet.gems.toLocaleString()} · 금 {wallet.gold.toLocaleString()}</span>
       </div>
 
       {/* 연출 무대. 비어 있어도 자리를 지켜 화면이 튀지 않게 한다 */}
@@ -230,7 +234,7 @@ export function SummonScreen({
           <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.9, marginBottom: 20 }}>
             누적 소환 {gacha.totalPulls}회
           </div>
-          <Button onClick={onBack}>대기실로</Button>
+          {/* 돌아갈 길은 App.tsx의 상시 탭 바('대기실')가 맡는다 */}
         </>
       )}
     </div>

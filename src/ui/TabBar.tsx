@@ -50,6 +50,17 @@ export function TabBar({ onSelect, active = 'home', badges = {} }: TabBarProps) 
         // 홈 인디케이터가 있는 기기에서 마지막 줄이 가리지 않도록
         paddingBottom: 'env(safe-area-inset-bottom)',
         flex: 'none',
+        /*
+          ⚠️ `sticky`여야 한다. 흐름에만 두면 로스터처럼 긴 화면(실측 1110px 스크롤)에서
+          **탭이 문서 맨 끝으로 밀려** 끝까지 스크롤해야 닿는다 — 하단 탭 바의 의미가 없다.
+          대기실처럼 스크롤이 없는 화면에서는 `sticky`가 아무 영향을 주지 않는다.
+
+          §5-33 주의: 조상에 `overflow:hidden`이 있으면 sticky가 죽는다.
+          여기서는 `html,body`가 `overflow-x: clip`이라 스크롤 컨테이너가 안 생겨 살아 있다
+          (`clip`은 `hidden`과 달리 스크롤 컨테이너를 만들지 않는다 — 그래서 clip을 쓴다).
+        */
+        position: 'sticky',
+        bottom: 0,
         zIndex: 10,
       }}
     >

@@ -1,7 +1,6 @@
 import { IsoVillage } from '../ui/IsoVillage';
 import { BaseHud } from '../ui/BaseHud';
 import type { VillageSpot } from '../ui/iso';
-import { TabBar, type TabKey } from '../ui/TabBar';
 import type { FacilityKind } from '../game/data/facilities';
 import type { FloorSpec } from '../game/data/floors';
 import type { HeroInstId, HeroInstance, Wallet } from '../game/types';
@@ -16,8 +15,6 @@ export interface BaseScreenProps {
   facilities: Record<FacilityKind, number>;
   /** 마을에서 장소를 골랐다 */
   onGoTo: (spot: VillageSpot) => void;
-  /** 하단 탭 */
-  onTab: (tab: TabKey) => void;
   /** 최상층을 이미 클리어했는가 — 더 오를 층이 없다 */
   towerCleared?: boolean;
   /** 상단 HUD의 재화 표시 */
@@ -48,7 +45,7 @@ export interface BaseScreenProps {
  */
 export function BaseScreen({
   floor, roster, party, facilities, wallet,
-  onGoTo, onTab,
+  onGoTo,
   towerCleared = false, deathCount,
 }: BaseScreenProps) {
   const alive = livingHeroes(roster);
@@ -84,7 +81,10 @@ export function BaseScreen({
         />
       </div>
 
-      <TabBar onSelect={onTab} active="home" />
+      {/*
+        탭 바는 여기가 아니라 `App.tsx`가 그린다 — 거점 화면 전체가 공유하는
+        상시 동선이라 화면마다 두면 새 화면에서 빠뜨린다(실제로 그랬다).
+      */}
     </div>
   );
 }

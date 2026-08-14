@@ -114,7 +114,7 @@ export function FacilityScreen({
     <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>시설</span>
-        <span>금 {wallet.gold}</span>
+        <span>금 {wallet.gold.toLocaleString()}</span>
       </div>
 
       <SectionLabel>대기실</SectionLabel>
