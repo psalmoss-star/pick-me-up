@@ -25,6 +25,13 @@ export interface HeroCardProps {
   dead?: boolean;
   favorite?: boolean;
   /**
+   * 소속 군(1 또는 2). 없으면 미편성.
+   *
+   * `selected`(테두리)만으로는 "어느 군인지"를 표현하지 못한다 —
+   * 두 군을 오가며 편성하므로 소속이 카드에 보여야 한다.
+   */
+  squad?: 1 | 2;
+  /**
    * 발굴 진행도 0~1. 카드는 게임 로직을 모르므로 호출부가 estimatePotential에서 꺼내 넘긴다
    * (art/klass를 호출부가 계산해 넘기는 것과 같은 방식).
    * 여기에 참값이나 추정 구간을 넘기지 말 것 — 카드에 필요한 건 "얼마나 알아냈나"뿐이다.
@@ -73,7 +80,7 @@ export function fitsOrnament(name: string, width: number, nameSize: number): boo
  */
 export function HeroCard({
   name, star, element, art, defId, variant, level, klass,
-  width = 130, selected, dead, favorite, reveal, onClick,
+  width = 130, selected, dead, favorite, squad, reveal, onClick,
 }: HeroCardProps) {
   const tier = STAR_TIERS[star] ?? STAR_TIERS[1];
   const hi = tier.ringHi ?? tier.ring;
@@ -248,6 +255,34 @@ export function HeroCard({
         </div>
         <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg,${tint}00 60%,${tint}0A 100%)`, pointerEvents: 'none' }} />
       </div>
+
+      {/*
+        소속 배지 — 즐겨찾기(❖, 우상단)와 반대쪽 좌상단에 둔다.
+        이름·레벨 줄은 카드 하단 쪽 흐름에 있어 top:4에 겹치지 않는다.
+      */}
+      {squad != null && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            width: 18,
+            height: 18,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 10,
+            borderRadius: '50%',
+            background: T.panel,
+            border: `1px solid ${squad === 1 ? T.gold : T.dim}`,
+            color: squad === 1 ? T.gold : T.dim,
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}
+        >
+          {squad === 1 ? '①' : '②'}
+        </div>
+      )}
 
       {favorite && !dead && <div style={{ position: 'absolute', top: 8, right: 10, color: T.gold, fontSize: 14, zIndex: 2 }}>❖</div>}
       {dead && (

@@ -18,12 +18,13 @@ import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt } from './game/data';
-import { isFinalFloor } from './game/data/floors';
-import { partyLimitAt } from './game/data/party';
+import { FLOORS, isFinalFloor } from './game/data/floors';
+import { partyLimitAt, squadsOpen } from './game/data/party';
+import { livingHeroes } from './game/roster';
 import {
   evaluateQuests, pendingQuests, questContext, questRng, type QuestGrant,
 } from './game/quest';
-import type { HeroInstance, HeroInstId } from './game/types';
+import type { HeroInstance } from './game/types';
 
 type Screen =
   | 'base' | 'brief' | 'battle' | 'result'
@@ -39,6 +40,8 @@ export default function App() {
    */
   const [screen, setScreen] = useState<Screen>('base');
   const [detail, setDetail] = useState<HeroInstance | null>(null);
+  /** 로스터 화면에서 지금 편성 중인 군(0=1군, 1=2군). 화면 전환과 무관하게 유지된다. */
+  const [editingSquad, setEditingSquad] = useState(0);
   // 무덤은 저장소에서 읽으므로 화면을 열 때 최신값을 가져온다.
   const [legacy, setLegacy] = useState(() => loadLegacy());
   /**
@@ -52,11 +55,14 @@ export default function App() {
   const towerCleared = useRunStore((s) => s.towerCleared);
   const roster = useRunStore((s) => s.roster);
   /**
-   * 1군만 이 화면들에 넘긴다 — 편성 UI(2군 포함)는 Task 4의 몫이다.
+   * 1군만 브리핑/전투 등 기존 화면에 넘긴다 — 그 화면들은 2군을 모른다.
    * squads[0]을 party 자리에 넣으면 화면 동작은 지금과 완전히 같다.
+   * 로스터 화면(편성 UI)만 squads 전체와 lockedSquad를 받아 2군을 다룬다.
    */
   const squads = useRunStore((s) => s.squads);
   const party = squads[0];
+  const lockedSquad = useRunStore((s) => s.lockedSquad);
+  const maxFloorReached = useRunStore((s) => s.maxFloorReached);
   const result = useRunStore((s) => s.result);
   const snapshot = useRunStore((s) => s.snapshot);
   const interventions = useRunStore((s) => s.interventions);
@@ -65,8 +71,6 @@ export default function App() {
   const seenFirstLegendary = useRunStore((s) => s.seenFirstLegendary);
 
   const toggleSquadMember = useRunStore((s) => s.toggleSquadMember);
-  // 1군 편성만 이 화면들이 다룬다 — 인자를 미리 고정해 기존 prop 시그니처(id만 받음)를 유지한다.
-  const toggleParty = (id: HeroInstId) => toggleSquadMember(0, id);
   const startBattle = useRunStore((s) => s.start);
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);
@@ -266,9 +270,13 @@ export default function App() {
         {screen === 'roster' && (
           <RosterScreen
             roster={roster}
-            party={party}
+            squads={squads}
+            editing={editingSquad}
+            onEditingChange={setEditingSquad}
             partyLimit={partyLimitAt(floor.id)}
-            onToggleParty={toggleParty}
+            squadsUnlocked={squadsOpen(livingHeroes(roster).length, FLOORS[maxFloorReached].id)}
+            lockedSquad={lockedSquad}
+            onToggleParty={(squad, id) => toggleSquadMember(squad, id)}
             onInspect={setDetail}
           />
         )}
