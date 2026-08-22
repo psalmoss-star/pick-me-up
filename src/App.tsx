@@ -8,6 +8,7 @@ import { FacilityScreen } from './screens/FacilityScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { SmithScreen } from './screens/SmithScreen';
 import { GraveScreen } from './screens/GraveScreen';
+import { TowerScreen } from './screens/TowerScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
@@ -27,7 +28,7 @@ import {
 import type { HeroInstance } from './game/types';
 
 type Screen =
-  | 'base' | 'brief' | 'battle' | 'result'
+  | 'base' | 'tower' | 'brief' | 'battle' | 'result'
   | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave' | 'roster';
 
 /** 모바일 전용. 데스크톱에서도 이 폭의 세로 화면을 중앙에 띄운다. */
@@ -71,6 +72,7 @@ export default function App() {
   const seenFirstLegendary = useRunStore((s) => s.seenFirstLegendary);
 
   const toggleSquadMember = useRunStore((s) => s.toggleSquadMember);
+  const selectFloor = useRunStore((s) => s.selectFloor);
   const startBattle = useRunStore((s) => s.start);
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);
@@ -140,12 +142,27 @@ export default function App() {
       case 'rest':
       case 'training': setScreen('facility'); break;
       /*
-        탑 — 등반 시작. 파티가 비었으면 브리핑으로 보내지 않는다.
+        탑 — 층 선택 화면으로. 예전엔 곧장 브리핑으로 갔지만, 기존 층 재도전(파밍)이
+        들어오면서 "어느 층으로 들어갈지" 고르는 자리가 필요해졌다(TowerScreen).
+        파티가 비었으면 그 화면조차 보여주지 않는다 — 골라봤자 브리핑에서 막히므로
+        입구 단계에서 끊는 편이 자연스럽다.
         IsoVillage가 잠긴 모습으로 그리지만 클릭 자체는 들어오므로 여기서도 막는다
         (그림만 믿고 가드를 빼면 나중에 스타일이 바뀔 때 조용히 뚫린다).
+
+        ⚠️ **`towerCleared`는 여기서도, `start()`에서도 막지 않는다 — 의도적으로 없다.**
+        예전(Task 5 이전) 가드는 `party.length > 0 && !towerCleared`였지만, 그건
+        층 진행이 순선형이던 시절 얘기다. `towerCleared`는 sticky고(runStore.ts:589-590,
+        최상층을 이미 깬 뒤 재도전해도 계속 true) 절대 꺼지지 않으므로, 이 자리에서
+        그대로 다시 걸면 **클리어한 순간부터 탑 전체가 영구히 잠긴다** — 재도전 파밍
+        (2군의 존재 이유, 설계서 §5.1~5.5)이 성립하지 않는다. `finish()`도 `towerCleared`
+        여부와 무관하게 보상·`revisits`를 처리한다(runStore.ts:700-735) — 스토어 어디에도
+        "클리어 후 전투 금지" 규칙이 없다. **이 주석을 보고 가드를 "복원"하지 말 것.**
+        진짜 막아야 할 것은 아래 두 가지뿐이고 각자 원래 있던 자리에서 막힌다:
+          · 빈 파티 → 이 case의 `party.length > 0`, 그리고 store `start()`의 `members.length === 0`
+          · 미해금 층 → `TowerMap`의 `idx <= maxFloorReached` (selectFloor도 동일 상한으로 클램프)
       */
       case 'tower':
-        if (party.length > 0 && !towerCleared) setScreen('brief');
+        if (party.length > 0) setScreen('tower');
         break;
     }
   };
@@ -347,12 +364,23 @@ export default function App() {
             onLegendarySeen={markLegendarySeen}
           />
         )}
+        {screen === 'tower' && (
+          <TowerScreen
+            floorIndex={floorIndex}
+            maxFloorReached={maxFloorReached}
+            towerCleared={towerCleared}
+            onSelectFloor={(index) => { selectFloor(index); setScreen('brief'); }}
+            onBack={() => setScreen('base')}
+          />
+        )}
         {screen === 'brief' && (
           <BriefScreen
             floor={floor}
             partySize={party.length}
             quests={pendingQuests(floor.id, claimedQuests)}
-            onBack={() => setScreen('base')}
+            // 이제 브리핑 앞에 층 선택(tower)이 낀다 — 돌아가기는 대기실이 아니라
+            // 거기로 가야 "선택 → 확인 → 돌아가서 다시 선택"이 자연스럽다.
+            onBack={() => setScreen('tower')}
             onStart={start}
           />
         )}
