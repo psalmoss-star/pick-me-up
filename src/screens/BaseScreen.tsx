@@ -68,8 +68,15 @@ export function BaseScreen({
           deathCount={deathCount ?? 0}
           onSelect={onGoTo}
           floorLabel={towerCleared ? undefined : `${floor.id}F`}
-          // 파티가 비었거나 등반이 끝났으면 탑이 잠긴다 — 그림으로도 보인다
-          towerLocked={party.length === 0 || towerCleared}
+          /*
+            편성이 비었을 때만 탑이 잠긴다.
+
+            ⚠️ 예전에는 `towerCleared`도 잠금 조건이었다. 재도전이 생기면서
+            **클리어 뒤에도 탑에 들어갈 수 있게 됐으므로**(해금된 층을 다시 돈다)
+            그 조건을 뺐다. 안 빼면 그림은 잠겨 보이는데 누르면 열리는 상태가 되어
+            "고장난 버튼"으로 읽힌다 — 표시와 동작이 갈리면 표시가 거짓말이 된다.
+          */
+          towerLocked={party.length === 0}
         />
         <BaseHud
           wallet={wallet}
