@@ -160,7 +160,7 @@ export const TIERS: Tier[] = [
       ENEMY.plaguebearer, ENEMY.direwolf, ENEMY.hexweaver,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden, ENEMY.warden],
-    count: [4, 5], guardHp: 3800, guardDef: 56,
+    count: [5, 6], guardHp: 3800, guardDef: 56,
     boss: ENEMY.hierophant,
   },
   {
@@ -170,7 +170,7 @@ export const TIERS: Tier[] = [
       ENEMY.hexweaver, ENEMY.grovekeeper, ENEMY.direwolf,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden],
-    count: [4, 6], guardHp: 5200, guardDef: 68,
+    count: [5, 6], guardHp: 5200, guardDef: 68,
     boss: ENEMY.blightlord,
   },
   {
@@ -462,6 +462,71 @@ export function buildEnemyVariant(floorId: number, tier: Tier, variant: number):
   return out;
 }
 
+/**
+ * 보스 층에 붙는 **추가** 호위 기수.
+ *
+ * ⚠️ 정원이 3→5로 늘었는데 보스 층만 보상을 못 받아 **전부 100%가 됐다**
+ * (100층이 63%/1.32 → 100%/0.09). 튜너는 보스 층을 건너뛰므로
+ * (`floor-tune.mts`) 표로도 못 고친다.
+ *
+ * **수치가 아니라 기수로 고친다.** 감쇠 계수를 0.45→0.85로 올려도 30~80층은
+ * 100%/0.00에서 꿈쩍도 안 했다(실측) — 2~3기가 5인을 상대로 행동 수에서 밀려
+ * 수치를 키워도 맞기 전에 죽기 때문이다. 반면 호위 +2는 같은 층을 47~78%로
+ * 끌어내린다. Task 6이 일반 층에서 얻은 결론과 같다.
+ *
+ * 실측(5인 기준 파티, 200회 / 기존 → +1 → +2 → +3):
+ *   40층 100% → 100% → **68%/2.29** → 3%/4.92
+ *   80층 100% → 100% → **78%/1.67** → 2%/4.94
+ *   90층 100% → **100%/0.39** → 47%/3.47 → 1%
+ *  100층 100% → **90%/1.05** → 10%/4.70 → 0%
+ *
+ * 목표는 **보스 층을 4기로 맞추는 것**이다(기존 2기면 +2, 3기면 +1).
+ * 깊은 보스(90층 이상)는 깊이 배수를 크게 먹어 같은 기수에도 훨씬 무거우므로
+ * 항상 +1이다 — +2를 주면 90층이 47%/사망 3.47이라 이겨도 5인 중 3인을 잃는다
+ * (§5-22: 승률만 보고 층을 합격시키지 말 것).
+ */
+function bossEscortCount(floorId: number, base: number): number {
+  /*
+    ⚠️ **기존 기수를 함께 본다.** 구간의 두 번째 보스 층은 이미 3기(보스+호위+세 번째)라
+    +2를 주면 5기가 되어 과하다 — 실측으로 40층 67%/사망 2.71, 60층 49%/3.13이었다.
+    이기더라도 5인 중 3인을 잃으면 다음 층을 못 간다(§5-22).
+    2기짜리(구간 첫 보스)만 +2를 받아 4기가 되고, 3기짜리는 +1로 4기가 된다.
+
+    90층 이상은 깊이 배수를 크게 먹어 같은 기수에도 훨씬 무겁다 — 항상 +1이다.
+  */
+  if (floorId >= 90) return 1;
+  return base >= 3 ? 1 : 2;
+}
+
+/**
+ * 보스 층 구성에 호위를 덧붙인다.
+ *
+ * 역할 상한(`MAX_SAME_ROLE`)을 여기서도 지킨다 — 보스전은 도발이 사라지면
+ * 곧바로 0/100으로 굳는 구조라(§5-11) 같은 역할이 쌓이면 더 위험하다.
+ * 채울 후보가 없으면 조용히 덜 붙인다(상한을 어기지 않는다).
+ */
+function withEscort(floorId: number, tier: Tier, base: EnemyDefId[]): EnemyDefId[] {
+  const out = [...base];
+  const counts = new Map<EnemyDefId, number>();
+  const roleCounts = new Map<string, number>();
+  for (const id of out) {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    const role = enemies[id].role;
+    roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+  }
+
+  const extra = bossEscortCount(floorId, base.length);
+  for (let i = 0; i < extra; i++) {
+    const cand = pickUnderCaps(tier.pool, floorId, 60 + i * 13, counts, roleCounts);
+    if (cand === null) break;
+    out.push(cand);
+    counts.set(cand, (counts.get(cand) ?? 0) + 1);
+    const role = enemies[cand].role;
+    roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+  }
+  return out;
+}
+
 function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefId[] {
   if (isBoss) {
     /**
@@ -473,7 +538,8 @@ function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefI
      * (97%·사망 0.36 vs 78%·1.13). 한쪽만 조절할 수 없어서 층을 갈랐다.
      */
     if (floorId === TOWER_HEIGHT) {
-      return [ENEMY.ashking, ENEMY.stonewarden, ENEMY.seraph];
+      // 최상층은 호위를 하나만 더 붙인다 — 아래 BOSS_ESCORT 주석 참조.
+      return [ENEMY.ashking, ENEMY.stonewarden, ENEMY.seraph, ENEMY.wraith];
     }
     /**
      * 보스 + 호위.
@@ -490,7 +556,9 @@ function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefI
      * 구간 안에서 두 번째 보스 층에는 호위를 하나 더 붙여 차이를 만든다.
      */
     const secondBossOfTier = Math.floor((floorId - tier.from) / BOSS_EVERY) % 2 === 1;
-    if (!(floorId >= 61 || secondBossOfTier)) return [tier.boss, guardEscort];
+    if (!(floorId >= 61 || secondBossOfTier)) {
+      return withEscort(floorId, tier, [tier.boss, guardEscort]);
+    }
 
     /**
      * 세 번째 자리는 앞선 보스 층과 겹치지 않게 고른다.
@@ -504,7 +572,7 @@ function computeEnemies(floorId: number, tier: Tier, isBoss: boolean): EnemyDefI
     for (let v = 1; v < 5 && third === prevThird; v++) {
       third = pickOne(tier.pool, floorId, 12 + v * 37);
     }
-    return [tier.boss, guardEscort, third];
+    return withEscort(floorId, tier, [tier.boss, guardEscort, third]);
   }
 
   const build = (variant: number): EnemyDefId[] => buildEnemyVariant(floorId, tier, variant);

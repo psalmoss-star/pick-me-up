@@ -409,17 +409,21 @@ describe('생성 층 — 적 기수와 역할 중복', () => {
     }
   });
 
-  it('보스 층은 보스 + 호위 2~3기를 유지한다', () => {
+  it('보스 층은 보스 + 호위 3~5기다', () => {
     /*
-      보스 층은 기수로 어렵게 만들지 않는다 — 보스 자체가 일반 적의 2~3배 HP라
-      기수까지 얹으면 격차가 곱으로 벌어진다(floorgen.ts 보스 감쇠 주석).
-      일반 층 확장이 보스 층까지 밀어 올리지 않았는지 잠근다.
+      정원 3→5에 보스 층만 보상을 못 받아 전부 100%가 됐었다(100층 63%→100%).
+      감쇠 계수로는 못 고친다 — 0.45→0.85로 올려도 30~80층이 100%/0.00에서
+      꿈쩍 안 했다(실측). 2~3기가 5인에게 행동 수로 밀리기 때문이다.
+      호위 기수로 고쳤다(`bossEscortCount`).
+
+      상한 5: 90층 이상은 +1이라 4기, 그 아래는 +2라 4~5기다.
+      더 붙이면 승률이 한 자리로 떨어진다(+3에서 40층 3%, 90층 1% — 실측).
     */
     for (const floor of generated) {
       if (!floor.isBoss) continue;
       const n = floor.enemyIds.length;
-      expect(n, `${floor.id}층 보스`).toBeGreaterThanOrEqual(2);
-      expect(n, `${floor.id}층 보스`).toBeLessThanOrEqual(3);
+      expect(n, `${floor.id}층 보스`).toBeGreaterThanOrEqual(3);
+      expect(n, `${floor.id}층 보스`).toBeLessThanOrEqual(5);
     }
   });
 

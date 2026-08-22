@@ -12,8 +12,12 @@
  */
 export const FLOOR_VARIANT: Record<number, number> = {
   33: 1,
+  46: 9,
+  53: 3,
   54: 3,
-  59: 5,
+  55: 2,
+  56: 1,
+  59: 10,
   61: 1,
   62: 1,
   67: 1,
