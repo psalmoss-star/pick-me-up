@@ -148,7 +148,7 @@ describe('개체는 서로 다른 인물이다', () => {
     const s = store();
     rich(s);
     s.getState().start();
-    const victim = s.getState().party[0];
+    const victim = s.getState().squads[0][0];
     s.setState({
       result: { ...s.getState().result!, outcome: 'defeat', casualties: [victim] },
     });

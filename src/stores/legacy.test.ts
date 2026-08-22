@@ -282,7 +282,7 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
      */
     saveLegacy({ ...emptyLegacy(), runNo: 1, summit: [] });
     const firstParty = store.getState().roster.slice(0, 2).map((h) => h.instId);
-    store.setState({ towerCleared: true, party: firstParty });
+    store.setState({ towerCleared: true, squads: [firstParty, []] });
 
     // 파티 전원을 빈사 상태로 만들어 재도전에서 전멸(사상자 발생)을 강제한다.
     const dying = store.getState().roster.map((h) => ({ ...h, currentHp: 1 }));
@@ -323,7 +323,7 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
       전이 조건(towerCleared)과 빈 파티를 동시에 만들기 위해 결과를 주입한다 —
       party 전원을 사상자로 넣어 생존 파티원이 0명이 되게 한다.
     */
-    const partyIds = store.getState().party;
+    const partyIds = store.getState().squads[0];
     store.setState({
       result: { ...store.getState().result!, outcome: 'victory', casualties: [...partyIds] },
     });

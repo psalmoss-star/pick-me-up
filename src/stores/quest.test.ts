@@ -311,7 +311,7 @@ describe('퍼머데스와의 관계', () => {
   it('영웅이 죽어도 그 자체로 과제가 달성되지 않는다', () => {
     const s = store();
     s.getState().start();
-    const victim = s.getState().party[0];
+    const victim = s.getState().squads[0][0];
     s.setState({
       result: {
         ...s.getState().result!,

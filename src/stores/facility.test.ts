@@ -43,7 +43,7 @@ const heroById = (s: ReturnType<typeof store>, id: HeroInstId) =>
 describe('층간 HP 유지', () => {
   it('전투 후 참전 영웅의 currentHp가 기록된다 — 예전엔 버려지고 있었다', () => {
     const s = store();
-    const party = s.getState().party;
+    const party = s.getState().squads[0];
     fightOnce(s);
 
     // 참전자 중 살아남은 쪽은 currentHp가 0이 아니어야 한다
@@ -56,7 +56,7 @@ describe('층간 HP 유지', () => {
 
   it('전투에 나가지 않은 영웅의 HP는 건드리지 않는다', () => {
     const s = store();
-    const benched = s.getState().roster.filter((h) => !s.getState().party.includes(h.instId));
+    const benched = s.getState().roster.filter((h) => !s.getState().squads[0].includes(h.instId));
     expect(benched.length).toBeGreaterThan(0);
     fightOnce(s);
     for (const b of benched) {
@@ -66,7 +66,7 @@ describe('층간 HP 유지', () => {
 
   it('회복 후에도 최대 HP를 넘지 않는다', () => {
     const s = store();
-    const party = s.getState().party;
+    const party = s.getState().squads[0];
     fightOnce(s);
     for (const id of party) {
       const h = heroById(s, id);
@@ -92,7 +92,7 @@ describe('층간 HP 유지', () => {
         floorIndex: BOSS_FLOOR,
         facilities: { rest: level, training: 0, forge: 0, armory: 0 },
       });
-      const party = s.getState().party;
+      const party = s.getState().squads[0];
       fightOnce(s);
       return party
         .map((id) => heroById(s, id))
@@ -113,7 +113,7 @@ describe('층간 HP 유지', () => {
      * 저층에서 소모가 누적되지 않는 것은 의도된 완급이다 — 대가는 6층부터 요구한다.
      */
     const s = store();
-    const party = s.getState().party;
+    const party = s.getState().squads[0];
     fightOnce(s);
     for (const id of party) {
       const h = heroById(s, id);
@@ -129,7 +129,7 @@ describe('훈련소 — 유휴 경험치', () => {
     const s = store();
     s.setState({ facilities: { rest: 0, training: FACILITY_MAX_LEVEL, forge: 0, armory: 0 } });
 
-    const party = s.getState().party;
+    const party = s.getState().squads[0];
     const benched = s.getState().roster.filter((h) => !party.includes(h.instId));
     const before = new Map(benched.map((h) => [h.instId, { lv: h.level, exp: h.exp }]));
 
@@ -145,7 +145,7 @@ describe('훈련소 — 유휴 경험치', () => {
 
   it('훈련소 미건설이면 대기 영웅이 자라지 않는다', () => {
     const s = store();
-    const party = s.getState().party;
+    const party = s.getState().squads[0];
     const benched = s.getState().roster.filter((h) => !party.includes(h.instId));
     const before = benched.map((h) => ({ id: h.instId, lv: h.level, exp: h.exp }));
 

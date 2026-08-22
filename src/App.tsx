@@ -23,7 +23,7 @@ import { partyLimitAt } from './game/data/party';
 import {
   evaluateQuests, pendingQuests, questContext, questRng, type QuestGrant,
 } from './game/quest';
-import type { HeroInstance } from './game/types';
+import type { HeroInstance, HeroInstId } from './game/types';
 
 type Screen =
   | 'base' | 'brief' | 'battle' | 'result'
@@ -51,7 +51,12 @@ export default function App() {
   const floorIndex = useRunStore((s) => s.floorIndex);
   const towerCleared = useRunStore((s) => s.towerCleared);
   const roster = useRunStore((s) => s.roster);
-  const party = useRunStore((s) => s.party);
+  /**
+   * 1군만 이 화면들에 넘긴다 — 편성 UI(2군 포함)는 Task 4의 몫이다.
+   * squads[0]을 party 자리에 넣으면 화면 동작은 지금과 완전히 같다.
+   */
+  const squads = useRunStore((s) => s.squads);
+  const party = squads[0];
   const result = useRunStore((s) => s.result);
   const snapshot = useRunStore((s) => s.snapshot);
   const interventions = useRunStore((s) => s.interventions);
@@ -59,7 +64,9 @@ export default function App() {
   const gacha = useRunStore((s) => s.gacha);
   const seenFirstLegendary = useRunStore((s) => s.seenFirstLegendary);
 
-  const toggleParty = useRunStore((s) => s.toggleParty);
+  const toggleSquadMember = useRunStore((s) => s.toggleSquadMember);
+  // 1군 편성만 이 화면들이 다룬다 — 인자를 미리 고정해 기존 prop 시그니처(id만 받음)를 유지한다.
+  const toggleParty = (id: HeroInstId) => toggleSquadMember(0, id);
   const startBattle = useRunStore((s) => s.start);
   const intervene = useRunStore((s) => s.intervene);
   const finishBattle = useRunStore((s) => s.finish);

@@ -214,7 +214,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
     const s = store();
     rich(s);
     // 파티 전원에게 무기를 하나씩
-    for (const id of s.getState().party) {
+    for (const id of s.getState().squads[0]) {
       s.getState().buyGear(gd('w_soldier'));
       const free = s.getState().gear.find((g) => !g.equippedBy)!;
       s.getState().equipGear(id, free.instId);
@@ -230,7 +230,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
   it('회수된 장비는 창고에 남고 아무도 안 낀 상태다', () => {
     const s = store();
     rich(s);
-    for (const id of s.getState().party) {
+    for (const id of s.getState().squads[0]) {
       s.getState().buyGear(gd('a_guard'));
       const free = s.getState().gear.find((g) => !g.equippedBy)!;
       s.getState().equipGear(id, free.instId);
@@ -247,7 +247,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
   it('살아남은 영웅의 장비는 그대로 유지된다', () => {
     const s = store();
     rich(s);
-    const first = s.getState().party[0];
+    const first = s.getState().squads[0][0];
     s.getState().buyGear(gd('w_soldier'));
     const gearId = s.getState().gear[0].instId;
     s.getState().equipGear(first, gearId);

@@ -20,7 +20,7 @@ import { saveRun, type SavedRun } from './save';
 import { grantDevWallet, isDevMode } from './devWallet';
 import { gameData, FLOORS, floorAt, HERO } from '../game/data';
 import { floorRewards, isFinalFloor } from '../game/data/floors';
-import { partyLimitAt } from '../game/data/party';
+import { partyLimitAt, SQUAD_COUNT } from '../game/data/party';
 import {
   armoryAtkMult, idleExpGain, restHealRate, upgradeCost, type FacilityKind,
 } from '../game/data/facilities';
@@ -123,7 +123,22 @@ export interface RunSlice {
   /** floorId → 재도전 횟수. 보상 체감의 입력이다 */
   revisits: Record<number, number>;
   roster: HeroInstance[];
-  party: HeroInstId[];
+  /**
+   * 편성. `[1군, 2군]`이고 길이는 항상 SQUAD_COUNT다.
+   *
+   * 1군 = 최전선 정복 / 2군 = 이미 깬 층 파밍.
+   * **한 영웅은 두 군에 동시에 못 든다** — 스토어가 강제하고 save.ts가 복원 시 교정한다.
+   */
+  squads: HeroInstId[][];
+  /**
+   * 직전 전투에 나간 군. 다음 전투까지 편성이 잠긴다.
+   *
+   * 저장 대상이다 — 새로고침으로 풀리면 규칙이 없는 것과 같다.
+   * "이 전투에 누굴 보낼지"가 되돌릴 수 없는 결정이 되어 퍼머데스와 결이 맞는다.
+   */
+  lockedSquad: number | null;
+  /** 직전 출전 군. finish()가 lockedSquad를 세울 때 참조한다. 저장 대상은 아니다. */
+  lastSortieSquad: number;
   /** 재화. 층 보상으로 쌓이고 소환에 쓰인다. */
   wallet: Wallet;
   /** 천장·쿨다운 카운터 */
@@ -200,14 +215,18 @@ export interface RunSlice {
 }
 
 export interface RunActions {
-  toggleParty: (id: HeroInstId) => void;
+  /**
+   * 편성 토글. 이미 그 군이면 빼고, 다른 군이면 옮기고, 없으면 넣는다.
+   * 잠긴 군·정원 초과·죽은 영웅·없는 id는 조용히 무시한다.
+   */
+  toggleSquadMember: (squad: number, id: HeroInstId) => void;
   /**
    * 즐겨찾기 표식을 켜고 끈다. 죽은 영웅과 없는 id는 무시한다.
    * 전투·밸런스에 영향이 없다 — 제물 확인 창의 기준일 뿐이다.
    */
   toggleFavorite: (id: HeroInstId) => void;
-  /** 전투 시작. 파티가 비어 있으면 아무 일도 하지 않고 false를 반환한다. */
-  start: () => boolean;
+  /** 전투 시작. 지정한 군이 비어 있으면 아무 일도 하지 않고 false를 반환한다. */
+  start: (squad?: number) => boolean;
   /** 개입 — 같은 시드로 재시뮬레이션한다. */
   intervene: (next: Intervention[]) => void;
   /** 전투 종료 처리. 퍼머데스가 반영되는 유일한 지점. */
@@ -310,7 +329,9 @@ function freshSlice(): RunSlice {
     revisits: {},
     towerCleared: false,
     roster,
-    party: roster.slice(0, 3).map((h) => h.instId),
+    squads: [roster.slice(0, 3).map((h) => h.instId), []],
+    lockedSquad: null,
+    lastSortieSquad: 0,
     wallet: initialWallet(),
     gacha: initialGachaState(0),
     codex: {} as Record<HeroDefId, CodexEntry>,
@@ -333,6 +354,16 @@ function freshSlice(): RunSlice {
 }
 
 /**
+ * 특정 군의 편성원.
+ *
+ * 지금은 전투에 나가는 군이 항상 1군(0번)이다 — 2군은 "층 선택으로 파밍하는" 쪽이라
+ * 출전 자체는 같은 경로를 탄다(턴제: 한 번에 한 군). 어느 군이 나가는지는 호출부가 정한다.
+ */
+export function squadMembers(s: Pick<RunSlice, 'squads'>, squad: number): HeroInstId[] {
+  return s.squads[squad] ?? [];
+}
+
+/**
  * 스토어 본체를 만든다. 테스트는 이 팩토리로 격리된 인스턴스를 얻는다.
  * (전역 훅 하나만 두면 테스트끼리 상태가 새어나간다)
  */
@@ -340,16 +371,42 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
   return create<RunStore>((set, get) => ({
     ...freshSlice(),
 
-    toggleParty: (id) =>
+    toggleSquadMember: (squad, id) =>
       set((s) => {
+        // 잠긴 군은 못 바꾼다. 화면도 막지만 스토어가 정본이다.
+        if (s.lockedSquad === squad) return {};
+        if (squad < 0 || squad >= SQUAD_COUNT) return {};
+
+        const hero = s.roster.find((h) => h.instId === id);
+        // 없는 id·죽은 영웅은 무시한다. 죽은 자를 편성하면 유령 참조가 된다.
+        if (!hero || hero.isDead) return {};
+
         const limit = partyLimitAt(FLOORS[s.floorIndex].id);
-        return {
-          party: s.party.includes(id)
-            ? s.party.filter((x) => x !== id)
-            : s.party.length >= limit
-              ? s.party
-              : [...s.party, id],
-        };
+        const cur = s.squads[squad] ?? [];
+
+        // 같은 군에 이미 있으면 뺀다
+        if (cur.includes(id)) {
+          const next = s.squads.map((m, i) => (i === squad ? m.filter((x) => x !== id) : m));
+          return { squads: next };
+        }
+
+        if (cur.length >= limit) return {};
+
+        /*
+          다른 군에 들어 있으면 거기서 빼고 여기로 옮긴다.
+          막지 않는 이유: UI에서 "이동"이 조작 수가 적다. 금지는 스토어가
+          "두 군에 동시에 못 든다"로만 지키면 된다.
+          단, 상대 군이 잠겨 있으면 옮길 수 없다 — 잠금이 우회되기 때문이다.
+        */
+        const owner = s.squads.findIndex((m) => m.includes(id));
+        if (owner !== -1 && s.lockedSquad === owner) return {};
+
+        const next = s.squads.map((m, i) => {
+          if (i === owner) return m.filter((x) => x !== id);
+          if (i === squad) return [...m, id];
+          return m;
+        });
+        return { squads: next };
       }),
 
     toggleFavorite: (id) => {
@@ -364,9 +421,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       saveRun(get());
     },
 
-    start: () => {
-      const { party, roster, floorIndex, potions } = get();
-      const members = party
+    start: (squad = 0) => {
+      const { roster, floorIndex, potions } = get();
+      const members = squadMembers(get(), squad)
         .map((id) => roster.find((h) => h.instId === id))
         .filter((h): h is HeroInstance => !!h && !h.isDead);
       if (members.length === 0) return false;
@@ -387,6 +444,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         // 지난 전투의 과제 달성 표시가 결과 화면에 남으면 안 된다
         questGrants: [],
         snapshot: roster,
+        lastSortieSquad: squad,
+        lockedSquad: null,
         result: runEncounter({
           party: members,
           floor: floorAt(floorIndex),
@@ -405,7 +464,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
      * 이래야 "같은 시드 + 같은 개입 = 같은 결과"라는 재현성이 유지된다.
      */
     intervene: (next) => {
-      const { snapshot, party, seed, floorIndex, facilities, carriedPotions } = get();
+      const { snapshot, seed, floorIndex, facilities, carriedPotions, lastSortieSquad } = get();
+      const party = squadMembers(get(), lastSortieSquad);
       const members = snapshot.filter((h) => party.includes(h.instId) && !h.isDead);
       if (members.length === 0) return;
       set({
@@ -613,7 +673,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          */
         potions: Math.max(0, s.potions - potionsUsed) + questPotions,
         carriedPotions: 0,
-        party: s.party.filter((id) => !casualties.has(id)),
+        squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
+        // 출전한 군은 다음 전투까지 편성이 잠긴다
+        lockedSquad: s.lastSortieSquad ?? 0,
         deathCount: s.deathCount + casualties.size,
         wallet: {
           ...s.wallet,
@@ -687,7 +749,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         const justCleared = !wasCleared && after.towerCleared;
         const summitHeroes = justCleared
           ? after.roster
-              .filter((h) => after.party.includes(h.instId) && !h.isDead)
+              .filter((h) => after.squads.flat().includes(h.instId) && !h.isDead)
               .map((h) => ({
                 name: displayName(h, gameData.heroes),
                 title: displayTitle(h, gameData.heroes),
@@ -847,7 +909,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         gear: freed.size === 0
           ? s.gear
           : s.gear.map((g) => (freed.has(g.instId) ? { ...g, equippedBy: null } : g)),
-        party: s.party.filter((id) => id !== r.consumedInstId),
+        squads: s.squads.map((m) => m.filter((id) => id !== r.consumedInstId)),
       }));
 
       // 되돌릴 수 없는 소멸이므로 즉시 저장한다.
@@ -1011,7 +1073,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         maxFloorReached: saved.maxFloorReached,
         revisits: saved.revisits,
         roster: saved.roster,
-        party: saved.party,
+        squads: saved.squads,
+        lockedSquad: saved.lockedSquad,
         deathCount: saved.deathCount,
         wallet: saved.wallet,
         gacha: saved.gacha,
@@ -1037,6 +1100,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         result: null,
         snapshot: [],
         questGrants: [],
+        lastSortieSquad: 0,
       }),
 
     reset: () => set(freshSlice()),

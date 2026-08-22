@@ -19,6 +19,7 @@
 import { FLOORS } from '../game/data';
 import { FACILITY_MAX_LEVEL } from '../game/data/facilities';
 import { GEAR_DEFS, GEAR_TUNING } from '../game/data/gear';
+import { SQUAD_COUNT } from '../game/data/party';
 import { questById, type QuestId } from '../game/data/quests';
 import { initialGachaState } from '../game/gacha';
 import type {
@@ -38,8 +39,8 @@ export const SAVE_VERSION = 2;
 /** 실제로 디스크에 나가는 부분 — RunSlice에서 전투 중 상태를 뺀 것 */
 export type SavedRun = Pick<
   RunSlice,
-  'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'party' | 'deathCount'
-  | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
+  'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'squads' | 'lockedSquad'
+  | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
 >;
 
@@ -60,7 +61,8 @@ export function serialize(s: RunSlice): string {
       maxFloorReached: s.maxFloorReached,
       revisits: s.revisits,
       roster: s.roster,
-      party: s.party,
+      squads: s.squads,
+      lockedSquad: s.lockedSquad,
       deathCount: s.deathCount,
       wallet: s.wallet,
       gacha: s.gacha,
@@ -143,10 +145,40 @@ export function deserialize(raw: string): SavedRun | null {
   if (roster.length === 0) return null;
 
   const ids = new Set(roster.filter((h) => !h.isDead).map((h) => h.instId));
-  // 죽었거나 존재하지 않는 영웅이 파티에 남아 있으면 걸러낸다.
-  // 저장 시점엔 정상이었어도 마이그레이션·수동 편집으로 깨질 수 있다.
-  const party = (Array.isArray(r.party) ? r.party : [])
-    .filter((id): id is HeroInstId => typeof id === 'string' && ids.has(id as HeroInstId));
+  /*
+    편성 복원.
+      - 죽었거나 없는 영웅은 걸러낸다
+      - **두 군에 중복으로 든 영웅은 앞선 군만 남긴다** — 한쪽에만 남기지 않으면
+        전투에 두 번 나가거나 보정이 이중으로 걸린다
+      - v1 세이브의 `party`는 1군으로 올린다
+      - 길이는 항상 SQUAD_COUNT로 맞춘다(모자라면 빈 배열로 채운다)
+  */
+  const rawSquads: unknown[] = Array.isArray(r.squads)
+    ? r.squads
+    : [Array.isArray(r.party) ? r.party : [], []];
+
+  const takenMember = new Set<HeroInstId>();
+  const squads: HeroInstId[][] = [];
+  for (let i = 0; i < SQUAD_COUNT; i += 1) {
+    const raw = Array.isArray(rawSquads[i]) ? (rawSquads[i] as unknown[]) : [];
+    const members: HeroInstId[] = [];
+    for (const id of raw) {
+      if (typeof id !== 'string') continue;
+      const hid = id as HeroInstId;
+      if (!ids.has(hid) || takenMember.has(hid)) continue;
+      takenMember.add(hid);
+      members.push(hid);
+    }
+    squads.push(members);
+  }
+
+  const rawLocked = r.lockedSquad;
+  const lockedSquad = typeof rawLocked === 'number'
+    && Number.isInteger(rawLocked)
+    && rawLocked >= 0
+    && rawLocked < SQUAD_COUNT
+    ? rawLocked
+    : null;
 
   const rawFloor = typeof r.floorIndex === 'number' ? r.floorIndex : 0;
   const floorIndex = Math.max(0, Math.min(FLOORS.length - 1, Math.floor(rawFloor)));
@@ -284,8 +316,8 @@ export function deserialize(raw: string): SavedRun | null {
 
   return migrate(
     {
-      floorIndex, maxFloorReached, revisits, roster: fixedRoster, party, deathCount,
-      wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
+      floorIndex, maxFloorReached, revisits, roster: fixedRoster, squads, lockedSquad,
+      deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
       gear: fixedGear, gearSeq, battleCount, potions, claimedQuests,
     },
     version,
@@ -298,6 +330,9 @@ export function deserialize(raw: string): SavedRun | null {
  * v1 → v2: `maxFloorReached`와 `revisits`가 추가됐다.
  * 두 필드는 `deserialize()`가 이미 기본값으로 채우므로(없으면 floorIndex / {})
  * 여기서 따로 할 일이 없다. v0(version 필드가 없던 세이브)도 같은 경로를 탄다.
+ *
+ * `squads`/`lockedSquad`도 같은 v2 안에서 추가됐다 — 버전을 올리지 않는다.
+ * v1의 `party`는 위(파티 복원 절)에서 이미 1군으로 옮겨졌으므로 여기서 할 일이 없다.
  *
  * 포맷을 또 바꾸면 여기에 분기를 넣고 SAVE_VERSION을 올릴 것.
  */

@@ -45,10 +45,10 @@ describe('합성 — 제물은 사라진다', () => {
     const s = store();
     const target = idAt(s, 0);
     const sac = idAt(s, 1);
-    expect(s.getState().party).toContain(sac);
+    expect(s.getState().squads[0]).toContain(sac);
 
     s.getState().fuse(target, sac);
-    expect(s.getState().party).not.toContain(sac);
+    expect(s.getState().squads[0]).not.toContain(sac);
   });
 
   it('대상이 경험치를 받는다', () => {

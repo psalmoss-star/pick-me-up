@@ -27,7 +27,9 @@ const sample = (): RunSlice => {
     maxFloorReached: 2,
     revisits: {},
     roster,
-    party: roster.slice(0, 2).map((h) => h.instId),
+    squads: [roster.slice(0, 2).map((h) => h.instId), []],
+    lockedSquad: null,
+    lastSortieSquad: 0,
     wallet: initialWallet(),
     gacha: initialGachaState(0),
     codex: {} as Record<HeroDefId, CodexEntry>,
@@ -72,7 +74,7 @@ describe('직렬화', () => {
     expect(back).not.toBeNull();
     expect(back!.floorIndex).toBe(s.floorIndex);
     expect(back!.deathCount).toBe(s.deathCount);
-    expect(back!.party).toEqual(s.party);
+    expect(back!.squads).toEqual(s.squads);
     expect(back!.roster).toHaveLength(s.roster.length);
   });
 
@@ -181,18 +183,18 @@ describe('깨진 세이브', () => {
     expect(deserialize(JSON.stringify(raw))).toBeNull();
   });
 
-  it('party에 없는 영웅이 섞여 있으면 걸러낸다', () => {
+  it('squads에 없는 영웅이 섞여 있으면 걸러낸다', () => {
     const raw = JSON.parse(serialize(sample()));
-    raw.run.party = [...raw.run.party, 'ghost#999'];
+    raw.run.squads[0] = [...raw.run.squads[0], 'ghost#999'];
     const back = deserialize(JSON.stringify(raw))!;
-    expect(back.party).not.toContain('ghost#999' as HeroInstId);
+    expect(back.squads[0]).not.toContain('ghost#999' as HeroInstId);
   });
 
-  it('죽은 영웅은 파티에서 걸러낸다', () => {
+  it('죽은 영웅은 편성에서 걸러낸다', () => {
     const s = sample();
     s.roster[0] = { ...s.roster[0], isDead: true };
     const back = deserialize(serialize(s))!;
-    expect(back.party).not.toContain(s.roster[0].instId);
+    expect(back.squads.flat()).not.toContain(s.roster[0].instId);
   });
 
   it('floorIndex가 범위를 벗어나면 잘라낸다', () => {
@@ -237,7 +239,7 @@ describe('퍼머데스는 저장을 견딘다', () => {
   it('전투에서 죽은 영웅은 불러와도 죽어 있다', () => {
     const store = createRunStore(() => 12345);
     store.getState().start();
-    const victim = store.getState().party[0];
+    const victim = store.getState().squads[0][0];
     store.setState({
       result: { ...store.getState().result!, casualties: [victim], outcome: 'defeat' },
     });
@@ -246,13 +248,13 @@ describe('퍼머데스는 저장을 견딘다', () => {
     // finish()가 자동 저장하므로 별도 호출 없이 불러온다
     const back = loadRun()!;
     expect(back.roster.find((h) => h.instId === victim)!.isDead).toBe(true);
-    expect(back.party).not.toContain(victim);
+    expect(back.squads[0]).not.toContain(victim);
     expect(back.deathCount).toBe(1);
   });
 
   it('발굴 진행도도 저장된다 (전투로 쌓은 관찰이 날아가지 않는다)', () => {
     const store = createRunStore(() => 12345);
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     store.getState().start();
     store.setState({
       result: { ...store.getState().result!, casualties: [], outcome: 'victory' },

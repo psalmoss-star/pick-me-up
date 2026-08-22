@@ -29,14 +29,14 @@ const heroOf = (store: ReturnType<typeof fixedStore>, id: HeroInstId) => {
 describe('파티 편성', () => {
   it('초기 파티는 정원만큼 채워져 있다', () => {
     const s = fixedStore().getState();
-    expect(s.party).toHaveLength(initialPartyLimit);
+    expect(s.squads[0]).toHaveLength(initialPartyLimit);
   });
 
   it('이미 편성된 영웅을 다시 누르면 빠진다', () => {
     const store = fixedStore();
-    const id = store.getState().party[0];
-    store.getState().toggleParty(id);
-    expect(store.getState().party).not.toContain(id);
+    const id = store.getState().squads[0][0];
+    store.getState().toggleSquadMember(0, id);
+    expect(store.getState().squads[0]).not.toContain(id);
   });
 
   it('정원을 넘겨 추가할 수 없다', () => {
@@ -44,19 +44,19 @@ describe('파티 편성', () => {
     // 초기 파티가 이미 정원이므로, 미편성 영웅을 넣어도 늘지 않는다
     const outsider = store
       .getState()
-      .roster.find((h) => !store.getState().party.includes(h.instId))!;
-    store.getState().toggleParty(outsider.instId);
-    expect(store.getState().party).toHaveLength(initialPartyLimit);
-    expect(store.getState().party).not.toContain(outsider.instId);
+      .roster.find((h) => !store.getState().squads[0].includes(h.instId))!;
+    store.getState().toggleSquadMember(0, outsider.instId);
+    expect(store.getState().squads[0]).toHaveLength(initialPartyLimit);
+    expect(store.getState().squads[0]).not.toContain(outsider.instId);
   });
 
   it('빠진 자리에는 다시 넣을 수 있다', () => {
     const store = fixedStore();
-    const removed = store.getState().party[0];
-    store.getState().toggleParty(removed);
-    store.getState().toggleParty(removed);
-    expect(store.getState().party).toContain(removed);
-    expect(store.getState().party).toHaveLength(initialPartyLimit);
+    const removed = store.getState().squads[0][0];
+    store.getState().toggleSquadMember(0, removed);
+    store.getState().toggleSquadMember(0, removed);
+    expect(store.getState().squads[0]).toContain(removed);
+    expect(store.getState().squads[0]).toHaveLength(initialPartyLimit);
   });
 });
 
@@ -76,7 +76,7 @@ describe('전투 시작', () => {
 
   it('파티가 비어 있으면 시작하지 않는다', () => {
     const store = fixedStore();
-    for (const id of [...store.getState().party]) store.getState().toggleParty(id);
+    for (const id of [...store.getState().squads[0]]) store.getState().toggleSquadMember(0, id);
     expect(store.getState().start()).toBe(false);
     expect(store.getState().result).toBeNull();
   });
@@ -133,7 +133,7 @@ describe('퍼머데스 (finish)', () => {
     store.getState().start();
 
     // 결과를 직접 조작해 사망자를 강제한다 — 밸런스에 의존하지 않기 위해
-    const victim = store.getState().party[0];
+    const victim = store.getState().squads[0][0];
     store.setState({
       result: { ...store.getState().result!, casualties: [victim], outcome: 'defeat' },
     });
@@ -141,7 +141,7 @@ describe('퍼머데스 (finish)', () => {
 
     const s = store.getState();
     expect(s.roster.find((h) => h.instId === victim)!.isDead).toBe(true);
-    expect(s.party).not.toContain(victim);
+    expect(s.squads[0]).not.toContain(victim);
     expect(s.deathCount).toBe(1);
   });
 
@@ -149,7 +149,7 @@ describe('퍼머데스 (finish)', () => {
     const store = fixedStore();
     const before = store.getState().roster.length;
     store.getState().start();
-    const victim = store.getState().party[0];
+    const victim = store.getState().squads[0][0];
     store.setState({
       result: { ...store.getState().result!, casualties: [victim], outcome: 'defeat' },
     });
@@ -178,7 +178,7 @@ describe('퍼머데스 (finish)', () => {
   it('승리하면 참전 영웅이 경험치를 받는다', () => {
     const store = fixedStore();
     store.getState().start();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     const before = store.getState().roster.find((h) => h.instId === fighter)!;
     const beforeTotal = before.level * 1e6 + before.exp;
 
@@ -195,7 +195,7 @@ describe('퍼머데스 (finish)', () => {
     // 층 보상과 같은 규칙 — 결과 화면의 "획득: 없음"과 일치해야 한다.
     const store = fixedStore();
     store.getState().start();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     const before = store.getState().roster.find((h) => h.instId === fighter)!;
 
     store.setState({
@@ -290,7 +290,7 @@ describe('퍼머데스 (finish)', () => {
       });
       store.getState().finish();
     };
-    const [a, b] = store.getState().party;
+    const [a, b] = store.getState().squads[0];
     kill(a);
     kill(b);
     expect(store.getState().deathCount).toBe(2);
@@ -299,14 +299,15 @@ describe('퍼머데스 (finish)', () => {
   it('죽은 영웅은 다시 편성되지 않는다', () => {
     const store = fixedStore();
     store.getState().start();
-    const victim = store.getState().party[0];
+    const victim = store.getState().squads[0][0];
     store.setState({
       result: { ...store.getState().result!, casualties: [victim], outcome: 'defeat' },
     });
     store.getState().finish();
 
-    store.getState().toggleParty(victim);
-    // toggleParty는 편성 자체는 허용하지만, start()가 죽은 영웅을 걸러낸다
+    store.getState().toggleSquadMember(0, victim);
+    // toggleSquadMember 자체가 죽은 영웅을 거부한다 — 편성에 애초에 안 들어간다
+    expect(store.getState().squads[0]).not.toContain(victim);
     store.getState().start();
     const fought = store.getState().result!.roster.filter((u) => u.side === 'ally');
     expect(fought.map((u) => u.sourceId)).not.toContain(victim);
@@ -335,7 +336,7 @@ describe('발굴 진행도 (finish)', () => {
 
   it('전투에 나간 영웅은 진행도가 오른다', () => {
     const store = fixedStore();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     store.getState().start();
     store.setState({
       result: { ...store.getState().result!, casualties: [], outcome: 'victory' },
@@ -348,7 +349,7 @@ describe('발굴 진행도 (finish)', () => {
     const store = fixedStore();
     const bench = store
       .getState()
-      .roster.find((h) => !store.getState().party.includes(h.instId))!.instId;
+      .roster.find((h) => !store.getState().squads[0].includes(h.instId))!.instId;
     store.getState().start();
     store.setState({
       result: { ...store.getState().result!, casualties: [], outcome: 'victory' },
@@ -360,7 +361,7 @@ describe('발굴 진행도 (finish)', () => {
   it('층을 돌파하면 참여만 했을 때보다 더 오른다', () => {
     const run = (outcome: 'victory' | 'defeat') => {
       const store = fixedStore();
-      const fighter = store.getState().party[0];
+      const fighter = store.getState().squads[0][0];
       store.getState().start();
       store.setState({
         result: { ...store.getState().result!, casualties: [], outcome },
@@ -373,7 +374,7 @@ describe('발굴 진행도 (finish)', () => {
 
   it('패배해도 참여분은 오른다 (관찰은 쌓인다)', () => {
     const store = fixedStore();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     store.getState().start();
     store.setState({
       result: { ...store.getState().result!, casualties: [], outcome: 'defeat' },
@@ -385,7 +386,7 @@ describe('발굴 진행도 (finish)', () => {
   it('죽은 영웅의 진행도도 남는다 (무덤 기록)', () => {
     const store = fixedStore();
     store.getState().start();
-    const victim = store.getState().party[0];
+    const victim = store.getState().squads[0][0];
     store.setState({
       result: { ...store.getState().result!, casualties: [victim], outcome: 'defeat' },
     });
@@ -397,7 +398,7 @@ describe('발굴 진행도 (finish)', () => {
 
   it('전투를 반복하면 누적된다', () => {
     const store = fixedStore();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     const once = (() => {
       store.getState().start();
       store.setState({
@@ -416,7 +417,7 @@ describe('발굴 진행도 (finish)', () => {
 
   it('진행도는 1을 넘지 않는다', () => {
     const store = fixedStore();
-    const fighter = store.getState().party[0];
+    const fighter = store.getState().squads[0][0];
     for (let i = 0; i < 40; i++) {
       store.getState().start();
       store.setState({
