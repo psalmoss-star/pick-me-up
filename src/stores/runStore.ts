@@ -21,6 +21,7 @@ import { grantDevWallet, isDevMode } from './devWallet';
 import { gameData, FLOORS, floorAt, HERO } from '../game/data';
 import { floorRewards, isFinalFloor } from '../game/data/floors';
 import { partyLimitAt, SQUAD_COUNT } from '../game/data/party';
+import { revisitMultiplier } from '../game/data/revisit';
 import {
   armoryAtkMult, idleExpGain, restHealRate, upgradeCost, type FacilityKind,
 } from '../game/data/facilities';
@@ -231,6 +232,11 @@ export interface RunActions {
   intervene: (next: Intervention[]) => void;
   /** 전투 종료 처리. 퍼머데스가 반영되는 유일한 지점. */
   finish: () => void;
+  /**
+   * 도전할 층을 고른다. 해금 상한 안에서만 움직인다.
+   * 최전선 진행은 `maxFloorReached`가 맡으므로 여기서는 안 건드린다.
+   */
+  selectFloor: (index: number) => void;
   /**
    * 회차 시작. 런을 전부 버리고 1층부터 다시 시작한다.
    *
@@ -510,6 +516,20 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         : null;
 
       /**
+       * 재도전 보상 체감 계수. 최전선 첫 도전이면 정확히 1.0이라
+       * 기존 밸런스 기준선이 보존된다 (`revisit.test.ts`가 이 값을 잠근다).
+       *
+       * exp·gold·승급석에만 곱한다. 과제 보상(questGold/questStones)에는 곱하지 않는다 —
+       * claimedQuests가 이미 재수령을 막으므로 파밍 대상이 아니다.
+       */
+      const curFloorId = FLOORS[get().floorIndex].id;
+      const maxFloorId = FLOORS[get().maxFloorReached].id;
+      const mult = revisitMultiplier(curFloorId, maxFloorId, get().revisits[curFloorId] ?? 0);
+      const scaledGold = Math.round((reward?.gold ?? 0) * mult);
+      const scaledStones = Math.round((reward?.promotionStones ?? 0) * mult);
+      const scaledExp = Math.round((reward?.exp ?? 0) * mult);
+
+      /**
        * 장비 처리 — 사망자의 회수 판정과 층 드롭.
        *
        * **전투 시드에서 파생시키되 별도 스트림을 쓴다.**
@@ -619,9 +639,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
              * 어디에서도 지급되지 않아 사라지고 있었다 — **싸운 영웅은 영원히 레벨이 안 올랐다.**
              * 그래서 층을 이어 오르면 파티는 그대로인데 층만 어려워져 구간 완주율이 0%였다.
              * 사망자에게는 주지 않는다(레벨업한 시신은 기록으로도 이상하다).
+             *
+             * 재도전 체감 계수(mult)가 곱해진 scaledExp를 쓴다 — 최전선 첫 도전은
+             * mult가 1.0이라 기존 지급량과 완전히 같다.
              */
             if (reward && !casualties.has(h.instId)) {
-              next = gainExp(next, reward.exp, gameData.starScaling).hero;
+              next = gainExp(next, scaledExp, gameData.starScaling).hero;
             }
 
             /**
@@ -679,10 +702,17 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         deathCount: s.deathCount + casualties.size,
         wallet: {
           ...s.wallet,
-          gold: s.wallet.gold + (reward?.gold ?? 0) + questGold,
+          gold: s.wallet.gold + scaledGold + questGold,
           promotionStones:
-            s.wallet.promotionStones + (reward?.promotionStones ?? 0) + questStones,
+            s.wallet.promotionStones + scaledStones + questStones,
         },
+        /**
+         * ⚠️ 클리어했을 때만 올린다. 져도 올리면 "실패로 보상을 깎는"
+         * 이중 처벌이 된다 — 진 전투는 보상 자체가 없으므로 순손실이다.
+         */
+        revisits: cleared
+          ? { ...s.revisits, [curFloorId]: (s.revisits[curFloorId] ?? 0) + 1 }
+          : s.revisits,
         floorIndex: cleared
           ? Math.min(FLOORS.length - 1, s.floorIndex + 1)
           : s.floorIndex,
@@ -777,6 +807,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        */
       saveRun(get());
     },
+
+    /**
+     * 도전할 층을 고른다. 해금 상한 안에서만 움직인다.
+     * 최전선 진행은 `maxFloorReached`가 맡으므로 여기서는 안 건드린다.
+     */
+    selectFloor: (index) =>
+      set((s) => ({
+        floorIndex: Math.max(0, Math.min(s.maxFloorReached, Math.floor(index))),
+      })),
 
     startNewRun: () => {
       const s = get();

@@ -15,6 +15,7 @@ import { evaluateQuests, questContext, questRng } from '../game/quest';
 import { questById, QUESTS, type QuestId } from '../game/data/quests';
 import { FLOORS, floorRewards } from '../game/data/floors';
 import { GEAR_DEFS } from '../game/data/gear';
+import { revisitMultiplier } from '../game/data/revisit';
 
 class MemStorage {
   private m = new Map<string, string>();
@@ -153,12 +154,14 @@ describe('중복 수령 방지', () => {
     const afterFirst = s.getState().wallet.gold;
     const q = questById('f1_swift' as QuestId)!;
 
-    // 1층으로 되돌려 같은 조건으로 다시 깬다
+    // 1층으로 되돌려 같은 조건으로 다시 깬다 — 이건 재도전이라 층 보상에
+    // revisitMultiplier가 곱해진다(과제 보상엔 안 곱는다. 이미 claimedQuests가 막는다).
     s.setState({ floorIndex: 0 });
     clearFloor1(s, 3);
 
     const gained = s.getState().wallet.gold - afterFirst;
-    expect(gained).toBe(floorRewards(FLOORS[0], 3).gold);
+    const mult = revisitMultiplier(FLOORS[0].id, FLOORS[s.getState().maxFloorReached].id, 1);
+    expect(gained).toBe(Math.round(floorRewards(FLOORS[0], 3).gold * mult));
     // 목록에도 하나만 남는다
     expect(s.getState().claimedQuests.filter((id) => id === q.id)).toHaveLength(1);
   });
@@ -184,8 +187,14 @@ describe('저장', () => {
     fresh.setState({ floorIndex: 0 });
     clearFloor1(fresh, 3);
 
-    // 층 보상만 들어와야 한다 — 과제분이 또 붙으면 이 값을 넘는다
-    expect(fresh.getState().wallet.gold - before).toBe(floorRewards(FLOORS[0], 3).gold);
+    // 층 보상만 들어와야 한다 — 과제분이 또 붙으면 이 값을 넘는다.
+    // 이것도 재도전(revisits[1] === 1)이라 revisitMultiplier가 곱해진 값과 비교한다.
+    const mult = revisitMultiplier(
+      FLOORS[0].id, FLOORS[fresh.getState().maxFloorReached].id, 1,
+    );
+    expect(fresh.getState().wallet.gold - before).toBe(
+      Math.round(floorRewards(FLOORS[0], 3).gold * mult),
+    );
   });
 
   it('과제 기록이 없는 옛 세이브도 읽힌다', () => {

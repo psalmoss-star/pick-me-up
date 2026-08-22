@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { T } from './tokens';
+import { TOUCH_MIN } from './Button';
 import { MISSION_LABEL } from '../game/mission';
 import { FLOORS, FLOOR_SEGMENTS, segmentIndexOfFloor } from '../game/data/floors';
 
@@ -20,6 +21,11 @@ function colorOf(state: CellState): string {
  * **보스는 색이 아니라 형태로 구분한다** — 모서리를 잘라 팔각으로 만든다.
  * 색만 바꾸면 잠긴 보스(#26232E)와 잠긴 일반 층이 구분되지 않는다.
  * (등급 표현에서 이미 겪은 함정을 층에도 적용한 것이다.)
+ *
+ * 항상 순수 표시용 `<div>`다 — 층 선택은 이 칸을 감싸는 쪽(펼친 구간의 `known` 줄)에서
+ * `<button>`으로 처리한다. 접힌 격자(`FloorGrid`)의 칸은 20px 안팎이라 여기서 44px
+ * 터치 타깃을 억지로 씌우면 `repeat(10, 1fr)` 격자가 겹쳐 깨진다 — 격자는 그대로
+ * 진행도 표시로만 두고, 실제 선택은 이름이 보이는 펼친 줄에서만 받는다.
  */
 function Cell({
   id, state, size, boss, showLabel,
@@ -106,8 +112,15 @@ function FloorGrid({
  * "얼마나 왔고 얼마나 남았나"는 등반 게임에서 정보가 아니라 동기다(§5-6: 허전하다고 빼지 말 것).
  */
 export function TowerMap({
-  current, compact, cleared,
-}: { current: number; compact?: boolean; cleared?: boolean }) {
+  current, compact, cleared, maxFloorReached, onSelectFloor,
+}: {
+  current: number;
+  compact?: boolean;
+  cleared?: boolean;
+  /** 해금 상한(인덱스). 이 위는 못 고른다 */
+  maxFloorReached: number;
+  onSelectFloor?: (index: number) => void;
+}) {
   const currentFloorId = FLOORS[Math.max(0, Math.min(FLOORS.length - 1, current))]?.id ?? 1;
   const currentSeg = segmentIndexOfFloor(currentFloorId);
   // 정상에 서면 마지막 구간을 편다 — 클리어 직후 화면이 접힌 채로 뜨면 허전하다.
@@ -172,8 +185,17 @@ export function TowerMap({
                 {known.map((f) => {
                   const idx = FLOORS.indexOf(f);
                   const state = stateOf(idx, current, !!cleared);
-                  return (
-                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  // 해금된 층만 고를 수 있다 — 잠긴 층은 애초에 known에 안 들어오지만
+                  // (§5-29의 상태 판정과 별개로) 상한을 다시 확인해 이중으로 막는다.
+                  const selectable = !!onSelectFloor && idx <= maxFloorReached;
+                  const rowStyle = {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    width: '100%',
+                  } as const;
+                  const content = (
+                    <>
                       <Cell
                         id={f.id}
                         state={state}
@@ -194,6 +216,30 @@ export function TowerMap({
                           {state === 'now' && <span style={{ color: T.gold }}> ◀ 현재</span>}
                         </div>
                       )}
+                    </>
+                  );
+
+                  return selectable ? (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => onSelectFloor(idx)}
+                      style={{
+                        ...rowStyle,
+                        minHeight: TOUCH_MIN,
+                        padding: 0,
+                        background: 'transparent',
+                        border: 'none',
+                        font: 'inherit',
+                        cursor: 'pointer',
+                        justifyContent: 'flex-start',
+                      }}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    <div key={f.id} style={rowStyle}>
+                      {content}
                     </div>
                   );
                 })}
