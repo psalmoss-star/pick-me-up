@@ -20,6 +20,7 @@ import { saveRun, type SavedRun } from './save';
 import { grantDevWallet, isDevMode } from './devWallet';
 import { gameData, FLOORS, floorAt, HERO } from '../game/data';
 import { floorRewards, isFinalFloor } from '../game/data/floors';
+import { partyLimitAt } from '../game/data/party';
 import {
   armoryAtkMult, idleExpGain, restHealRate, upgradeCost, type FacilityKind,
 } from '../game/data/facilities';
@@ -51,10 +52,6 @@ import { loadLegacy, saveLegacy, sealedNames } from './legacy';
 export function gearIndex(gear: GearInstance[]): Map<GearInstId, GearInstance> {
   return new Map(gear.map((g) => [g.instId, g]));
 }
-
-/** 파티 정원. 게임 규칙이므로 스토어가 강제한다. */
-export { PARTY_LIMIT } from '../screens/BaseScreen';
-import { PARTY_LIMIT } from '../screens/BaseScreen';
 
 /**
  * 시드 생성기. 기본은 Math.random이지만 테스트는 고정값을 주입한다.
@@ -328,13 +325,16 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
     ...freshSlice(),
 
     toggleParty: (id) =>
-      set((s) => ({
-        party: s.party.includes(id)
-          ? s.party.filter((x) => x !== id)
-          : s.party.length >= PARTY_LIMIT
-            ? s.party
-            : [...s.party, id],
-      })),
+      set((s) => {
+        const limit = partyLimitAt(FLOORS[s.floorIndex].id);
+        return {
+          party: s.party.includes(id)
+            ? s.party.filter((x) => x !== id)
+            : s.party.length >= limit
+              ? s.party
+              : [...s.party, id],
+        };
+      }),
 
     toggleFavorite: (id) => {
       const hero = get().roster.find((h) => h.instId === id);

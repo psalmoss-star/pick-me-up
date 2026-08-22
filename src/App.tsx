@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BaseScreen, PARTY_LIMIT } from './screens/BaseScreen';
+import { BaseScreen } from './screens/BaseScreen';
 import { RosterScreen } from './screens/RosterScreen';
 import { BriefScreen } from './screens/BriefScreen';
 import { SummonScreen } from './screens/SummonScreen';
@@ -19,6 +19,7 @@ import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt } from './game/data';
 import { isFinalFloor } from './game/data/floors';
+import { partyLimitAt } from './game/data/party';
 import {
   evaluateQuests, pendingQuests, questContext, questRng, type QuestGrant,
 } from './game/quest';
@@ -259,7 +260,7 @@ export default function App() {
           <RosterScreen
             roster={roster}
             party={party}
-            partyLimit={PARTY_LIMIT}
+            partyLimit={partyLimitAt(floor.id)}
             onToggleParty={toggleParty}
             onInspect={setDetail}
           />

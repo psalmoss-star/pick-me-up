@@ -6,8 +6,6 @@ import type { FloorSpec } from '../game/data/floors';
 import type { HeroInstId, HeroInstance, Wallet } from '../game/types';
 import { livingHeroes } from '../game/roster';
 
-export const PARTY_LIMIT = 3;
-
 export interface BaseScreenProps {
   floor: FloorSpec;
   roster: HeroInstance[];

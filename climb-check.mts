@@ -14,6 +14,7 @@ import { gameData, FLOORS } from './src/game/data';
 import { HERO } from './src/game/data/sample';
 import { restHealRate, FACILITY_MAX_LEVEL } from './src/game/data/facilities';
 import { floorRewards } from './src/game/data/floors';
+import { partyLimitAt } from './src/game/data/party';
 import { gainExp } from './src/game/progression';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from './src/game/types';
 
@@ -90,13 +91,6 @@ const maxHpOf = (h: HeroInstance): number =>
   statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
 
 /**
- * 파티 정원. 원본은 `screens/BaseScreen.tsx`의 PARTY_LIMIT이지만 여기서 import하면
- * React 화면이 딸려와 tsx 스크립트가 죽는다(§5-19: import.meta.glob은 Vite 전용).
- * CLI는 game/ 순수 계층만 건드려야 하므로 값을 복제한다 — 바뀌면 함께 고칠 것.
- */
-const PARTY_LIMIT = 3;
-
-/**
  * 연속으로 오른다. 패배하거나 구간 끝을 깰 때까지.
  *
  * @param healRate 층 사이 회복 비율(최대 HP 대비). 0 = 회복 없음.
@@ -134,7 +128,7 @@ function climb(
       const rb = (b.currentHp === 0 ? maxHpOf(b) : b.currentHp) / maxHpOf(b);
       return rb - ra;
     });
-    const sortie = sorted.slice(0, PARTY_LIMIT);
+    const sortie = sorted.slice(0, partyLimitAt(FLOORS[i].id));
 
     const r = runEncounter({
       party: sortie, floor: FLOORS[i], data: gameData,

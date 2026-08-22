@@ -8,9 +8,13 @@
  * 밸런스 수치는 검증하지 않는다 — 그건 sim/battle 테스트의 몫이다.
  */
 import { describe, it, expect } from 'vitest';
-import { createRunStore, PARTY_LIMIT } from './runStore';
+import { createRunStore } from './runStore';
 import { FLOORS } from '../game/data/floors';
+import { partyLimitAt } from '../game/data/party';
 import type { HeroInstId } from '../game/types';
+
+/** 초기 파티 화면(1층 기준)의 정원. */
+const initialPartyLimit = partyLimitAt(FLOORS[0].id);
 
 /** 시드를 고정한 스토어. 같은 시드면 전투 결과가 같아야 한다. */
 const fixedStore = (seed = 12345) => createRunStore(() => seed);
@@ -25,7 +29,7 @@ const heroOf = (store: ReturnType<typeof fixedStore>, id: HeroInstId) => {
 describe('파티 편성', () => {
   it('초기 파티는 정원만큼 채워져 있다', () => {
     const s = fixedStore().getState();
-    expect(s.party).toHaveLength(PARTY_LIMIT);
+    expect(s.party).toHaveLength(initialPartyLimit);
   });
 
   it('이미 편성된 영웅을 다시 누르면 빠진다', () => {
@@ -42,7 +46,7 @@ describe('파티 편성', () => {
       .getState()
       .roster.find((h) => !store.getState().party.includes(h.instId))!;
     store.getState().toggleParty(outsider.instId);
-    expect(store.getState().party).toHaveLength(PARTY_LIMIT);
+    expect(store.getState().party).toHaveLength(initialPartyLimit);
     expect(store.getState().party).not.toContain(outsider.instId);
   });
 
@@ -52,7 +56,7 @@ describe('파티 편성', () => {
     store.getState().toggleParty(removed);
     store.getState().toggleParty(removed);
     expect(store.getState().party).toContain(removed);
-    expect(store.getState().party).toHaveLength(PARTY_LIMIT);
+    expect(store.getState().party).toHaveLength(initialPartyLimit);
   });
 });
 
