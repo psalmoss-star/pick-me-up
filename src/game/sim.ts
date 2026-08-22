@@ -55,17 +55,24 @@ const highParty = () => [
 ];
 
 /**
- * 생성 구간용 기준 파티.
+ * 생성 구간용 기준 파티 — **5인이다**(`partyLimitAt(21) === 5`).
  *
  * 구간마다 전력이 다르므로 층 번호로 고른다 — 21층과 95층을 같은 파티로 재면
  * 한쪽은 전멸하고 한쪽은 100%가 나와 곡선을 판단할 수 없다.
  * (구간별 기준 파티가 다르다는 원칙은 저층/중층/상층에서 이미 세웠다.)
+ *
+ * ⚠️ **`scripts/floor-tune.mts`의 기준 파티와 반드시 같아야 한다.**
+ * 튜너는 이 파티로 합격/불합격을 판정하고 sim은 그 결과를 표로 보여준다 —
+ * 둘이 갈리면 "튜너는 합격시켰는데 sim에선 전멸"이 나고 원인을 못 찾는다(§5-28).
+ *
+ * 구성은 저층 3인(딜/탱/힐)에 딜러와 서포트를 하나씩 얹은 것이다.
+ * 2군이 열리는 구간이라 실제 플레이도 역할이 갖춰진 5인에 가깝다.
  */
 const genParty = (floorId: number) => {
-  if (floorId <= 40) return [hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3)];
-  if (floorId <= 60) return [hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3)];
-  if (floorId <= 80) return [hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3)];
-  return [hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3)];
+  if (floorId <= 40) return [hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3), hero(HERO.gale, 5, 60, 4), hero(HERO.banner, 5, 60, 5)];
+  if (floorId <= 60) return [hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3), hero(HERO.gale, 5, 75, 4), hero(HERO.banner, 5, 75, 5)];
+  if (floorId <= 80) return [hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3), hero(HERO.gale, 6, 85, 4), hero(HERO.banner, 6, 85, 5)];
+  return [hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3), hero(HERO.gale, 6, 95, 4), hero(HERO.banner, 6, 95, 5)];
 };
 
 export function floorWinRate(

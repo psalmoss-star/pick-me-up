@@ -38,6 +38,7 @@ import {
   buildEnemyVariant, VARIANT_COUNT, tierOf, generateFloor,
 } from '../src/game/data/floorgen';
 import { FLOOR_VARIANT } from '../src/game/data/floorVariants';
+import { partyLimitAt } from '../src/game/data/party';
 import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance, Star } from '../src/game/types';
 
 const hero = (defId: HeroDefId, star: Star, level: number, n: number): HeroInstance => ({
@@ -50,10 +51,10 @@ const hero = (defId: HeroDefId, star: Star, level: number, n: number): HeroInsta
  * 여기서 쓰는 전력이 sim과 다르면, 이 도구가 통과시킨 층이 sim 표에서 실패로 나온다.
  */
 const genParty = (fid: number): HeroInstance[] => {
-  if (fid <= 40) return [hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3)];
-  if (fid <= 60) return [hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3)];
-  if (fid <= 80) return [hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3)];
-  return [hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3)];
+  if (fid <= 40) return [hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3), hero(HERO.gale, 5, 60, 4), hero(HERO.banner, 5, 60, 5)];
+  if (fid <= 60) return [hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3), hero(HERO.gale, 5, 75, 4), hero(HERO.banner, 5, 75, 5)];
+  if (fid <= 80) return [hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3), hero(HERO.gale, 6, 85, 4), hero(HERO.banner, 6, 85, 5)];
+  return [hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3), hero(HERO.gale, 6, 95, 4), hero(HERO.banner, 6, 95, 5)];
 };
 
 /**
@@ -67,8 +68,19 @@ const genParty = (fid: number): HeroInstance[] => {
  */
 const MIN_WIN = 55;
 const MAX_WIN = 96;
-/** 사망 상한 — 승률이 높아도 매번 한 명씩 죽으면 다음 층이 무너진다(§5-22). */
-const MAX_DEATH = 1.2;
+/**
+ * 합격 사망 상한 — **정원 대비 비율**이다(§5-22).
+ *
+ * ⚠️ 절대값으로 두면 안 된다. 3인 기준 1.2를 5인에 그대로 쓰면 허용치가 상대적으로
+ * 빡빡해지고(0.24 → 0.4가 아니라 그대로 1.2), 반대로 3인 감각으로 2.0을 주면
+ * 승률은 합격인데 매 층 2명씩 죽는 구간이 생긴다.
+ * 그 대가는 다음 층에서 청구된다 — 7층은 승률 90%지만 사망 1.16이고,
+ * 3인이 2인이 되면 8층이 78%→0~4%로 무너진다.
+ *
+ * 0.4 = 3인이면 1.2(기존 값과 동일), 5인이면 2.0.
+ */
+const MAX_DEATH_RATIO = 0.4;
+const maxDeathAt = (fid: number) => partyLimitAt(fid) * MAX_DEATH_RATIO;
 
 /**
  * ⚠️ **"너무 쉬움"과 "너무 어려움"을 같이 취급하면 안 된다.**
@@ -80,7 +92,8 @@ const MAX_DEATH = 1.2;
  *
  * 그래서 재추첨 대상은 `tooHard`만으로 좁힌다. 상한은 보고용으로만 남긴다.
  */
-const tooHard = (m: { win: number; death: number }) => m.win < MIN_WIN || m.death > MAX_DEATH;
+const tooHard = (fid: number, m: { win: number; death: number }) =>
+  m.win < MIN_WIN || m.death > maxDeathAt(fid);
 
 /**
  * 편성마다 N회씩 돌리므로 실제 전투 수는 2N이다.
@@ -90,18 +103,23 @@ const tooHard = (m: { win: number; death: number }) => m.win < MIN_WIN || m.deat
 const N = Number(process.env.TUNE_N ?? 80);
 
 /**
- * 대체 편성 — 등반 중 실제로 나가게 되는 **다른 3인**.
+ * 대체 편성 — 등반 중 실제로 나가게 되는 **다른 5인**.
  *
- * ⚠️ 기준 파티(탱+딜+힐)만으로 재면 안 된다. 연속 등반은 HP가 높은 순으로 3인을
- * 뽑으므로, 누가 다치면 **힐러나 탱커가 빠진 편성**이 나간다.
+ * ⚠️ 기준 파티(탱+딜+힐+딜+서폿)만으로 재면 안 된다. 연속 등반은 HP가 높은 순으로
+ * 뽑으므로, 누가 다치면 **탱커나 힐러가 빠진 편성**이 나간다.
  * 실제로 53층은 기준 파티에서 97%인데 딜러 위주 편성에서는 **43%**였다 —
  * 튜너는 합격으로 봤지만 등반에서는 26%가 여기서 막혔다.
+ *
+ * 5인의 "최악"은 **탱커와 힐러가 동시에 빠진** 편성이다. 정원이 늘면 빈자리를
+ * 딜러가 메우므로, 3인 시절보다 오히려 역할이 무너진 편성이 나오기 쉽다.
+ * 힐러를 아예 빼면 어떤 층도 통과 못 해 튜너가 무한 재추첨에 빠지므로,
+ * 탱커를 빼고 힐러를 하급(leech)으로 낮춰 "버티지 못하는 5인"을 만든다.
  */
 const altParty = (fid: number): HeroInstance[] => {
-  if (fid <= 40) return [hero(HERO.gale, 5, 60, 4), hero(HERO.bolt, 5, 60, 5), hero(HERO.tide, 5, 65, 3)];
-  if (fid <= 60) return [hero(HERO.gale, 5, 75, 4), hero(HERO.bolt, 5, 75, 5), hero(HERO.tide, 5, 80, 3)];
-  if (fid <= 80) return [hero(HERO.gale, 6, 85, 4), hero(HERO.bolt, 6, 85, 5), hero(HERO.tide, 6, 90, 3)];
-  return [hero(HERO.gale, 6, 95, 4), hero(HERO.bolt, 6, 99, 5), hero(HERO.tide, 6, 99, 3)];
+  if (fid <= 40) return [hero(HERO.gale, 5, 60, 4), hero(HERO.bolt, 5, 60, 5), hero(HERO.leech, 5, 65, 6), hero(HERO.thorn, 5, 60, 7), hero(HERO.cinder, 5, 60, 8)];
+  if (fid <= 60) return [hero(HERO.gale, 5, 75, 4), hero(HERO.bolt, 5, 75, 5), hero(HERO.leech, 5, 80, 6), hero(HERO.thorn, 5, 75, 7), hero(HERO.cinder, 5, 75, 8)];
+  if (fid <= 80) return [hero(HERO.gale, 6, 85, 4), hero(HERO.bolt, 6, 85, 5), hero(HERO.leech, 6, 90, 6), hero(HERO.thorn, 6, 85, 7), hero(HERO.cinder, 6, 85, 8)];
+  return [hero(HERO.gale, 6, 95, 4), hero(HERO.bolt, 6, 99, 5), hero(HERO.leech, 6, 99, 6), hero(HERO.thorn, 6, 95, 7), hero(HERO.cinder, 6, 95, 8)];
 };
 
 /**
@@ -130,7 +148,7 @@ function measure(fid: number, enemyIds: readonly EnemyDefId[]) {
 }
 
 /** 합격 = 너무 어렵지 않다. 쉬운 쪽은 위 주석대로 건드리지 않는다. */
-const ok = (m: { win: number; death: number }) => !tooHard(m);
+const ok = (fid: number, m: { win: number; death: number }) => !tooHard(fid, m);
 
 /**
  * ⚠️ **기존 표를 이어받아 시작한다.**
@@ -173,7 +191,7 @@ for (let fid = HANDCRAFTED_UNTIL + 1; fid <= TOWER_HEIGHT; fid++) {
   */
   const base = generateFloor(fid).enemyIds;
   const baseM = measure(fid, base);
-  if (ok(baseM)) {
+  if (ok(fid, baseM)) {
     untouched++;
     // 고치지는 않지만 "숨돌림 층이 몇 개인지"는 알아야 곡선을 판단할 수 있다
     if (baseM.win > MAX_WIN) tooEasy.push(`${fid}층 ${baseM.win.toFixed(0)}%`);
@@ -208,7 +226,7 @@ for (let fid = HANDCRAFTED_UNTIL + 1; fid <= TOWER_HEIGHT; fid++) {
     const ids = buildEnemyVariant(fid, tier, v);
     if (collides(ids)) continue;
     const m = measure(fid, ids);
-    if (ok(m)) { best = { v, m }; break; }
+    if (ok(fid, m)) { best = { v, m }; break; }
     /*
       합격이 없으면 "가장 덜 나쁜 것"을 남긴다 — 기준은 **승률이 높은 쪽**이다.
       목표 구간 중앙에 가까운 쪽으로 고르면, 승률 3%와 60%가 있을 때 60%를 놓치고
@@ -217,7 +235,7 @@ for (let fid = HANDCRAFTED_UNTIL + 1; fid <= TOWER_HEIGHT; fid++) {
     if (!best || m.win > best.m.win) best = { v, m };
   }
 
-  if (best && ok(best.m)) {
+  if (best && ok(fid, best.m)) {
     chosen[fid] = best.v;
     fixed++;
     report.push(`  ${String(fid).padStart(3)}층 v0 ${baseM.win.toFixed(0)}%/${baseM.death.toFixed(2)} → v${best.v} ${best.m.win.toFixed(0)}%/${best.m.death.toFixed(2)}`);
@@ -256,7 +274,7 @@ for (let pass = 0; pass < 6; pass++) {
     const cur = chosen[fid] != null
       ? buildEnemyVariant(fid, tierOf(fid), chosen[fid])
       : generateFloor(fid).enemyIds;
-    const stillHard = tooHard(measure(fid, cur));
+    const stillHard = tooHard(fid, measure(fid, cur));
     if (!clash && !stillHard) continue;
 
     // 충돌하지 않으면서 합격하는 변형을 다시 찾는다
@@ -273,7 +291,7 @@ for (let pass = 0; pass < 6; pass++) {
       }
       if (bad) continue;
       const m = measure(fid, ids);
-      if (!ok(m)) continue;
+      if (!ok(fid, m)) continue;
       if (chosen[fid] === v) break; // 이미 그 변형이다 — 바뀐 게 없다
       chosen[fid] = v;
       changed++;
@@ -285,7 +303,10 @@ for (let pass = 0; pass < 6; pass++) {
   console.log(`  (정리 ${pass + 1}회차: ${changed}개 층 재선택)`);
 }
 
-console.log(`\n  합격 구간 ${MIN_WIN}~${MAX_WIN}% · 사망 ${MAX_DEATH} 이하 · ${N}회\n`);
+console.log(
+  `\n  합격 구간 ${MIN_WIN}~${MAX_WIN}% · 사망 정원×${MAX_DEATH_RATIO}` +
+  ` (생성 구간 ${maxDeathAt(TOWER_HEIGHT).toFixed(1)}) 이하 · ${N}회\n`,
+);
 console.log(report.join('\n') || '  (조정 대상 없음)');
 console.log(`\n  손 안 댐 ${untouched} | 변형으로 해결 ${fixed} | 합격 변형 없음 ${failed}`);
 console.log(`  (그중 ${MAX_WIN}% 초과로 쉬운 층 ${tooEasy.length}개 — 숨돌림이므로 건드리지 않는다)\n`);
@@ -298,7 +319,8 @@ if (process.argv.includes('--write')) {
  * 층별 적 구성 변형 번호 — **자동 생성 파일. 손으로 고치지 말 것.**
  *
  * \`scripts/floor-tune.mts\`가 실제 전투를 돌려 승률이 합격 구간(${MIN_WIN}~${MAX_WIN}%,
- * 사망 ${MAX_DEATH} 이하)을 벗어나는 층을 찾아, 통과하는 변형 번호를 기록한 것이다.
+ * 사망 정원×${MAX_DEATH_RATIO} = ${maxDeathAt(TOWER_HEIGHT).toFixed(1)} 이하)을
+ * 벗어나는 층을 찾아, 통과하는 변형 번호를 기록한 것이다.
  * 여기 없는 층은 기본 변형(0)을 쓴다.
  *
  * 갱신: npx tsx scripts/floor-tune.mts --write

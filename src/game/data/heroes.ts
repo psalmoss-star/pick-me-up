@@ -184,4 +184,9 @@ export const HERO = {
   tide: id<HeroDefId>('h_tide'),
   gale: id<HeroDefId>('h_gale'),
   bolt: id<HeroDefId>('h_bolt'),
+  // 정원이 5로 늘면서 sim·튜너 기준 파티가 5인이 됐다 — 그 자리를 채우는 영웅들.
+  thorn: id<HeroDefId>('h_thorn'),
+  cinder: id<HeroDefId>('h_cinder'),
+  banner: id<HeroDefId>('h_banner'),
+  leech: id<HeroDefId>('h_leech'),
 };

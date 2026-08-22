@@ -65,25 +65,34 @@ const highParty = (): HeroInstance[] => [
  * 다만 여기서는 뒤에 **대기 2인**을 붙인다 — 사망 시 빈자리를 채우는 실제 플레이를
  * 반영하지 않으면 완주율이 실제보다 훨씬 낮게 나온다(위 `party` 주석 참조).
  *
- * ⚠️ `sim.ts`의 `genParty`를 고치면 여기도 같이 고칠 것. 값을 복제하는 이유는
- * sim이 CLI 전용 모듈이라 import하면 순환이 생기기 때문이다.
+ * ⚠️ **로스터는 7인이다**(출전 5 + 대기 2). 정원이 5로 늘었으므로 5인 로스터로 재면
+ * 대기가 0이 되어 사망 한 번이 곧 영구 결손이 된다 — 저층에서 "정원 3 + 대기 2"로
+ * 재던 것과 조건이 달라져 비교가 성립하지 않는다(§5-23: 측정 도구가 실제 플레이와
+ * 다르면 없는 문제를 만들어낸다). 2군이 열리는 구간이라 실제 로스터는 8인 이상이다.
+ *
+ * ⚠️ `sim.ts`의 `genParty`를 고치면 여기도 같이 고칠 것 — **앞 5인**이 그것과 같아야
+ * 한다. 값을 복제하는 이유는 sim이 CLI 전용 모듈이라 import하면 순환이 생기기 때문이다.
  */
 const genParty = (floorId: number): HeroInstance[] => {
   if (floorId <= 40) return [
     hero(HERO.ashen, 5, 60, 1), hero(HERO.bulwark, 5, 60, 2), hero(HERO.tide, 5, 65, 3),
-    hero(HERO.gale, 5, 60, 4), hero(HERO.bolt, 5, 60, 5),
+    hero(HERO.gale, 5, 60, 4), hero(HERO.banner, 5, 60, 5),
+    hero(HERO.bolt, 5, 60, 6), hero(HERO.leech, 5, 60, 7),
   ];
   if (floorId <= 60) return [
     hero(HERO.ashen, 5, 75, 1), hero(HERO.bulwark, 5, 75, 2), hero(HERO.tide, 5, 80, 3),
-    hero(HERO.gale, 5, 75, 4), hero(HERO.bolt, 5, 75, 5),
+    hero(HERO.gale, 5, 75, 4), hero(HERO.banner, 5, 75, 5),
+    hero(HERO.bolt, 5, 75, 6), hero(HERO.leech, 5, 75, 7),
   ];
   if (floorId <= 80) return [
     hero(HERO.ashen, 6, 85, 1), hero(HERO.bulwark, 6, 85, 2), hero(HERO.tide, 6, 90, 3),
-    hero(HERO.gale, 6, 85, 4), hero(HERO.bolt, 6, 85, 5),
+    hero(HERO.gale, 6, 85, 4), hero(HERO.banner, 6, 85, 5),
+    hero(HERO.bolt, 6, 85, 6), hero(HERO.leech, 6, 85, 7),
   ];
   return [
     hero(HERO.ashen, 6, 95, 1), hero(HERO.bulwark, 6, 95, 2), hero(HERO.tide, 6, 99, 3),
-    hero(HERO.gale, 6, 95, 4), hero(HERO.bolt, 6, 99, 5),
+    hero(HERO.gale, 6, 95, 4), hero(HERO.banner, 6, 95, 5),
+    hero(HERO.bolt, 6, 99, 6), hero(HERO.leech, 6, 95, 7),
   ];
 };
 
