@@ -372,3 +372,62 @@ describe('floorRewards', () => {
     expect(last.exp / first.exp).toBeGreaterThan(last.gold / first.gold);
   });
 });
+
+describe('생성 층 — 적 기수와 역할 중복', () => {
+  /** 생성 구간의 층만 훑는다. 1~20층은 손으로 짠 정본이라 규칙이 다르다. */
+  const generated = FLOORS.filter((f) => f.id > HANDCRAFTED_UNTIL);
+
+  it('같은 역할의 적이 3기 이상 겹치지 않는다', () => {
+    /*
+      §5-19: 같은 디버프를 주는 적을 겹쳐 쌓으면 급격하게 무너진다.
+      방깎 2기로 16층이 8%(전멸), 광역 2기로 19층이 97%→25%가 됐다.
+      기수를 늘리면 중복 확률이 구조적으로 오르므로 상한을 명시한다.
+    */
+    for (const floor of generated) {
+      const byRole = new Map<string, number>();
+      for (const id of floor.enemyIds) {
+        const role = enemies[id].role;
+        byRole.set(role, (byRole.get(role) ?? 0) + 1);
+      }
+      for (const [role, n] of byRole) {
+        expect(n, `${floor.id}층 ${role} ${n}기`).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+
+  it('일반 층의 적은 4~6기다', () => {
+    /*
+      정원이 5로 늘어 3~4기로는 생성 구간이 사실상 전부 100%가 됐다(STEP 29 실측).
+      수치 배수가 아니라 기수로 올린다 — 지수는 0.008 폭에서 결과가 뒤집히는
+      칼날이고(STEP 15) 기수는 선형에 가깝다.
+    */
+    for (const floor of generated) {
+      if (floor.isBoss) continue;
+      const n = floor.enemyIds.length;
+      expect(n, `${floor.id}층`).toBeGreaterThanOrEqual(4);
+      expect(n, `${floor.id}층`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('보스 층은 보스 + 호위 2~3기를 유지한다', () => {
+    /*
+      보스 층은 기수로 어렵게 만들지 않는다 — 보스 자체가 일반 적의 2~3배 HP라
+      기수까지 얹으면 격차가 곱으로 벌어진다(floorgen.ts 보스 감쇠 주석).
+      일반 층 확장이 보스 층까지 밀어 올리지 않았는지 잠근다.
+    */
+    for (const floor of generated) {
+      if (!floor.isBoss) continue;
+      const n = floor.enemyIds.length;
+      expect(n, `${floor.id}층 보스`).toBeGreaterThanOrEqual(2);
+      expect(n, `${floor.id}층 보스`).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('손으로 짠 1~20층은 안 건드린다', () => {
+    // 회귀 감지선. 정원 3 구간이라 구성이 변하면 검증된 승률이 무너진다.
+    // 6층(균열의 심장)은 보스 단독 구성이다 — 실측 확인함(floors.ts).
+    expect(FLOORS[5].id).toBe(6);
+    expect(FLOORS[5].enemyIds).toEqual(['e_golem']);
+    expect(FLOORS[5].isBoss).toBe(true);
+  });
+});

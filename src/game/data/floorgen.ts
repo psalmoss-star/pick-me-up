@@ -19,6 +19,7 @@
 import type { EnemyDefId } from '../types';
 import type { GuardDef, Mission, MissionKind } from '../mission';
 import { ENEMY } from './sample';
+import { enemies } from './enemies';
 import { FLOOR_VARIANT } from './floorVariants';
 import type { FloorScene, FloorSpec } from './floors';
 
@@ -39,6 +40,26 @@ export const BOSS_EVERY = 10;
  * 간격만 강제한다. `floors.test.ts`가 이 값으로 잠근다.
  */
 export const MIN_REPEAT_GAP = 8;
+
+/**
+ * 한 층에 같은 적이 들어갈 수 있는 최대 기수.
+ *
+ * 같은 디버프가 겹치면 급격히 무너진다(§STEP 9). 예전에는 재추첨 3번의
+ * best-effort라 실제로 새어 나갔다(89층 hexweaver 3기 — 실측).
+ */
+export const MAX_SAME_ENEMY = 2;
+
+/**
+ * 한 층에 같은 **역할**의 적이 들어갈 수 있는 최대 기수.
+ *
+ * 적 id가 달라도 역할이 같으면 같은 방식으로 무너뜨린다 — §5-19에서
+ * 방깎 2기로 16층이 8%(전멸), 광역 2기로 19층이 97%→25%가 됐다.
+ * 기수를 4~6으로 올리면 중복 확률이 구조적으로 오르므로 id 상한만으로는 부족하다.
+ *
+ * ⚠️ 상층 풀은 7종 중 4종이 dealer다. 이 값을 1로 내리면 채울 적이 없어
+ * 기수가 무너진다(`pickUnderCaps`가 자리를 포기한다).
+ */
+export const MAX_SAME_ROLE = 2;
 
 /**
  * 같은 층 **이름**이 다시 나오기까지 최소 간격.
@@ -102,7 +123,16 @@ export interface Tier {
   pool: EnemyDefId[];
   /** 도발을 가진 적 — §5-11. 최소 하나는 섞여야 힐러가 먼저 죽는 구조가 안 된다 */
   taunts: EnemyDefId[];
-  /** 적 기수 범위 */
+  /**
+   * 적 기수 범위 — 일반 층에만 적용된다(보스 층은 보스+호위 2~3기 고정).
+   *
+   * 정원이 5로 늘자 3~4기로는 생성 구간이 사실상 전부 100%가 됐다(STEP 29).
+   * 수치 배수가 아니라 기수로 올린다 — 지수는 0.008 폭에서 결과가 뒤집히는
+   * 칼날이고(STEP 15) 기수는 선형에 가깝다.
+   *
+   * ⚠️ 상한은 6을 넘기지 말 것. `MAX_SAME_ROLE`이 2인데 풀의 역할이 3~4종이라
+   * 7기째는 채울 후보가 없어 조용히 잘린다.
+   */
   count: [number, number];
   /** 보호 대상 HP 기준값 (수비/호위 층에서 사용) */
   guardHp: number;
@@ -130,7 +160,7 @@ export const TIERS: Tier[] = [
       ENEMY.plaguebearer, ENEMY.direwolf, ENEMY.hexweaver,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden, ENEMY.warden],
-    count: [3, 4], guardHp: 3800, guardDef: 56,
+    count: [4, 5], guardHp: 3800, guardDef: 56,
     boss: ENEMY.hierophant,
   },
   {
@@ -140,7 +170,7 @@ export const TIERS: Tier[] = [
       ENEMY.hexweaver, ENEMY.grovekeeper, ENEMY.direwolf,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden],
-    count: [3, 4], guardHp: 5200, guardDef: 68,
+    count: [4, 6], guardHp: 5200, guardDef: 68,
     boss: ENEMY.blightlord,
   },
   {
@@ -150,7 +180,7 @@ export const TIERS: Tier[] = [
       ENEMY.hexweaver, ENEMY.grovekeeper, ENEMY.revenant,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden],
-    count: [4, 4], guardHp: 6800, guardDef: 80,
+    count: [5, 6], guardHp: 6800, guardDef: 80,
     boss: ENEMY.warcaller,
   },
   {
@@ -160,7 +190,7 @@ export const TIERS: Tier[] = [
       ENEMY.hexweaver, ENEMY.plaguebearer, ENEMY.direwolf,
     ],
     taunts: [ENEMY.colossus, ENEMY.stonewarden],
-    count: [4, 4], guardHp: 8600, guardDef: 92,
+    count: [5, 6], guardHp: 8600, guardDef: 92,
     boss: ENEMY.sovereign,
   },
 ];
@@ -382,20 +412,52 @@ const DEDUPE_VARIANTS = 6;
  * 순수 함수로 export하는 이유는 튜닝 스크립트가 같은 구성을 재현해야 하기 때문이다 —
  * 스크립트가 자체 구현을 두면 생성기와 조용히 갈라진다(§5-28과 같은 성격).
  */
+/**
+ * 한 자리를 채울 적을 고른다 — **상한을 반드시 지킨다.**
+ *
+ * 예전에는 최대 3번 다시 뽑고 실패하면 그냥 넣었다. 그래서 상한이 "권고"였고
+ * 실제로 새어 나갔다 — 89층에 hexweaver가 3기(같은 적 상한 2 위반),
+ * 28·99층에 dealer가 3기 있었다(실측). 기수를 4~6으로 올리면 한 층이 풀에서
+ * 뽑는 횟수가 늘어 이 확률이 구조적으로 커지므로 best-effort로는 못 막는다.
+ *
+ * 그래서 재추첨 대신 **후보를 걸러낸 뒤 그 안에서 뽑는다.** 남는 후보가 없으면
+ * 그 자리는 포기한다(호출부가 기수를 줄인다) — 상한을 어기느니 한 기 적은 게 낫다.
+ */
+function pickUnderCaps(
+  pool: EnemyDefId[],
+  floorId: number,
+  salt: number,
+  counts: Map<EnemyDefId, number>,
+  roleCounts: Map<string, number>,
+): EnemyDefId | null {
+  const ok = pool.filter(
+    (id) =>
+      (counts.get(id) ?? 0) < MAX_SAME_ENEMY &&
+      (roleCounts.get(enemies[id].role) ?? 0) < MAX_SAME_ROLE,
+  );
+  if (ok.length === 0) return null;
+  return pickOne(ok, floorId, salt);
+}
+
 export function buildEnemyVariant(floorId: number, tier: Tier, variant: number): EnemyDefId[] {
   const [lo, hi] = tier.count;
   const n = lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1));
 
-  const out: EnemyDefId[] = [pickOne(tier.taunts, floorId, 2 + variant * 100)];
-  const counts = new Map<EnemyDefId, number>([[out[0], 1]]);
+  const first = pickOne(tier.taunts, floorId, 2 + variant * 100);
+  const out: EnemyDefId[] = [first];
+  const counts = new Map<EnemyDefId, number>([[first, 1]]);
+  const roleCounts = new Map<string, number>([[enemies[first].role, 1]]);
+
   for (let i = 1; i < n; i++) {
-    // 같은 적이 2기를 넘지 않도록 최대 3번 다시 뽑는다.
-    let cand = pickOne(tier.pool, floorId, 3 + i + variant * 100);
-    for (let retry = 0; retry < 3 && (counts.get(cand) ?? 0) >= 2; retry++) {
-      cand = pickOne(tier.pool, floorId, 30 + i * 7 + retry + variant * 100);
-    }
+    const cand = pickUnderCaps(
+      tier.pool, floorId, 3 + i + variant * 100, counts, roleCounts,
+    );
+    // 상한 때문에 채울 수 있는 적이 없다 — 기수를 줄인다.
+    if (cand === null) break;
     out.push(cand);
     counts.set(cand, (counts.get(cand) ?? 0) + 1);
+    const role = enemies[cand].role;
+    roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
   }
   return out;
 }
