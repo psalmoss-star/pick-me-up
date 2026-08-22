@@ -33,12 +33,12 @@ export const SAVE_KEY = 'tower-of-picks:run';
  * 세이브 포맷 버전.
  * 필드를 더하거나 의미를 바꿨으면 올리고 `migrate()`에 분기를 추가할 것.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** 실제로 디스크에 나가는 부분 — RunSlice에서 전투 중 상태를 뺀 것 */
 export type SavedRun = Pick<
   RunSlice,
-  'floorIndex' | 'roster' | 'party' | 'deathCount'
+  'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'party' | 'deathCount'
   | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
 >;
@@ -57,6 +57,8 @@ export function serialize(s: RunSlice): string {
     // 스프레드로 넘기면 나중에 RunSlice에 필드가 늘 때 조용히 새어나간다.
     run: {
       floorIndex: s.floorIndex,
+      maxFloorReached: s.maxFloorReached,
+      revisits: s.revisits,
       roster: s.roster,
       party: s.party,
       deathCount: s.deathCount,
@@ -148,6 +150,29 @@ export function deserialize(raw: string): SavedRun | null {
 
   const rawFloor = typeof r.floorIndex === 'number' ? r.floorIndex : 0;
   const floorIndex = Math.max(0, Math.min(FLOORS.length - 1, Math.floor(rawFloor)));
+
+  /*
+    v1엔 maxFloorReached가 없다. floorIndex가 "거기까지 갔다"는 뜻이므로 그 값으로 채운다.
+    상한이 현재 층보다 낮으면 층 선택이 깨지므로 floorIndex 이상으로 강제한다(수동 편집 방어).
+  */
+  const rawMax = typeof r.maxFloorReached === 'number' ? r.maxFloorReached : floorIndex;
+  const maxFloorReached = Math.max(
+    floorIndex,
+    Math.min(FLOORS.length - 1, Math.floor(Number.isFinite(rawMax) ? rawMax : floorIndex)),
+  );
+
+  /*
+    재도전 횟수. 음수·비정수·비숫자는 버린다 — 보상 계수의 입력이라
+    이상값이 들어오면 배수가 튄다.
+  */
+  const rawRevisits = asObject(r.revisits) ?? {};
+  const revisits: Record<number, number> = {};
+  for (const [k, v] of Object.entries(rawRevisits)) {
+    const floorId = Number(k);
+    if (!Number.isInteger(floorId) || floorId < 1) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
+    revisits[floorId] = Math.floor(v);
+  }
 
   const deathCount = typeof r.deathCount === 'number' && r.deathCount >= 0
     ? Math.floor(r.deathCount)
@@ -259,7 +284,7 @@ export function deserialize(raw: string): SavedRun | null {
 
   return migrate(
     {
-      floorIndex, roster: fixedRoster, party, deathCount,
+      floorIndex, maxFloorReached, revisits, roster: fixedRoster, party, deathCount,
       wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
       gear: fixedGear, gearSeq, battleCount, potions, claimedQuests,
     },
@@ -268,10 +293,13 @@ export function deserialize(raw: string): SavedRun | null {
 }
 
 /**
- * 버전별 보정. 지금은 v1뿐이라 할 일이 없다.
+ * 버전별 보정.
  *
- * v0(= version 필드가 없던 세이브)도 그대로 통과시킨다 — 필드 구성이 같기 때문이다.
- * 나중에 포맷을 바꾸면 여기에 분기를 넣고 SAVE_VERSION을 올릴 것.
+ * v1 → v2: `maxFloorReached`와 `revisits`가 추가됐다.
+ * 두 필드는 `deserialize()`가 이미 기본값으로 채우므로(없으면 floorIndex / {})
+ * 여기서 따로 할 일이 없다. v0(version 필드가 없던 세이브)도 같은 경로를 탄다.
+ *
+ * 포맷을 또 바꾸면 여기에 분기를 넣고 SAVE_VERSION을 올릴 것.
  */
 function migrate(run: SavedRun, _version: number): SavedRun {
   return run;

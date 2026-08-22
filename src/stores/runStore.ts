@@ -107,7 +107,21 @@ export function initialRoster(): HeroInstance[] {
 
 /** 직렬화 가능한 순수 데이터 부분 — STEP 3의 저장 단위가 된다. */
 export interface RunSlice {
+  /**
+   * 이번에 도전할 층(인덱스). 재도전으로 **앞뒤로 움직인다.**
+   * 예전에는 이 값이 "현재 위치"와 "최대 진행도"를 겸했고 클리어 시 +1만 하는
+   * 단방향이라 "1층으로 돌아간다"를 표현할 자리가 없었다.
+   */
   floorIndex: number;
+  /**
+   * 해금 상한(인덱스). 최전선 진행은 이 값이 오를 때만 일어난다.
+   *
+   * ⚠️ `towerCleared` 판정은 **이 값**으로 한다. `floorIndex`로 하면
+   * 100층을 깬 뒤 재도전으로 1층에 내려갔을 때 판정이 깨진다.
+   */
+  maxFloorReached: number;
+  /** floorId → 재도전 횟수. 보상 체감의 입력이다 */
+  revisits: Record<number, number>;
   roster: HeroInstance[];
   party: HeroInstId[];
   /** 재화. 층 보상으로 쌓이고 소환에 쓰인다. */
@@ -292,6 +306,8 @@ function freshSlice(): RunSlice {
   const roster = initialRoster();
   return {
     floorIndex: 0,
+    maxFloorReached: 0,
+    revisits: {},
     towerCleared: false,
     roster,
     party: roster.slice(0, 3).map((h) => h.instId),
@@ -609,12 +625,22 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           ? Math.min(FLOORS.length - 1, s.floorIndex + 1)
           : s.floorIndex,
         /**
+         * 최전선은 **`floorIndex`가 상한과 같을 때 클리어**해야 오른다.
+         * 재도전(아래층)으로는 안 오른다 — 그래야 파밍이 진행을 대체하지 않는다.
+         */
+        maxFloorReached: cleared && s.floorIndex >= s.maxFloorReached
+          ? Math.min(FLOORS.length - 1, s.maxFloorReached + 1)
+          : s.maxFloorReached,
+        /**
          * 최상층 클리어 표시.
          * floorIndex는 클램프되므로 "마지막 층에 있음"과 "마지막 층을 깼음"을
          * 구분할 수 없다. 이 플래그가 없으면 정상을 밟아도 같은 층이 계속 열린다.
+         *
+         * ⚠️ 판정 기준이 maxFloorReached다.
+         * floorIndex로 하면 100층을 깬 뒤 1층에 내려가 있을 때 깨진다.
          */
         towerCleared: s.towerCleared
-          || (cleared && isFinalFloor(s.floorIndex)),
+          || (cleared && s.floorIndex >= s.maxFloorReached && isFinalFloor(s.maxFloorReached)),
         result: null,
       }));
 
@@ -982,6 +1008,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
     hydrate: (saved) =>
       set({
         floorIndex: saved.floorIndex,
+        maxFloorReached: saved.maxFloorReached,
+        revisits: saved.revisits,
         roster: saved.roster,
         party: saved.party,
         deathCount: saved.deathCount,

@@ -235,7 +235,8 @@ describe('퍼머데스 (finish)', () => {
   it('최상층을 깨면 towerCleared가 선다', () => {
     const store = fixedStore();
     store.getState().start();
-    store.setState({ floorIndex: FLOORS.length - 1 });
+    // towerCleared는 maxFloorReached 기준이므로 최전선도 같이 최상층으로 올려둔다.
+    store.setState({ floorIndex: FLOORS.length - 1, maxFloorReached: FLOORS.length - 1 });
     expect(store.getState().towerCleared).toBe(false);
     store.setState({
       result: { ...store.getState().result!, casualties: [], outcome: 'victory' },

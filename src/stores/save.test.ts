@@ -24,6 +24,8 @@ const sample = (): RunSlice => {
   const roster = initialRoster();
   return {
     floorIndex: 2,
+    maxFloorReached: 2,
+    revisits: {},
     roster,
     party: roster.slice(0, 2).map((h) => h.instId),
     wallet: initialWallet(),
@@ -290,5 +292,81 @@ describe('저장 키', () => {
   it('키가 고정돼 있다 (바꾸면 기존 세이브가 사라진다)', () => {
     saveRun(sample());
     expect(localStorage.getItem(SAVE_KEY)).not.toBeNull();
+  });
+});
+
+describe('세이브 v2 — maxFloorReached / revisits', () => {
+  it('v1 세이브의 floorIndex가 maxFloorReached로 올라온다', () => {
+    // v1엔 maxFloorReached가 없다. floorIndex가 "거기까지 갔다"는 뜻이므로 그 값이 정답이다.
+    const v1 = JSON.stringify({
+      version: 1,
+      savedAt: Date.now(),
+      run: {
+        floorIndex: 5,
+        roster: [{ instId: 'h_ashen#1', defId: 'h_ashen', star: 2, level: 15, isDead: false }],
+        party: ['h_ashen#1'],
+      },
+    });
+
+    const out = deserialize(v1);
+    expect(out).not.toBeNull();
+    expect(out!.maxFloorReached).toBe(5);
+    expect(out!.floorIndex).toBe(5);
+  });
+
+  it('v1 세이브의 revisits는 빈 객체가 된다', () => {
+    const v1 = JSON.stringify({
+      version: 1,
+      savedAt: Date.now(),
+      run: {
+        floorIndex: 3,
+        roster: [{ instId: 'h_ashen#1', defId: 'h_ashen', star: 2, level: 15, isDead: false }],
+        party: [],
+      },
+    });
+
+    expect(deserialize(v1)!.revisits).toEqual({});
+  });
+
+  it('maxFloorReached는 floorIndex보다 작을 수 없다', () => {
+    // 수동 편집 방어. 작으면 해금 상한이 현재 층보다 낮아 층 선택이 깨진다.
+    const broken = JSON.stringify({
+      version: 2,
+      savedAt: Date.now(),
+      run: {
+        floorIndex: 9,
+        maxFloorReached: 2,
+        roster: [{ instId: 'h_ashen#1', defId: 'h_ashen', star: 2, level: 15, isDead: false }],
+        party: [],
+      },
+    });
+
+    const out = deserialize(broken)!;
+    expect(out.maxFloorReached).toBeGreaterThanOrEqual(out.floorIndex);
+  });
+
+  it('revisits의 음수·비정수·비숫자 값은 걸러진다', () => {
+    const dirty = JSON.stringify({
+      version: 2,
+      savedAt: Date.now(),
+      run: {
+        floorIndex: 0,
+        maxFloorReached: 0,
+        revisits: { 3: 2, 4: -1, 5: 'x', 6: 1.7 },
+        roster: [{ instId: 'h_ashen#1', defId: 'h_ashen', star: 2, level: 15, isDead: false }],
+        party: [],
+      },
+    });
+
+    const out = deserialize(dirty)!;
+    expect(out.revisits[3]).toBe(2);
+    expect(out.revisits[4]).toBeUndefined();
+    expect(out.revisits[5]).toBeUndefined();
+    expect(out.revisits[6]).toBe(1);   // 내림
+  });
+
+  it('미래 버전(v3)은 여전히 읽지 않는다', () => {
+    const v3 = JSON.stringify({ version: 3, savedAt: Date.now(), run: { floorIndex: 0, roster: [] } });
+    expect(deserialize(v3)).toBeNull();
   });
 });

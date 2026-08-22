@@ -307,11 +307,12 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
 
     /*
       ⚠️ **최상층에 서 있어야 이 검증이 성립한다.**
-      towerCleared는 `cleared && isFinalFloor(floorIndex)`로만 서므로, floorIndex가 0이면
-      승리를 주입해도 전이가 일어나지 않고 summit 블록 자체가 실행되지 않는다 —
-      그러면 이 테스트는 가드를 지워도 통과하는 빈 테스트가 된다(실제로 그랬다).
+      towerCleared는 `cleared && floorIndex >= maxFloorReached && isFinalFloor(maxFloorReached)`로만
+      서므로, floorIndex가 0이면 승리를 주입해도 전이가 일어나지 않고 summit 블록 자체가
+      실행되지 않는다 — 그러면 이 테스트는 가드를 지워도 통과하는 빈 테스트가 된다(실제로 그랬다).
+      maxFloorReached도 같이 올려야 한다 — 재도전 판정은 최전선을 올리지 않는다.
     */
-    store.setState({ floorIndex: FLOORS.length - 1 });
+    store.setState({ floorIndex: FLOORS.length - 1, maxFloorReached: FLOORS.length - 1 });
 
     const dying = store.getState().roster.map((h) => ({ ...h, currentHp: 1 }));
     store.setState({ roster: dying });
