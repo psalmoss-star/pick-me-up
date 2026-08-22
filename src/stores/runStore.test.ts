@@ -8,7 +8,7 @@
  * 밸런스 수치는 검증하지 않는다 — 그건 sim/battle 테스트의 몫이다.
  */
 import { describe, it, expect } from 'vitest';
-import { createRunStore } from './runStore';
+import { createRunStore, initialRoster } from './runStore';
 import { FLOORS } from '../game/data/floors';
 import { partyLimitAt } from '../game/data/party';
 import type { HeroInstId } from '../game/types';
@@ -71,7 +71,9 @@ describe('전투 시작', () => {
     const store = fixedStore();
     expect(store.getState().start()).toBe(true);
     expect(store.getState().result).not.toBeNull();
-    expect(store.getState().snapshot).toHaveLength(5);
+    // 스냅샷은 로스터 전체를 담는다. 인원수를 상수로 박으면 로스터가
+    // 늘어날 때마다 무관한 테스트가 깨진다 — 5인 → 6인에서 실제로 그랬다.
+    expect(store.getState().snapshot).toHaveLength(initialRoster().length);
   });
 
   it('파티가 비어 있으면 시작하지 않는다', () => {
