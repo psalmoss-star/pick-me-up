@@ -3,7 +3,7 @@ import type {
   Klass, Star, StarScaling, Stats,
 } from './types';
 import { derivePotential, type PotentialBonus } from './potential';
-import { MIN_ATTR_FILL } from './data/elements';
+import { MIN_ATTR_FILL, RAMP_START } from './data/elements';
 
 /**
  * 능력치 모델
@@ -36,6 +36,34 @@ export function capsFor(
   };
 }
 
+/**
+ * 능력치 채움비 — 상한 중 몇 %가 현재 채워져 있는가.
+ *
+ * 하한(`MIN_ATTR_FILL`) 위에서는 `level / maxLevel` 그대로다. **여기가 검증된
+ * 승률표(6층 70% / 12층 43% / 20층 55%)가 걸린 구간이므로 건드리면 안 된다.**
+ * 기준 파티(★3 Lv.30, ★4 Lv.50 …)는 전부 이 구간에 있다.
+ *
+ * ⚠️ 예전에는 `Math.max(MIN_ATTR_FILL, level / maxLevel)`이었다. 클램프는
+ * **하한 아래를 통째로 평평하게 만든다** — ★4의 Lv.1~15가 전부 채움비 0.25로
+ * 같았고, 레벨 15개가 아무 효과도 없었다(실측: 전투력 44 고정).
+ * 등급이 높을수록 만렙이 크므로 무효 구간도 같이 커진다(★6은 Lv.1~25).
+ * 갓 뽑은 고등급을 키우던 플레이어가 "올려도 안 세진다"를 겪은 원인이다.
+ *
+ * 그래서 하한 아래를 평지가 아니라 **경사로**로 바꾼다. 하한에 닿는 레벨(무릎)에서
+ * 기존 곡선과 정확히 만나므로 무릎 위는 1비트도 안 움직인다.
+ * `RAMP_START`만큼 낮은 지점에서 출발해 무릎까지 단조 증가한다.
+ */
+export function attrFill(level: number, maxLevel: number): number {
+  const ratio = level / maxLevel;
+  // 하한 위 — 기존 공식 그대로. 밸런스 회귀선이 여기 있다
+  if (ratio >= MIN_ATTR_FILL) return Math.min(1, ratio);
+
+  const knee = MIN_ATTR_FILL * maxLevel; // 채움비가 하한에 닿는 레벨
+  if (knee <= 1) return MIN_ATTR_FILL;
+  const t = Math.min(1, Math.max(0, (level - 1) / (knee - 1)));
+  return MIN_ATTR_FILL * (RAMP_START + (1 - RAMP_START) * t);
+}
+
 export function computeAttributes(
   def: HeroDef,
   star: Star,
@@ -45,13 +73,8 @@ export function computeAttributes(
 ): Attributes {
   const caps = capsFor(def.baseCaps, star, scaling, potential);
   const maxLevel = scaling[star].maxLevel;
-  /*
-    ⚠️ 하한(`MIN_ATTR_FILL`)이 없으면 **등급이 높을수록 약하게 시작한다.**
-    만렙이 등급마다 커지므로(★1은 10, ★5는 80) Lv.1 충전율이 10% → 1.25%로
-    거꾸로 간다. 실측에서 갓 뽑은 ★4·★5의 atk이 6으로 ★1의 12보다 낮았다.
-    수치의 근거와 재측정 조건은 `data/elements.ts`의 상수 주석에 있다.
-  */
-  const fill = Math.min(1, Math.max(MIN_ATTR_FILL, level / maxLevel));
+  // 채움비 규칙과 그 근거는 `attrFill` 주석에 있다 (하한·경사로 둘 다).
+  const fill = attrFill(level, maxLevel);
   const build = (k: AttrKey) => ({
     current: Math.max(1, Math.round(caps[k] * fill)),
     max: caps[k],
