@@ -75,3 +75,60 @@ describe('클래스', () => {
     expect(klassFor(6)).toBe('영웅');
   });
 });
+
+/**
+ * 갓 얻은 개체의 하한 (STEP 33).
+ *
+ * ⚠️ **`npm run sim`·`climb-check`은 이 구간을 구조적으로 못 잡는다.**
+ * 두 도구의 파티는 전부 잘 키운 상태(★2 Lv.15, ★4 Lv.50)라 저레벨을 밟지 않는다.
+ * 실제로 이 결함이 있는 채로 두 도구의 표가 완전히 정상이었다 —
+ * 실기기의 상태창에서 "갓 뽑은 ★4의 atk이 6"으로 처음 드러났다.
+ * 그래서 여기서 테스트로 잠근다.
+ */
+describe('신규 개체 하한 — 등급이 높을수록 강하게 시작해야 한다', () => {
+  const STARS = [1, 2, 3, 4, 5, 6] as const;
+
+  it('Lv.1 전투 스탯이 등급을 따라 단조 증가한다', () => {
+    const atk = STARS.map((s) => computeHeroStats(ashen, s, 1, starScaling).atk);
+    expect(atk).toEqual([...atk].sort((a, b) => a - b));
+    // 예전에는 ★1이 12, ★4·★5가 6이었다 — 거꾸로였다
+    expect(atk[4]).toBeGreaterThan(atk[0]);
+  });
+
+  it('Lv.1 HP도 등급을 따라 단조 증가한다', () => {
+    const hp = STARS.map((s) => computeHeroStats(ashen, s, 1, starScaling).hp);
+    expect(hp).toEqual([...hp].sort((a, b) => a - b));
+  });
+
+  it('갓 뽑은 개체도 상한의 일부는 채워져 있다', () => {
+    for (const s of STARS) {
+      const a = computeAttributes(ashen, s, 1, starScaling);
+      for (const k of ['str', 'int', 'vit', 'agi'] as const) {
+        // 1로 바닥을 치던 값이 실제 비율을 갖는다
+        expect(a[k].current).toBeGreaterThan(a[k].max * 0.2);
+      }
+    }
+  });
+
+  /**
+   * 하한이 육성을 대체하면 안 된다 — 갓 뽑은 고등급이 만렙 저등급을 이기면
+   * 레벨을 올릴 이유가 사라진다.
+   */
+  it('갓 뽑은 ★5가 만렙 ★2보다 강하지 않다 — 육성이 의미를 잃으면 안 된다', () => {
+    const fresh5 = computeHeroStats(ashen, 5, 1, starScaling);
+    const maxed2 = computeHeroStats(ashen, 2, starScaling[2].maxLevel, starScaling);
+    expect(fresh5.atk).toBeLessThan(maxed2.atk);
+  });
+
+  it('만렙 도달은 여전히 상한을 정확히 채운다', () => {
+    for (const s of STARS) {
+      expect(isAtCap(computeAttributes(ashen, s, starScaling[s].maxLevel, starScaling))).toBe(true);
+    }
+  });
+
+  it('하한이 걸려도 레벨을 올리면 계속 강해진다', () => {
+    const lv = [1, 20, 40, 60].map((l) => computeHeroStats(ashen, 4, l, starScaling).atk);
+    expect(lv).toEqual([...lv].sort((a, b) => a - b));
+    expect(lv[3]).toBeGreaterThan(lv[0]);
+  });
+});

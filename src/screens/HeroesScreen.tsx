@@ -71,7 +71,15 @@ export function HeroesScreen({
     <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 18 }}>
         <span>영웅</span>
-        <span>보유 {alive.length}{roster.length !== alive.length && ` / ${roster.length}`}</span>
+        {/*
+          사망자가 있으면 '생존 N / 전체'로 쓴다. '보유 3 / 12'라고 하면
+          12명을 들고 있는 것으로 읽히는데 실제로는 9명이 무덤에 있다.
+        */}
+        <span>
+          {roster.length === alive.length
+            ? `보유 ${alive.length}`
+            : `생존 ${alive.length} / ${roster.length}`}
+        </span>
       </div>
 
       {alive.length === 0 && (

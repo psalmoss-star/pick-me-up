@@ -148,7 +148,12 @@ export function PartyScreen({
               <div
                 key={i}
                 style={{
-                  width: 72,
+                  /*
+                    이름이 두 줄로 접히지 않을 만큼은 줘야 한다 — 72px에서는
+                    '북풍의 리엔'이 칸을 꽉 채워 답답했다(실기기 확인).
+                    가로 스크롤이므로 넓혀도 넘치지 않는다.
+                  */
+                  width: 92,
                   flexShrink: 0,
                   border: `1px solid ${slot ? T.panelHi : T.panelHi}`,
                   borderStyle: slot ? 'solid' : 'dashed',

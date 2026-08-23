@@ -172,6 +172,12 @@ export function StatusScreen({
         )}
       </SystemPanel>
 
+      {/*
+        SectionLabel은 위 여백이 없다 — 패널 바로 뒤에 붙이면 라벨이 패널 테두리에
+        겹쳐 읽힌다(실기기 스크린샷에서 '능력치'가 위 패널에 걸쳐 보였다).
+        패널과 패널 사이에는 여기서 간격을 준다.
+      */}
+      <div style={{ marginTop: 18 }} />
       <SectionLabel>능력치</SectionLabel>
       <SystemPanel compact>
         {/* 현재/상한을 숫자로 그대로 드러낸다 — 상한 도달은 "승급 없이는 못 큰다"는 뜻이다 */}
@@ -181,6 +187,7 @@ export function StatusScreen({
         <Attr label="민첩" at={attrs.agi} />
       </SystemPanel>
 
+      <div style={{ marginTop: 18 }} />
       <SectionLabel>잠재력</SectionLabel>
       <SystemPanel compact>
         {/*
@@ -197,6 +204,7 @@ export function StatusScreen({
         </div>
       </SystemPanel>
 
+      <div style={{ marginTop: 18 }} />
       <SectionLabel>스킬</SectionLabel>
       <SystemPanel compact>
         {/*
@@ -223,7 +231,8 @@ export function StatusScreen({
 
       {def.lore && (
         <>
-          <SectionLabel>기록</SectionLabel>
+          <div style={{ marginTop: 18 }} />
+      <SectionLabel>기록</SectionLabel>
           <SystemPanel compact>
             <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.9 }}>{def.lore}</div>
           </SystemPanel>
