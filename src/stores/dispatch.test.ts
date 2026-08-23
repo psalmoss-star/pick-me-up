@@ -105,18 +105,30 @@ describe('파견 — 기본', () => {
 });
 
 describe('파견 — ⚠️ 교착 방지', () => {
-  it('로스터 전원을 파견해도 등반이 막히지 않는다', () => {
+  /**
+   * ⚠️ **가장 중요한 테스트.**
+   *
+   * 전원을 내보내면 싸울 사람이 없으므로 `start()`는 당연히 실패한다 — 그건 교착이
+   * 아니다. 교착은 **거기서 빠져나올 방법이 없을 때** 생긴다.
+   *
+   * 그래서 검사하는 것은 "항상 등반할 수 있다"가 아니라
+   * **"언제든 되돌려서 등반할 수 있다"**이다. 조기 복귀가 그 유일한 탈출구이고,
+   * 그래서 어떤 조건도 붙으면 안 된다.
+   */
+  it('전원을 파견해도 복귀만 하면 즉시 등반할 수 있다', () => {
     const s = store();
     unlockAll(s);
     const ids = rosterIds(s);
     expect(ids.length).toBeGreaterThan(2);
-    // 한 명씩 전부 폐광으로 내보낸다
     for (const id of ids) expect(s.getState().dispatchAdventure(MINE, [id]).ok).toBe(true);
     expect(dispatchedHeroIds(s.getState().dispatches).size).toBe(ids.length);
 
-    // 그래도 탑에 들어갈 수 있어야 한다
-    s.getState().start();
-    expect(s.getState().result).not.toBeNull();
+    // 전원이 나가 있으면 출전할 사람이 없다 — 여기까지는 정상이다
+    expect(s.getState().start()).toBe(false);
+
+    // 탈출구: 아무 조건 없이 되돌린다. 되돌리는 데 전투도 금도 필요하지 않다
+    while (s.getState().dispatches.length > 0) s.getState().recallDispatch(0);
+    expect(s.getState().start()).toBe(true);
   });
 
   it('조기 복귀는 무조건 성공한다 — 완료 전이어도, 금이 0이어도', () => {
@@ -187,6 +199,59 @@ describe('파견 — ⚠️ 교착 방지', () => {
     });
     clearFloor(s);
     expect(s.getState().dispatches).toHaveLength(0);
+  });
+});
+
+describe('파견 — 편성·출전에서 빠진다', () => {
+  it('나가 있는 영웅은 파티에 넣을 수 없다', () => {
+    const s = store();
+    unlockAll(s);
+    // 편성돼 있지 않은 영웅을 고른다
+    const benched = rosterIds(s).filter((id) => !s.getState().squads.flat().includes(id));
+    const id = benched[0];
+    s.getState().dispatchAdventure(MINE, [id]);
+
+    s.getState().toggleSquadMember(1, id);
+    expect(s.getState().squads.flat()).not.toContain(id);
+  });
+
+  it('편성된 채로 나가도 파티에서 뺄 수는 있다 — 넣기만 막는다', () => {
+    const s = store();
+    unlockAll(s);
+    const id = s.getState().squads[0][0];
+    s.getState().dispatchAdventure(MINE, [id]);
+    expect(s.getState().squads[0]).toContain(id);
+
+    s.getState().toggleSquadMember(0, id);
+    expect(s.getState().squads[0]).not.toContain(id);
+  });
+
+  it('편성된 채로 나간 영웅은 출전에 끼지 않는다 — 모험 중에 탑에서 죽으면 안 된다', () => {
+    const s = store();
+    unlockAll(s);
+    const id = s.getState().squads[0][0];
+    s.getState().dispatchAdventure(MINE, [id]);
+
+    s.getState().start();
+    const fought = s.getState().result!.roster
+      .filter((u) => u.side === 'ally' && u.kind === 'hero')
+      .map((u) => u.sourceId);
+    expect(fought).not.toContain(id);
+  });
+
+  it('1군 전원이 나가 있으면 그 군은 출전하지 못한다 — 다만 다른 군은 멀쩡하다', () => {
+    const s = store();
+    unlockAll(s);
+    for (const id of s.getState().squads[0]) {
+      s.getState().dispatchAdventure(MINE, [id]);
+    }
+    expect(s.getState().start(0)).toBe(false);
+
+    // 남은 인원으로 2군을 짜면 등반이 이어진다 = 교착이 아니다
+    const free = rosterIds(s).filter((id) => !dispatchedHeroIds(s.getState().dispatches).has(id));
+    expect(free.length).toBeGreaterThan(0);
+    for (const id of free) s.getState().toggleSquadMember(1, id);
+    expect(s.getState().start(1)).toBe(true);
   });
 });
 

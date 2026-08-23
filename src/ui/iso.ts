@@ -42,7 +42,7 @@ export type Pt = readonly [number, number];
  * (사이드뷰 `VillageScene.tsx`에 있던 타입이다. 그 화면은 STEP 23에서
  * 아이소메트릭으로 교체되며 삭제됐고, 타입만 여기로 옮겼다.)
  */
-export type VillageSpot = FacilityKind | 'grave' | 'summon' | 'shop' | 'tower';
+export type VillageSpot = FacilityKind | 'grave' | 'summon' | 'shop' | 'tower' | 'adventure';
 
 /** 격자(x, y, z) → 화면(px, py). 이 파일의 유일한 관문이다. */
 export function iso(x: number, y: number, z = 0): Pt {

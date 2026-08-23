@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { iso, pts, depth, projectPin, OX, OY, HW, HH, ZH } from './iso';
+import { VILLAGE_LOTS } from './IsoVillage';
 
 describe('iso 투영', () => {
   it('원점은 OX/OY로 간다', () => {
@@ -132,5 +133,61 @@ describe('pts', () => {
 
   it('소수점 1자리로 자른다 (문자열이 무한정 길어지지 않게)', () => {
     expect(pts([[1.23456, 2.9999]])).toBe('1.2,3.0');
+  });
+});
+
+/**
+ * 마을 라벨 겹침 — **눈이 아니라 숫자로 잡는다.**
+ *
+ * 예전에는 `IsoVillage.tsx` 주석에 "8×8이면 시설 8개가 라벨 겹침 없이 들어간다(실측)"
+ * 라고만 적혀 있었다. 그래서 9번째(모험 관문)를 넣을 때 **어디가 비었는지 알 수 없어**
+ * "격자가 꽉 찼으니 새 자리를 못 만든다"고 잘못 판단할 뻔했다 — 재보니 여유가 많았다.
+ *
+ * 깊이(x+y)로 재면 안 된다. 훈련소와 숙소는 깊이가 **정확히 같은데도**(둘 다 3.7)
+ * 화면 좌우로 갈라져 안 겹친다. 겹침은 투영 좌표에서만 보인다.
+ */
+describe('마을 배치 — 라벨 겹침', () => {
+  /** 라벨 상자 어림치. 한글 4~5자 + 부제 한 줄 */
+  const LW = 76;
+  const LH = 24;
+
+  /** 두 자리의 여유. 1 미만이면 라벨 상자가 겹친다 */
+  function clearance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+    const [ax, ay] = iso(a.x, a.y);
+    const [bx, by] = iso(b.x, b.y);
+    // 가로·세로 중 **한쪽만** 충분히 벌어져도 안 겹친다
+    return Math.max(Math.abs(ax - bx) / LW, Math.abs(ay - by) / LH);
+  }
+
+  const spots = Object.keys(VILLAGE_LOTS) as (keyof typeof VILLAGE_LOTS)[];
+
+  it('모든 자리 쌍이 라벨 상자만큼 떨어져 있다', () => {
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) {
+        const c = clearance(VILLAGE_LOTS[spots[i]], VILLAGE_LOTS[spots[j]]);
+        expect(c, `${spots[i]} x ${spots[j]}`).toBeGreaterThanOrEqual(0.85);
+      }
+    }
+  });
+
+  it('모험 관문이 기존 자리 중 가장 빡빡한 쌍보다 여유롭다', () => {
+    // 기존 8개끼리의 최소 여유 = 실기기에서 문제없던 기준선
+    const prior = spots.filter((s) => s !== 'adventure');
+    let baseline = Infinity;
+    for (let i = 0; i < prior.length; i++) {
+      for (let j = i + 1; j < prior.length; j++) {
+        baseline = Math.min(baseline, clearance(VILLAGE_LOTS[prior[i]], VILLAGE_LOTS[prior[j]]));
+      }
+    }
+    let added = Infinity;
+    for (const s of prior) {
+      added = Math.min(added, clearance(VILLAGE_LOTS.adventure, VILLAGE_LOTS[s]));
+    }
+    expect(added).toBeGreaterThan(baseline);
+  });
+
+  it('자리마다 좌표가 하나씩 있다 — 같은 칸에 둘을 두면 하나가 안 보인다', () => {
+    const keys = new Set(spots.map((s) => `${VILLAGE_LOTS[s].x},${VILLAGE_LOTS[s].y}`));
+    expect(keys.size).toBe(spots.length);
   });
 });

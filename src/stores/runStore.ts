@@ -539,6 +539,14 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           return { squads: next };
         }
 
+        /*
+          ⚠️ **빼는 것은 위에서 이미 처리했다.** 파견 검사는 **넣을 때만** 한다 —
+          넣기 전에 막으면 "나가 있는 동안 파티에서 뺄 수도 없는" 상태가 생기고,
+          그건 잠금 교착과 같은 모양이다(`isSquadLocked` 주석).
+          나가 있는 사람을 편성하면 정원만 차지한 채 전투에 안 나온다.
+        */
+        if (dispatchedHeroIds(s.dispatches).has(id)) return {};
+
         if (cur.length >= limit) return {};
 
         /*
@@ -572,9 +580,18 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
     start: (squad = 0) => {
       const { roster, floorIndex, potions } = get();
+      /*
+        ⚠️ **나가 있는 영웅은 출전에서 뺀다.** 편성해둔 뒤에 파견을 보내면
+        명단에는 남아 있는데 마을에 없는 상태가 되는데, 그대로 내보내면
+        모험 중인 사람이 탑에서 싸우고 심지어 죽는다.
+
+        **여기서 false를 돌려주면 안 된다** — 남은 인원이 있으면 그들로 간다.
+        전원이 나가 있어야만 실패한다. 파견이 등반을 막는 순간 교착이다.
+      */
+      const away = dispatchedHeroIds(get().dispatches);
       const members = squadMembers(get(), squad)
         .map((id) => roster.find((h) => h.instId === id))
-        .filter((h): h is HeroInstance => !!h && !h.isDead);
+        .filter((h): h is HeroInstance => !!h && !h.isDead && !away.has(h.instId));
       if (members.length === 0) return false;
 
       /**

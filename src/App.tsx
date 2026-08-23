@@ -10,6 +10,8 @@ import { FacilityScreen } from './screens/FacilityScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { SmithScreen } from './screens/SmithScreen';
 import { GraveScreen } from './screens/GraveScreen';
+import { AdventureScreen } from './screens/AdventureScreen';
+import { dispatchedHeroIds } from './game/adventure';
 import { TowerScreen } from './screens/TowerScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
@@ -39,7 +41,7 @@ import type { HeroInstance, HeroInstId } from './game/types';
 
 type Screen =
   | 'base' | 'tower' | 'brief' | 'battle' | 'result'
-  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave'
+  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave' | 'adventure'
   // 예전에는 셋이 'roster' 하나였다 — 탭 3개가 같은 화면이라 구별되지 않았다
   | 'heroes' | 'status' | 'party';
 
@@ -134,6 +136,9 @@ export default function App() {
   const enhanceGear = useRunStore((s) => s.enhanceGear);
   const potions = useRunStore((s) => s.potions);
   const buyPotion = useRunStore((s) => s.buyPotion);
+  const dispatches = useRunStore((s) => s.dispatches);
+  const dispatchAdventure = useRunStore((s) => s.dispatchAdventure);
+  const recallDispatch = useRunStore((s) => s.recallDispatch);
   // 결과 화면의 과제 미리보기 입력 — finish()가 쓰는 값과 같아야 한다
   const seed = useRunStore((s) => s.seed);
   const battleCount = useRunStore((s) => s.battleCount);
@@ -174,6 +179,7 @@ export default function App() {
     switch (spot) {
       case 'summon': setScreen('summon'); break;
       case 'shop': setScreen('shop'); break;
+      case 'adventure': setScreen('adventure'); break;
       case 'grave': setGraveFrom('base'); setLegacy(loadLegacy()); setScreen('grave'); break;
       // 마을의 '대장간' 건물은 무기창고(armory) 자리이고 실제 동작은 강화다.
       case 'armory': setScreen('smith'); break;
@@ -252,6 +258,7 @@ export default function App() {
    */
   const HUB_SCREENS = [
     'base', 'heroes', 'status', 'party', 'summon', 'facility', 'shop', 'smith', 'forge',
+    'adventure',
   ] as const;
   const showTabs = (HUB_SCREENS as readonly string[]).includes(screen);
 
@@ -412,6 +419,7 @@ export default function App() {
             onGoTo={goToSpot}
             towerCleared={towerCleared}
             deathCount={deathCount}
+            awayCount={dispatchedHeroIds(dispatches).size}
           />
         )}
         {screen === 'heroes' && (
@@ -462,11 +470,15 @@ export default function App() {
             restCost={restQuote(roster).cost}
             restInjured={restQuote(roster).injured.length}
             /*
-              훈련 중인 영웅 = **출전하지 않는 생존자.**
-              판정은 `finish()`의 유휴 exp 규칙과 같아야 한다(1군에 없으면 훈련).
+              훈련 중인 영웅 = **출전하지 않고 파견도 안 나간 생존자.**
+              판정은 `finish()`의 유휴 exp 규칙과 **정확히 같아야 한다** —
+              거기서 파견 인원(`awayNow`)을 제외하므로 여기서도 빼야 한다.
+              안 빼면 훈련소에 이름이 떠 있는데 exp는 안 오르는 상태가 된다.
             */
             trainees={roster
-              .filter((h) => !h.isDead && !party.includes(h.instId))
+              .filter((h) => !h.isDead
+                && !party.includes(h.instId)
+                && !dispatchedHeroIds(dispatches).has(h.instId))
               .map((h) => {
                 const maxLevel = gameData.starScaling[h.star].maxLevel;
                 const atMax = h.level >= maxLevel;
@@ -480,6 +492,26 @@ export default function App() {
                   exp: h.exp,
                 };
               })}
+          />
+        )}
+        {screen === 'adventure' && (
+          <AdventureScreen
+            maxFloorId={FLOORS[maxFloorReached].id}
+            battleCount={battleCount}
+            dispatches={dispatches}
+            onDispatch={dispatchAdventure}
+            onRecall={recallDispatch}
+            onBack={() => setScreen('base')}
+            heroes={roster
+              .filter((h) => !h.isDead)
+              .map((h) => ({
+                instId: h.instId,
+                name: displayName(h, gameData.heroes),
+                level: h.level,
+                star: h.star,
+                away: dispatchedHeroIds(dispatches).has(h.instId),
+                inSquad: squads.flat().includes(h.instId),
+              }))}
           />
         )}
         {screen === 'grave' && (

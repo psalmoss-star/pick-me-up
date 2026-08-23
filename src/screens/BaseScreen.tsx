@@ -25,6 +25,8 @@ export interface BaseScreenProps {
    * 퍼머데스 게임에서 "몇 명 잃었나"는 런 전체 기준이 정답이므로 스토어 값을 받는다.
    */
   deathCount?: number;
+  /** 지금 모험에 나가 있는 인원 — 관문 등불이 켜지는 조건이다 */
+  awayCount?: number;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface BaseScreenProps {
 export function BaseScreen({
   floor, roster, party, facilities, wallet,
   onGoTo,
-  towerCleared = false, deathCount,
+  towerCleared = false, deathCount, awayCount = 0,
 }: BaseScreenProps) {
   const alive = livingHeroes(roster);
   const floorText = towerCleared ? '등반 종료' : `${floor.id}층 · ${floor.name}`;
@@ -66,6 +68,7 @@ export function BaseScreen({
         <IsoVillage
           facilities={facilities}
           deathCount={deathCount ?? 0}
+          awayCount={awayCount}
           onSelect={onGoTo}
           floorLabel={towerCleared ? undefined : `${floor.id}F`}
           /*

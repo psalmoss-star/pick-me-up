@@ -33,7 +33,14 @@ import { FACILITY_MAX_LEVEL, type FacilityKind } from '../game/data/facilities';
 const W = 390;
 const H = 760;
 
-/** 섬 격자 크기. 8×8이면 시설 8개가 라벨 겹침 없이 들어간다(실측). */
+/**
+ * 섬 격자 크기.
+ *
+ * ⚠️ 예전 주석은 "8×8이면 시설 8개가 라벨 겹침 없이 들어간다(실측)"였는데,
+ * 그 문장이 **"8개가 상한"으로 잘못 읽힌다.** 실제로는 여유 있는 자리가 훨씬 많다
+ * (모험 관문을 9번째로 넣을 때 재서 확인했다). 몇 개가 들어가는지는 주석이 아니라
+ * `iso.test.ts`의 겹침 테스트가 판정한다.
+ */
 const GRID = 8;
 
 /** 사각 기둥 하나 — 윗면·오른면·왼면 3개로 입체를 만든다. */
@@ -176,6 +183,62 @@ function SummonCircle({ x, y }: { x: number; y: number }) {
   );
 }
 
+/**
+ * 모험 관문 — 건물이 아니라 **마을 밖으로 나가는 길**이다.
+ *
+ * 시설처럼 그리지 않는 이유: 시설 4종은 전부 `Facility`로 그려서 실루엣이 같고
+ * 레벨로만 구분된다. 모험은 레벨이 없고 성격도 달라(밖으로 나간다) 같은 모양이면
+ * "다섯 번째 시설"로 읽힌다. 문설주 둘과 길로 그려서 한눈에 갈라놓는다.
+ *
+ * 나가 있는 인원이 있으면 등불을 켠다 — 마을을 보기만 해도 누가 밖에 있는지
+ * 알 수 있어야 한다(화면을 열어봐야 아는 정보는 부감도의 목적에 어긋난다).
+ */
+function Gate({ x, y, away }: { x: number; y: number; away: boolean }) {
+  const [lx, ly] = iso(x - 0.45, y + 0.45);
+  const [rx, ry] = iso(x + 0.45, y - 0.45);
+  const H = 26;
+  return (
+    <g>
+      {/* 바깥으로 이어지는 길 — 앞쪽(x+y가 큰 쪽)으로 뻗는다 */}
+      <polygon
+        points={pts([iso(x - 0.5, y + 0.5), iso(x + 0.5, y - 0.5),
+          iso(x + 1.5, y + 0.5), iso(x + 0.5, y + 1.5)])}
+        fill={ISO.stoneL}
+        opacity=".55"
+      />
+      {/* 문설주 둘 */}
+      {[[lx, ly], [rx, ry]].map(([px, py], i) => (
+        <polygon
+          key={i}
+          points={pts([[px - 3, py], [px + 3, py], [px + 3, py - H], [px - 3, py - H]])}
+          fill={ISO.stoneR}
+          stroke={ISO.outline}
+          strokeWidth=".8"
+          strokeLinejoin="round"
+        />
+      ))}
+      {/* 상인방 */}
+      <polygon
+        points={pts([[lx - 3, ly - H], [rx + 3, ry - H], [rx + 3, ry - H - 6], [lx - 3, ly - H - 6]])}
+        fill={ISO.stoneTop}
+        stroke={ISO.outline}
+        strokeWidth=".8"
+        strokeLinejoin="round"
+      />
+      {/* 등불 — 나가 있는 인원이 있을 때만 */}
+      <circle
+        cx={(lx + rx) / 2}
+        cy={(ly + ry) / 2 - H - 3}
+        r={3.2}
+        fill={away ? ISO.glow : ISO.stoneL}
+        stroke={ISO.outline}
+        strokeWidth=".6"
+        opacity={away ? 1 : 0.6}
+      />
+    </g>
+  );
+}
+
 /** 무덤 — 자라지 않는다. 비석만 는다. */
 function Graves({ x, y, deaths }: { x: number; y: number; deaths: number }) {
   const stones = Math.max(1, Math.min(4, deaths));
@@ -243,6 +306,34 @@ function Tower({ x, y, locked }: { x: number; y: number; locked: boolean }) {
   );
 }
 
+/**
+ * ── 배치 ──────────────────────────────────────────────
+ *
+ * 탑은 가장 안쪽(x,y 작음)에 둔다 — 부감도에서 안쪽이 '멀리·높이'로 읽히고,
+ * 앞줄에 두면 다른 건물을 전부 가린다.
+ * 시설 4종은 중앙, 상점·무덤은 바깥. 무덤은 가장 앞(가장 잘 보이는 자리)에
+ * 두지 않는다 — 마을의 주인공이 아니다.
+ *
+ * ⚠️ **라벨 겹침은 눈이 아니라 숫자로 잡는다.** 예전 주석은 "8개가 라벨 겹침 없이
+ * 들어간다"고만 적혀 있었고, 그래서 9번째를 넣을 때 **어디가 비었는지 알 수 없었다**
+ * (실제로 "격자가 꽉 찼다"고 잘못 판단할 뻔했다 — 재보니 빈 자리가 많았다).
+ * 좌표를 밖으로 빼서 `iso.test.ts`가 쌍마다 여유를 재도록 한다.
+ *
+ * 깊이(x+y)만으로는 부족하다 — 훈련소와 숙소는 깊이가 **정확히 같지만** 화면
+ * 좌우로 갈라져 안 겹친다. 겹침은 투영 좌표에서 봐야 한다.
+ */
+export const VILLAGE_LOTS: Record<VillageSpot, { x: number; y: number }> = {
+  tower: { x: 0.4, y: 0.4 },
+  training: { x: 3.4, y: 0.3 },
+  forge: { x: 6.1, y: 1.4 },
+  rest: { x: 0.3, y: 3.4 },
+  summon: { x: 3.6, y: 3.6 },
+  armory: { x: 6.2, y: 4.4 },
+  shop: { x: 1.0, y: 6.2 },
+  adventure: { x: 3.4, y: 6.0 },
+  grave: { x: 5.4, y: 6.6 },
+};
+
 export interface IsoVillageProps {
   facilities: Record<FacilityKind, number>;
   onSelect: (spot: VillageSpot) => void;
@@ -250,6 +341,8 @@ export interface IsoVillageProps {
   towerLocked?: boolean;
   /** 현재 층 — 탑 핀의 부제로 쓴다 */
   floorLabel?: string;
+  /** 지금 모험에 나가 있는 인원 수 — 관문 핀의 부제이자 등불의 점등 조건 */
+  awayCount?: number;
 }
 
 /**
@@ -271,7 +364,7 @@ interface Lot {
 }
 
 export function IsoVillage({
-  facilities, onSelect, deathCount = 0, towerLocked = false, floorLabel,
+  facilities, onSelect, deathCount = 0, towerLocked = false, floorLabel, awayCount = 0,
 }: IsoVillageProps) {
   const fac = (k: FacilityKind) => facilities[k] ?? 0;
   /** 시설 높이 = 층수 × 층높이 + 지붕. Facility의 상수와 맞물려 있다 */
@@ -299,56 +392,55 @@ export function IsoVillage({
     return () => ro.disconnect();
   }, []);
 
-  /*
-    ── 배치 ──────────────────────────────────────────────
-    탑은 가장 안쪽(x,y 작음)에 둔다 — 부감도에서 안쪽이 '멀리·높이'로 읽히고,
-    앞줄에 두면 다른 건물을 전부 가린다.
-    시설 4종은 중앙, 상점·무덤은 바깥. 무덤은 가장 앞(가장 잘 보이는 자리)에
-    두지 않는다 — 마을의 주인공이 아니다.
+  /** 좌표는 VILLAGE_LOTS 하나에서만 온다 — 여기에 다시 적으면 조용히 어긋난다 */
+  const at = (spot: VillageSpot) => VILLAGE_LOTS[spot];
 
-    ⚠️ 라벨이 서로 겹치지 않게 x+y(깊이)를 충분히 벌린다. 같은 깊이에 둘을 두면
-    화면에서 같은 높이에 나란히 서서 글자가 붙는다(폭 390px에서 특히).
-  */
   const lots: Lot[] = [
     {
       spot: 'tower', label: '탑 입장', sub: floorLabel,
-      x: 0.4, y: 0.4, lz: 5.6,
-      render: () => <Tower x={0.4} y={0.4} locked={towerLocked} />,
+      ...at('tower'), lz: 5.6,
+      render: () => <Tower {...at('tower')} locked={towerLocked} />,
     },
     {
       spot: 'training', label: '훈련소', sub: `Lv.${fac('training')}`,
-      x: 3.4, y: 0.3, lz: facTop('training'),
-      render: () => <Facility x={3.4} y={0.3} level={fac('training')} warm />,
+      ...at('training'), lz: facTop('training'),
+      render: () => <Facility {...at('training')} level={fac('training')} warm />,
     },
     {
       spot: 'forge', label: '합성소', sub: `Lv.${fac('forge')}`,
-      x: 6.1, y: 1.4, lz: facTop('forge'),
-      render: () => <Facility x={6.1} y={1.4} level={fac('forge')} warm={false} />,
+      ...at('forge'), lz: facTop('forge'),
+      render: () => <Facility {...at('forge')} level={fac('forge')} warm={false} />,
     },
     {
       spot: 'rest', label: '숙소', sub: `Lv.${fac('rest')}`,
-      x: 0.3, y: 3.4, lz: facTop('rest'),
-      render: () => <Facility x={0.3} y={3.4} level={fac('rest')} warm={false} />,
+      ...at('rest'), lz: facTop('rest'),
+      render: () => <Facility {...at('rest')} level={fac('rest')} warm={false} />,
     },
     {
       spot: 'summon', label: '소환 제단',
-      x: 3.6, y: 3.6, lz: 1.9,
-      render: () => <SummonCircle x={4.1} y={4.1} />,
+      ...at('summon'), lz: 1.9,
+      // 소환진은 바닥 원이라 그림 중심이 핀보다 살짝 앞이다(의도된 어긋남)
+      render: () => <SummonCircle x={at('summon').x + 0.5} y={at('summon').y + 0.5} />,
     },
     {
       spot: 'armory', label: '무기창고', sub: `Lv.${fac('armory')}`,
-      x: 6.2, y: 4.4, lz: facTop('armory'),
-      render: () => <Facility x={6.2} y={4.4} level={fac('armory')} warm />,
+      ...at('armory'), lz: facTop('armory'),
+      render: () => <Facility {...at('armory')} level={fac('armory')} warm />,
     },
     {
       spot: 'shop', label: '상점',
-      x: 1.0, y: 6.2, lz: 2.3,
-      render: () => <Facility x={1.0} y={6.2} level={1} warm />,
+      ...at('shop'), lz: 2.3,
+      render: () => <Facility {...at('shop')} level={1} warm />,
+    },
+    {
+      spot: 'adventure', label: '모험 관문', sub: awayCount > 0 ? `${awayCount}명 원정` : undefined,
+      ...at('adventure'), lz: 1.6,
+      render: () => <Gate {...at('adventure')} away={awayCount > 0} />,
     },
     {
       spot: 'grave', label: '무덤', sub: deathCount > 0 ? `${deathCount}명` : undefined,
-      x: 5.4, y: 6.6, lz: 0.9,
-      render: () => <Graves x={5.6} y={6.8} deaths={deathCount} />,
+      ...at('grave'), lz: 0.9,
+      render: () => <Graves x={at('grave').x + 0.2} y={at('grave').y + 0.2} deaths={deathCount} />,
     },
   ];
 

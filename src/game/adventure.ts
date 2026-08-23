@@ -45,8 +45,15 @@ export function adventureRng(seed: number, advId: AdventureId, startedAtBattle: 
  *
  * 평균 레벨을 쓴다 — 합계로 하면 인원이 많은 모험이 자동으로 쉬워져서
  * `partySize`가 난이도 손잡이 구실을 못 한다.
+ *
+ * 인자를 `HeroInstance`가 아니라 `{ level }`로 받는 이유: 화면이 파견 전
+ * 성공률을 미리 보여줘야 하는데, 화면은 영웅 전체가 아니라 표시용 요약만 들고 있다.
+ * 전체를 요구하면 호출부가 캐스팅으로 우회하게 되고 그 순간 타입이 거짓말이 된다.
  */
-export function successChance(def: AdventureDef, heroes: readonly HeroInstance[]): number {
+export function successChance(
+  def: AdventureDef,
+  heroes: readonly Pick<HeroInstance, 'level'>[],
+): number {
   if (heroes.length === 0) return ADVENTURE_SUCCESS_MIN;
   const avgLevel = heroes.reduce((s, h) => s + h.level, 0) / heroes.length;
   const raw = def.baseSuccess + avgLevel * ADVENTURE_LEVEL_BONUS_PER_LEVEL;
