@@ -36,6 +36,9 @@
 - **등급 차이는 색이 아니라 구조로 표현한다.** `STAR_TIERS`의 `corners`/`lattice`/`rays`/`halo`를
   실제로 렌더에 반영해야 한다. 색만 바꾸면 ★3과 ★5가 구분되지 않는다 (이미 겪은 버그).
 - ★1~3은 무광·정적, ★4~6은 발광·장식·움직임. 이 분기를 흐리지 말 것.
+- 마을에 자리를 더할 때 **좌표는 `VILLAGE_LOTS` 한 곳에만** 적는다.
+  라벨 겹침은 눈이 아니라 `iso.test.ts`가 판정한다 — 깊이(x+y)로 재면 안 된다
+  (훈련소와 숙소는 깊이가 같은데도 안 겹친다. 겹침은 투영 좌표에서만 보인다).
 
 ### 게임 규칙
 - 퍼머데스는 협상 대상이 아니다. 사망한 영웅은 어떤 경로로도 되돌리지 않는다.
@@ -53,7 +56,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 712개 통과)
+npm test           # Vitest 1회 실행 (현재 761개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -105,6 +108,8 @@ src/
 │  ├─ progression.ts  # 경험치 / 승급 / 합성
 │  ├─ gear.ts        # 장비 — 보정·착용·사망 시 회수·강화·드롭
 │  ├─ quest.ts       # 층 돌파 과제 — 전투 기록 재판정 (전투를 다시 돌리지 않는다)
+│  ├─ loot.ts       # 층 전리품 — 회수→장비→재료. **소비 순서의 단일 출처**
+│  ├─ adventure.ts  # 모험 파견 판정 — 사망 없음(부상만). 각성석의 유일한 공급원
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
@@ -129,6 +134,8 @@ src/
 │     ├─ quests.ts    # 과제 13종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
 │     ├─ party.ts     # 파티 정원 규칙 — 층 구간별 정원, 2군 개방 조건. 상수가 아니라 함수다
 │     ├─ revisit.ts   # 기존 층 재도전 — 재도전 횟수별 보상 체감
+│     ├─ materials.ts # 제작 재료 3종 — 금으로 살 수 없다(주석에 이유)
+│     ├─ adventures.ts # 모험 3종. exp는 **정액**이어야 한다(1층 참전 exp가 상한)
 │     ├─ names.ts     # 개체 이름 어휘 (이름 66 × 수식어 44 + 이명 26)
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
@@ -152,6 +159,7 @@ src/
 ├─ screens/           # BaseScreen / BriefScreen / BattleScreen / ResultScreen
 │                     # / SummonScreen / ForgeScreen / FacilityScreen
 │                     # / ShopScreen / SmithScreen / DetailModal / TowerScreen
+│                     # / AdventureScreen (모험 파견 — 마을 '모험 관문')
 │                     # 하단 탭 3개는 각자 화면이다 (STEP 32에서 갈랐다):
 │                     # / HeroesScreen(목록) / StatusScreen(판독) / PartyScreen(편성)
 ├─ reference/

@@ -927,7 +927,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
             s.wallet.promotionStones + scaledStones + questStones,
           /**
            * ⚠️ **모험이 각성석의 유일한 공급원이다.**
-           * 여기 말고 다른 경로를 열면 ★5의 희소성이 사라진다
+           * 여기 말고 다른 경로를 열면 ★6의 희소성이 사라진다
            * (`data/adventures.ts`의 `awakeningChance` 주석 참조).
            */
           awakeningStones: s.wallet.awakeningStones + advStones,

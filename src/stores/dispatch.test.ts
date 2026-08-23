@@ -9,7 +9,9 @@
  *
  * 파견(`away`)은 **같은 모양의 잠금**이다. 영웅을 묶어두는데, 푸는 조건이
  * 다른 행동의 성공에 의존하면 똑같은 사고가 난다. 그래서 아래를 잠근다:
- *   - 로스터 전원을 파견해도 등반이 막히지 않는다
+ *   - 전원을 파견해도 **되돌리면 즉시 등반할 수 있다**
+ *     (전원이 나가 있으면 못 싸우는 건 당연하다. 교착은 못 싸우는 게 아니라
+ *      거기서 빠져나올 수 없는 것이다)
  *   - 조기 복귀는 **무조건** 성공한다 (완료 여부·금·파티 상태 무관)
  *   - 새 런은 파견을 전부 청산한다
  *   - 정의가 사라진 모험도 영웅을 붙잡지 못한다
@@ -316,7 +318,7 @@ describe('파견 — 보상 지급', () => {
     expect(found).toBe(true);
   });
 
-  it('각성석이 실제로 지갑에 들어온다 — ★5가 도달 가능해진다', () => {
+  it('각성석이 실제로 지갑에 들어온다 — ★6이 도달 가능해진다', () => {
     let granted = 0;
     for (let seed = 1; seed < 40; seed++) {
       const { s, before, outcome } = runToCompletion(seed, RIFT);
@@ -341,6 +343,61 @@ describe('파견 — 보상 지급', () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('파견 — ★6이 도달 가능해진다', () => {
+  /**
+   * ⚠️ **이게 모험을 만든 이유다.**
+   *
+   * ★5→★6은 각성석 1개가 필요한데(`elements.ts`의 `requiresAwakening`),
+   * 게임 안에 각성석을 주는 곳이 **하나도 없었다**(`stores/devWallet.ts`에만 있었다).
+   * 실측 30전투 후: 금 32,986 · 승급석 43 · **각성석 0**. ★6은 죽은 콘텐츠였다.
+   *
+   * (★4→★5는 승급석 20개라 원래부터 도달 가능했다 — 막혀 있던 건 그 위 한 칸이다.)
+   *
+   * 순수 승급 로직은 `progression.test.ts`가 이미 잠근다. 여기서 재는 것은
+   * **모험으로 번 각성석이 실제로 그 문을 연다**는 연결이다.
+   */
+  it('모험으로 번 각성석으로 ★5를 ★6으로 올릴 수 있다', () => {
+    const s = store(3);
+    unlockAll(s);
+    const def = ADVENTURE_BY_ID[RIFT];
+
+    /*
+      각성석이 나올 때까지 균열을 반복한다.
+
+      ⚠️ 파견에 쓸 인원은 **1군 밖에서만** 고른다. 1군을 보내면 출전할 사람이 없어
+      `start()`가 실패하고, 그러면 전투가 안 돌아 파견도 영영 안 끝난다
+      (실제로 이렇게 짰다가 "start() 실패"로 멈췄다 — 게임에서도 같은 일이 일어난다).
+    */
+    let guard = 0;
+    while (s.getState().wallet.awakeningStones === 0 && guard < 80) {
+      const squad = s.getState().squads.flat();
+      const ids = rosterIds(s)
+        .filter((id) => !squad.includes(id) && !dispatchedHeroIds(s.getState().dispatches).has(id))
+        .slice(0, def.partySize);
+      if (ids.length === def.partySize) s.getState().dispatchAdventure(RIFT, ids);
+      clearFloor(s);
+      guard++;
+    }
+    expect(s.getState().wallet.awakeningStones, '모험이 각성석을 준다').toBeGreaterThan(0);
+
+    // 만렙 ★5를 하나 세워두고 승급시킨다
+    const target = rosterIds(s)[0];
+    s.setState({
+      roster: s.getState().roster.map((h) => (h.instId === target
+        ? { ...h, star: 5 as const, level: 80, exp: 0 }
+        : h)),
+    });
+    const before = s.getState().wallet.awakeningStones;
+    const r = s.getState().promote(target);
+
+    // 성공하면 PromoteResult(승급 내역)가, 실패하면 PromoteCheck(ok:false)가 온다
+    expect('reason' in r ? r.reason : null, JSON.stringify(r)).toBeNull();
+    expect((r as { toStar: number }).toStar).toBe(6);
+    expect(s.getState().roster.find((h) => h.instId === target)!.star).toBe(6);
+    expect(s.getState().wallet.awakeningStones).toBe(before - 1);
   });
 });
 
