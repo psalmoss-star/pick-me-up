@@ -18,6 +18,17 @@ export type FloorId = number;
 export type GearDefId = string & { readonly __brand: 'GearDefId' };
 /** 보유 중인 개별 장비 ID. 같은 종류라도 이 값이 다르면 다른 물건이다. */
 export type GearInstId = string & { readonly __brand: 'GearInstId' };
+/**
+ * 제작 재료 종류 ID.
+ *
+ * 장비와 달리 **개체가 없다** — 같은 재료는 서로 구별되지 않으므로
+ * 포션처럼 수량만 센다(`Record<MaterialId, number>`).
+ */
+export type MaterialId = string & { readonly __brand: 'MaterialId' };
+/** 재료 등급. 드롭되는 층 깊이를 가른다 */
+export type MaterialTier = 'common' | 'fine' | 'rare';
+/** 보유 재료 — 종류별 수량. 없는 키는 0으로 읽는다 */
+export type MaterialBag = Partial<Record<MaterialId, number>>;
 
 /** 0.0 ~ 1.0 사이 난수를 반환. 시드 기반 구현을 주입한다. */
 export type RNG = () => number;

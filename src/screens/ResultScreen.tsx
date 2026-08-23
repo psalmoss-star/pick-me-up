@@ -10,6 +10,9 @@ import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { gameData } from '../game/data';
 import { floorRewards } from '../game/data/floors';
+import { MATERIAL_DEFS, MATERIAL_ORDER } from '../game/data/materials';
+import { isEmptyBag } from '../game/loot';
+import type { MaterialBag } from '../game/types';
 import { GEAR_DEFS } from '../game/data/gear';
 import type { FloorSpec } from '../game/data/floors';
 import type { EncounterResult } from '../game/encounter';
@@ -59,6 +62,8 @@ export interface ResultScreenProps {
   rewardMult?: number;
   /** 이번 전투로 레벨이 오른 개체들. 훈련소 유휴 exp로 오른 것도 포함한다 */
   levelUps?: LevelUp[];
+  /** 이번 돌파로 얻은 제작 재료. 빈 주머니면 아무것도 그리지 않는다 */
+  materials?: MaterialBag;
   onFinish: () => void;
 }
 
@@ -68,7 +73,7 @@ export interface ResultScreenProps {
  */
 export function ResultScreen({
   result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
-  rewardMult = 1, levelUps = [], onFinish,
+  rewardMult = 1, levelUps = [], materials = {}, onFinish,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
   const find = (id: string) => roster.find((h) => h.instId === id);
@@ -181,6 +186,27 @@ export function ResultScreen({
                 {l.name}
                 <span style={{ color: T.dim }}> Lv.{l.from} → </span>
                 <span style={{ color: T.gold }}>Lv.{l.to}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/*
+          제작 재료.
+
+          장비처럼 개체가 아니라 수량이라 이름과 개수만 적는다.
+          여기 쌓이는 것이 나중에 대장간에서 무기가 된다 —
+          "왜 또 오르나"의 답이 결과 화면에 보여야 한다.
+        */}
+        {!isEmptyBag(materials) && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+            <div style={{ fontSize: 12, color: T.rare, letterSpacing: '.2em', marginBottom: 6 }}>
+              ◈ 재료
+            </div>
+            {MATERIAL_ORDER.filter((id) => (materials[id] ?? 0) > 0).map((id) => (
+              <div key={id} style={{ fontSize: 13, lineHeight: 1.9 }}>
+                {MATERIAL_DEFS[id].name}
+                <span style={{ color: T.rare }}> +{materials[id]}</span>
               </div>
             ))}
           </div>

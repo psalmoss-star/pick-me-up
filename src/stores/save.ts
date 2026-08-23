@@ -22,8 +22,10 @@ import { GEAR_DEFS, GEAR_TUNING } from '../game/data/gear';
 import { SQUAD_COUNT } from '../game/data/party';
 import { questById, type QuestId } from '../game/data/quests';
 import { initialGachaState } from '../game/gacha';
+import { MATERIAL_DEFS } from '../game/data/materials';
 import type {
   GearDefId, GearInstId, GearInstance, GearSlot, HeroInstId, HeroInstance,
+  MaterialBag, MaterialId,
 } from '../game/types';
 import { initialWallet, type RunSlice } from './runStore';
 
@@ -42,6 +44,7 @@ export type SavedRun = Pick<
   'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'squads' | 'lockedSquad'
   | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
+  | 'materials'
 >;
 
 interface SaveFile {
@@ -75,6 +78,7 @@ export function serialize(s: RunSlice): string {
       battleCount: s.battleCount,
       potions: s.potions,
       claimedQuests: s.claimedQuests,
+      materials: s.materials,
     },
   };
   return JSON.stringify(file);
@@ -299,6 +303,20 @@ export function deserialize(raw: string): SavedRun | null {
     : 0;
 
   /*
+    제작 재료는 STEP 37에서 추가됐다. 없는 세이브는 빈 주머니로 읽는다.
+
+    정의에 없는 id는 버린다 — 장비의 유령 id를 버리는 것과 같은 이유다.
+    수량은 정수·음수 불가로 클램프한다(손으로 고친 세이브 방지).
+  */
+  const rawMaterials = asObject(r.materials) ?? {};
+  const materials: MaterialBag = {};
+  for (const [id, v] of Object.entries(rawMaterials)) {
+    if (!MATERIAL_DEFS[id as MaterialId]) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) continue;
+    materials[id as MaterialId] = Math.floor(v);
+  }
+
+  /*
     달성 과제는 STEP 8에서 추가됐다. 없는 세이브는 미달성으로 읽는다.
 
     정의에 없는 id는 버린다 — 과제를 빼거나 이름을 바꿨을 때 유령 id가 남으면
@@ -318,7 +336,7 @@ export function deserialize(raw: string): SavedRun | null {
     {
       floorIndex, maxFloorReached, revisits, roster: fixedRoster, squads, lockedSquad,
       deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
-      gear: fixedGear, gearSeq, battleCount, potions, claimedQuests,
+      gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials,
     },
     version,
   );

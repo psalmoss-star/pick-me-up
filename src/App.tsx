@@ -26,6 +26,8 @@ import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
 import { idleExpGain } from './game/data/facilities';
 import { revisitMultiplier } from './game/data/revisit';
 import { expToNext, gainExp } from './game/progression';
+import { rollFloorLoot } from './game/loot';
+import type { MaterialBag } from './game/types';
 import { displayName } from './game/identity';
 import type { LevelUp } from './screens/ResultScreen';
 import { partyLimitAt, squadsOpen } from './game/data/party';
@@ -304,6 +306,31 @@ export default function App() {
     revisitMultiplier(floor.id, FLOORS[maxFloorReached].id, revisits[floor.id] ?? 0);
 
   /**
+   * 이번 전투로 얻는 **재료**를 미리 계산한다.
+   *
+   * ⚠️ 결과 화면은 `finish()`보다 먼저 뜨므로 스토어에서 읽을 수 없다(§5-17).
+   * 과제·레벨업과 같은 패턴 — `lootRngFor()`로 **같은 시드**를 다시 만들어 재계산한다.
+   *
+   * ⚠️ **소비 순서가 같아야 한다.** `finish()`는 회수 → 장비 드롭 → 재료 순으로
+   * 같은 스트림을 소비한다. 여기서 재료만 먼저 뽑으면 값이 갈린다.
+   * 그래서 앞의 두 단계를 **같은 횟수만큼 흘려보낸 뒤** 재료를 뽑는다.
+   */
+  const previewMaterials = (): MaterialBag => {
+    if (!result || result.outcome !== 'victory') return {};
+    return rollFloorLoot({
+      seed,
+      floorId: floor.id,
+      isBoss: !!floor.isBoss,
+      battleCount,
+      casualties: result.casualties
+        .map((id) => snapshot.find((h) => h.instId === id))
+        .filter((h): h is NonNullable<typeof h> => !!h)
+        .map((h) => h.gear),
+      cleared: true,
+    }).materials;
+  };
+
+  /**
    * 이번 전투로 **레벨이 오른 영웅**을 미리 계산한다.
    *
    * 과제 미리보기(`previewQuests`)와 같은 사정이다 — 결과 화면은 `finish()`보다
@@ -571,6 +598,7 @@ export default function App() {
             /* 표시와 지급이 같은 배수를 쓰도록 — 재도전에서 어긋나고 있었다 */
             rewardMult={revisitMult()}
             levelUps={previewLevelUps()}
+            materials={previewMaterials()}
             onFinish={() => {
               /*
                 무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야

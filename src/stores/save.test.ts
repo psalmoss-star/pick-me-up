@@ -17,6 +17,7 @@ import type { RunSlice } from './runStore';
 import { initialGachaState } from '../game/gacha';
 import { displayName } from '../game/identity';
 import { gameData } from '../game/data';
+import { MATERIAL } from '../game/data/materials';
 import type { CodexEntry, HeroDefId, HeroInstId } from '../game/types';
 
 /** 저장 대상만 담은 최소 슬라이스 */
@@ -38,6 +39,7 @@ const sample = (): RunSlice => {
     gearSeq: 0,
     battleCount: 0,
     potions: 0,
+    materials: {},
     carriedPotions: 0,
     claimedQuests: [],
     questGrants: [],
@@ -76,6 +78,38 @@ describe('직렬화', () => {
     expect(back!.deathCount).toBe(s.deathCount);
     expect(back!.squads).toEqual(s.squads);
     expect(back!.roster).toHaveLength(s.roster.length);
+  });
+
+  it('제작 재료가 왕복해도 보존된다', () => {
+    const s = { ...sample(), materials: { [MATERIAL.ore]: 7, [MATERIAL.essence]: 2 } };
+    const back = deserialize(serialize(s));
+    expect(back!.materials).toEqual({ [MATERIAL.ore]: 7, [MATERIAL.essence]: 2 });
+  });
+
+  it('재료 이전 옛 세이브는 빈 주머니로 읽힌다', () => {
+    const s = sample();
+    const raw = JSON.parse(serialize(s));
+    delete raw.run.materials;
+    expect(deserialize(JSON.stringify(raw))!.materials).toEqual({});
+  });
+
+  it('정의에 없는 재료 id는 버린다 (유령 재료 방지)', () => {
+    const s = sample();
+    const raw = JSON.parse(serialize(s));
+    raw.run.materials = { [MATERIAL.ore]: 3, mt_ghost: 99 };
+    const back = deserialize(JSON.stringify(raw));
+    expect(back!.materials).toEqual({ [MATERIAL.ore]: 3 });
+  });
+
+  it('재료 수량이 음수·소수·비숫자면 버리거나 내림한다 (수동 편집 방지)', () => {
+    const s = sample();
+    const raw = JSON.parse(serialize(s));
+    raw.run.materials = {
+      [MATERIAL.ore]: -5, [MATERIAL.hide]: 2.7, [MATERIAL.essence]: 'many',
+    };
+    const back = deserialize(JSON.stringify(raw));
+    // 음수·문자열은 사라지고, 소수는 내림
+    expect(back!.materials).toEqual({ [MATERIAL.hide]: 2 });
   });
 
   it('정상 클리어 표시가 왕복해도 유지된다', () => {

@@ -11,7 +11,7 @@
  * 전부 `src/game/`의 순수 함수에 위임한다. 여기서 밸런스를 계산하지 않는다.
  */
 import { create } from 'zustand';
-import { createRng, substream, STREAM } from '../game/rng';
+import { createRng } from '../game/rng';
 import { runEncounter, type EncounterResult } from '../game/encounter';
 import type { Intervention } from '../game/intervention';
 import { klassFor, statsOfInstance } from '../game/stats';
@@ -27,10 +27,10 @@ import {
   armoryAtkMult, idleExpGain, restHealRate, upgradeCost,
   REST_COST_PER_HP, REST_COST_MIN, type FacilityKind,
 } from '../game/data/facilities';
-import { GEAR_DEFS, GEAR_TUNING, POTION_TUNING, dropWeights, dropTable } from '../game/data/gear';
+import { GEAR_DEFS, POTION_TUNING } from '../game/data/gear';
 import {
   equip as equipGearPure, unequip as unequipGearPure, enhance as enhanceGearPure,
-  makeGear, rollRecovery, weightedPick,
+  makeGear,
 } from '../game/gear';
 import { evaluateQuests, questContext, questRng, type QuestGrant } from '../game/quest';
 import type { QuestId } from '../game/data/quests';
@@ -40,9 +40,10 @@ import {
   type FuseCheck, type FuseResult, type PromoteCheck, type PromoteResult,
 } from '../game/progression';
 import { displayName, displayTitle } from '../game/identity';
+import { mergeMaterials, rollFloorLoot } from '../game/loot';
 import type {
   BannerKind, CodexEntry, GachaState, GearDefId, GearInstId, GearInstance, GearSlot,
-  HeroDefId, HeroInstId, HeroInstance, Star, Wallet,
+  HeroDefId, HeroInstId, HeroInstance, MaterialBag, Star, Wallet,
 } from '../game/types';
 import type { FallenRecord, Legacy } from '../game/legacyTypes';
 import { loadLegacy, saveLegacy, sealedNames } from './legacy';
@@ -193,6 +194,13 @@ export interface RunSlice {
    * 장비와 달리 개체가 없는 순수 수량이라 숫자 하나로 충분하다.
    */
   potions: number;
+  /**
+   * 보유 제작 재료 — 종류별 수량.
+   *
+   * 포션과 같은 이유로 개체가 없다. 다만 종류가 있어서 레코드다.
+   * **금으로 살 수 없다**(`data/materials.ts` 주석 참조) — 탑 드롭과 모험으로만 들어온다.
+   */
+  materials: MaterialBag;
   /**
    * 이번 전투에 들려 보낸 개수.
    *
@@ -376,6 +384,7 @@ function freshSlice(): RunSlice {
     gearSeq: 0,
     battleCount: 0,
     potions: 0,
+    materials: {},
     carriedPotions: 0,
     claimedQuests: [],
     questGrants: [],
@@ -632,37 +641,32 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        *     재시뮬레이션해도 드롭은 그대로다.
        */
       const floorSpec = floorAt(get().floorIndex);
-      const lootRng = substream(
-        (get().seed ^ Math.imul(floorSpec.id, 0x85ebca6b)
-          ^ Math.imul(get().battleCount + 1, 0xc2b2ae35)) >>> 0,
-        STREAM.LOOT,
-      );
+      /*
+        전리품 판정은 **game/loot.ts의 `rollFloorLoot` 하나**가 맡는다.
+        회수 → 장비 → 재료의 소비 순서가 결과를 좌우하는데(실측: 순서를 바꾸면
+        200시드 중 120개에서 장비 드롭이 달라졌다), 그 순서가 여기와 결과 화면
+        미리보기 두 곳에 적히면 조용히 갈라진다 — 과제가 `questRng`를 밖으로 뺀 것과
+        같은 이유다.
+      */
+      const casualtyGear = get().roster
+        .filter((h) => casualties.has(h.instId))
+        .map((h) => h.gear);
+      const loot = rollFloorLoot({
+        seed: get().seed,
+        floorId: floorSpec.id,
+        isBoss: !!floorSpec.isBoss,
+        battleCount: get().battleCount,
+        casualties: casualtyGear,
+        cleared,
+      });
 
-      /** 사망자가 들고 있던 장비: 슬롯마다 독립 판정으로 회수 또는 소실 */
-      const lostGear = new Set<GearInstId>();
-      const freedGear = new Set<GearInstId>();
-      for (const h of get().roster) {
-        if (!casualties.has(h.instId)) continue;
-        const { recovered, lost } = rollRecovery(h.gear, lootRng, GEAR_TUNING.recoveryRate);
-        for (const id of recovered) freedGear.add(id);
-        for (const id of lost) lostGear.add(id);
-      }
-
-      /** 층 드롭. 승리했을 때만, 깊이에 따라 등급이 잠긴다. */
-      const dropped: GearInstance[] = [];
-      if (cleared) {
-        const chance = floorSpec.isBoss ? GEAR_TUNING.bossDropChance : GEAR_TUNING.dropChance;
-        if (lootRng() < chance) {
-          const rank = weightedPick(dropWeights(floorSpec.id), lootRng);
-          if (rank) {
-            const pool = dropTable().filter((d) => d.rank === rank);
-            if (pool.length > 0) {
-              const pick = pool[Math.min(pool.length - 1, Math.floor(lootRng() * pool.length))];
-              dropped.push(makeGear(pick.id, get().gearSeq + dropped.length + 1));
-            }
-          }
-        }
-      }
+      const freedGear = new Set<GearInstId>(loot.recovered);
+      const lostGear = new Set<GearInstId>(loot.lost);
+      /** 층 드롭. instId 발번은 스토어 몫이라 여기서 붙인다 */
+      const dropped: GearInstance[] = loot.gearDefId
+        ? [makeGear(loot.gearDefId, get().gearSeq + 1)]
+        : [];
+      const droppedMaterials = loot.materials;
 
       /**
        * 전투 후 잔여 HP. 엔진이 계산해 주던 것을 예전에는 버리고 있었다
@@ -784,6 +788,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 들고 나간 수를 그냥 빼면 안 쓰고 이긴 전투에서도 사라진다.
          */
         potions: Math.max(0, s.potions - potionsUsed) + questPotions,
+        materials: mergeMaterials(s.materials, droppedMaterials),
         carriedPotions: 0,
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
@@ -1241,6 +1246,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         gearSeq: saved.gearSeq,
         battleCount: saved.battleCount,
         potions: saved.potions,
+        materials: saved.materials,
         claimedQuests: saved.claimedQuests,
         seenFirstLegendary: saved.seenFirstLegendary,
         towerCleared: saved.towerCleared,
