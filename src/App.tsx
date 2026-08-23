@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BaseScreen } from './screens/BaseScreen';
-import { RosterScreen } from './screens/RosterScreen';
+import { HeroesScreen } from './screens/HeroesScreen';
+import { StatusScreen } from './screens/StatusScreen';
+import { PartyScreen } from './screens/PartyScreen';
 import { BriefScreen } from './screens/BriefScreen';
 import { SummonScreen } from './screens/SummonScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
@@ -26,11 +28,13 @@ import { livingHeroes } from './game/roster';
 import {
   evaluateQuests, pendingQuests, questContext, questRng, type QuestGrant,
 } from './game/quest';
-import type { HeroInstance } from './game/types';
+import type { HeroInstance, HeroInstId } from './game/types';
 
 type Screen =
   | 'base' | 'tower' | 'brief' | 'battle' | 'result'
-  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave' | 'roster';
+  | 'summon' | 'forge' | 'facility' | 'shop' | 'smith' | 'grave'
+  // 예전에는 셋이 'roster' 하나였다 — 탭 3개가 같은 화면이라 구별되지 않았다
+  | 'heroes' | 'status' | 'party';
 
 /** 모바일 전용. 데스크톱에서도 이 폭의 세로 화면을 중앙에 띄운다. */
 const MOBILE_WIDTH = 480;
@@ -42,13 +46,14 @@ export default function App() {
    */
   const [screen, setScreen] = useState<Screen>('base');
   /**
-   * 마지막으로 누른 탭.
+   * 상태창 탭이 보고 있는 영웅.
    *
-   * `heroes`·`status`·`party` 세 탭이 같은 `roster` 화면으로 가므로(아래 goToTab 주석),
-   * 화면만 봐서는 어느 탭에 불을 켜야 할지 알 수 없다. 그래서 눌린 탭을 따로 기억한다.
-   * 이게 없으면 파티를 눌러도 **영웅** 탭이 켜진다(실기기에서 발견).
+   * 탭은 모달과 달리 '닫기'가 없으므로 어떤 영웅을 보는지 App이 들고 있어야
+   * 탭을 오가도 유지된다. **id만 들고 roster에서 매번 다시 찾는다** —
+   * 개체 스냅샷을 들고 있으면 장비를 끼거나 레벨이 올라도 숫자가 안 바뀐다
+   * (`DetailModal`이 같은 이유로 아래에서 `roster.find`를 다시 한다).
    */
-  const [lastTab, setLastTab] = useState<TabKey>('home');
+  const [selectedHeroId, setSelectedHeroId] = useState<HeroInstId | null>(null);
   /** 시설 화면에 들어갈 때 어느 건물을 눌렀는가 — 그 카드로 스크롤한다 */
   const [facilityFocus, setFacilityFocus] = useState<FacilityKind | undefined>(undefined);
   const [detail, setDetail] = useState<HeroInstance | null>(null);
@@ -207,16 +212,18 @@ export default function App() {
    * 부감도에서 작은 건물을 조준하는 것보다 하단 탭이 빠르므로 둘 다 둔다.
    * 탭을 늘릴 때는 마을 라벨과 목적지가 어긋나지 않는지 확인할 것 (TabBar 주석).
    *
-   * '상태창'은 로스터와 같은 화면으로 간다 — 개체 상세는 거기서 카드를 눌러 연다.
-   * 별도 화면을 새로 만들면 같은 정보가 두 곳에 생겨 유지보수가 갈린다.
+   * ⚠️ **탭과 화면은 1:1이다.** 예전에는 영웅·상태창·파티 셋이 같은 `roster` 화면으로
+   * 갔다 — "별도 화면을 만들면 정보가 두 곳에 생긴다"는 이유였는데, 실제로는
+   * **탭 3개가 구별되지 않는 결함**이 됐다(실기기에서 "전부 똑같다"로 보고됨).
+   * 정보 중복은 화면을 합쳐서가 아니라 **같은 파생 함수를 쓰는 것**으로 막는다
+   * (`statsOfInstance`/`estimatePotential` 등이 유일한 관문이다).
    */
   const goToTab = (tab: TabKey) => {
-    setLastTab(tab);
     switch (tab) {
       case 'home': setScreen('base'); break;
-      case 'heroes':
-      case 'status':
-      case 'party': setScreen('roster'); break;
+      case 'heroes': setScreen('heroes'); break;
+      case 'status': setScreen('status'); break;
+      case 'party': setScreen('party'); break;
       case 'summon': setScreen('summon'); break;
     }
   };
@@ -235,20 +242,22 @@ export default function App() {
    * 이미 빠듯하다(§STEP 19에서 667px 기준 넘침 0으로 맞춰둔 상태).
    * 무덤(grave)도 제외한다 — 엔딩·기록 화면이라 거점이 아니다.
    */
-  const HUB_SCREENS = ['base', 'roster', 'summon', 'facility', 'shop', 'smith', 'forge'] as const;
+  const HUB_SCREENS = [
+    'base', 'heroes', 'status', 'party', 'summon', 'facility', 'shop', 'smith', 'forge',
+  ] as const;
   const showTabs = (HUB_SCREENS as readonly string[]).includes(screen);
 
   /**
    * 지금 화면이 어느 탭에 해당하는가 — 선택 표시가 실제 위치와 맞아야 한다.
    *
-   * `roster`만 `lastTab`을 본다. 세 탭(영웅·상태창·파티)이 같은 화면을 가리키므로
-   * "어느 탭으로 들어왔는가"가 화면에서 역산되지 않기 때문이다.
-   * 다만 마을 건물 클릭처럼 탭을 거치지 않고 온 경우 `lastTab`이 엉뚱할 수 있어,
-   * roster를 가리키는 탭일 때만 쓰고 아니면 `heroes`로 떨어뜨린다.
+   * 탭과 화면이 1:1이 되면서 **화면에서 바로 역산된다.**
+   * 예전에는 셋이 같은 `roster` 화면이라 역산이 불가능해 `lastTab` 상태를
+   * 따로 들고 있어야 했다 — 그 우회가 이제 필요 없다.
    */
-  const ROSTER_TABS: readonly TabKey[] = ['heroes', 'status', 'party'];
   const activeTab: TabKey =
-    screen === 'roster' ? (ROSTER_TABS.includes(lastTab) ? lastTab : 'heroes')
+    screen === 'heroes' ? 'heroes'
+    : screen === 'status' ? 'status'
+    : screen === 'party' ? 'party'
     : screen === 'summon' ? 'summon'
     : 'home';
 
@@ -324,8 +333,30 @@ export default function App() {
             deathCount={deathCount}
           />
         )}
-        {screen === 'roster' && (
-          <RosterScreen
+        {screen === 'heroes' && (
+          <HeroesScreen
+            roster={roster}
+            squads={squads}
+            wallet={wallet}
+            onInspect={setDetail}
+            onOpenStatus={(h) => { setSelectedHeroId(h.instId); setScreen('status'); }}
+            onOpenForge={() => setScreen('forge')}
+          />
+        )}
+        {screen === 'status' && (
+          <StatusScreen
+            roster={roster}
+            squads={squads}
+            gear={gear}
+            wallet={wallet}
+            selectedId={selectedHeroId}
+            onSelect={setSelectedHeroId}
+            onOpenSummon={() => setScreen('summon')}
+            onOpenForge={() => setScreen('forge')}
+          />
+        )}
+        {screen === 'party' && (
+          <PartyScreen
             roster={roster}
             squads={squads}
             editing={editingSquad}
@@ -335,6 +366,8 @@ export default function App() {
             lockedSquad={lockedSquad}
             onToggleParty={(squad, id) => toggleSquadMember(squad, id)}
             onInspect={setDetail}
+            /* 출전은 층 선택을 거친다 — start()를 직접 부르면 재도전 입구가 사라진다 */
+            onSortie={() => goToSpot('tower')}
           />
         )}
         {screen === 'facility' && (

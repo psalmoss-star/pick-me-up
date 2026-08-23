@@ -53,7 +53,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 649개 통과)
+npm test           # Vitest 1회 실행 (현재 678개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -105,6 +105,8 @@ src/
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
 │  ├─ reveal.ts        # 발굴 — 잠재치 구간 추정, 전투로 진행도 상승
 │  ├─ encounter.ts    # runEncounter — 로스터/MVP 조립
+│  ├─ power.ts        # 전투력 — **표시 전용.** 엔진이 import하면 안 된다(테스트로 잠금)
+│  ├─ formation.ts    # 진형·속성 구성·자동 편성 후보. 전부 표시/보조용 파생값
 │  ├─ intervention.ts # 개입(집중/수호/후퇴)
 │  ├─ beats.ts        # 이벤트 비트 (확인 창 트리거)
 │  ├─ sim.ts          # 밸런싱용 CLI
@@ -144,7 +146,9 @@ src/
 │     └─ variantNaming.ts  # 변형 파일명 규칙(순수 파서). gen-art.mts와 반드시 일치
 ├─ screens/           # BaseScreen / BriefScreen / BattleScreen / ResultScreen
 │                     # / SummonScreen / ForgeScreen / FacilityScreen
-│                     # / ShopScreen / SmithScreen / DetailModal
+│                     # / ShopScreen / SmithScreen / DetailModal / TowerScreen
+│                     # 하단 탭 3개는 각자 화면이다 (STEP 32에서 갈랐다):
+│                     # / HeroesScreen(목록) / StatusScreen(판독) / PartyScreen(편성)
 ├─ reference/
 │  └─ Prototype.jsx   # 동작하는 프로토타입 전체. 화면 추출의 원본
 └─ App.tsx            # 화면 전환(view state)만 담당. 게임 상태는 runStore
