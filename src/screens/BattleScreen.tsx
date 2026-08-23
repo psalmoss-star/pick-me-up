@@ -3,7 +3,7 @@ import { SystemPanel } from '../ui/SystemPanel';
 import { Button } from '../ui/Button';
 import { Scene } from '../ui/art/Scene';
 import { T } from '../ui/tokens';
-import { BattleUnit, type Floater } from './battle/BattleUnit';
+import { BattleUnit, STATUS_MARK, type Floater } from './battle/BattleUnit';
 import { InterventionBar } from './battle/InterventionBar';
 import { deriveBeats } from '../game/beats';
 import { MISSION_LABEL } from '../game/mission';
@@ -129,6 +129,8 @@ export function BattleScreen({
           amount: e.amount ?? 0,
           heal: e.type === 'heal',
           crit: e.isCrit === true,
+          affinity: e.affinity,
+          fromPotion: e.fromPotion === true,
         }));
         if (added.length) {
           setFloaters((f) => [...f, ...added]);
@@ -149,11 +151,16 @@ export function BattleScreen({
 
   const done = step >= result.events.length && !pending;
 
+  /*
+    ⚠️ `statusApplied`를 추가했다 — 디버프가 걸리는 순간이 안 보이면
+    "왜 갑자기 녹지"가 설명되지 않는다. 엔진은 이벤트를 내고 있었고 화면이 버렸다.
+    ⚠️ 줄 수(`SIZE.logLines`)는 375×667 무스크롤 예산이므로 **늘리지 않았다.**
+  */
   const log = result.events
     .slice(0, step)
     .filter((e) =>
       e.type === 'skillUse' || e.type === 'damage' || e.type === 'heal'
-      || e.type === 'death' || e.type === 'retreat')
+      || e.type === 'death' || e.type === 'retreat' || e.type === 'statusApplied')
     .slice(-SIZE.logLines);
 
   const nameOf = (uid?: string) => result.roster.find((u) => u.uid === uid)?.name ?? '';
@@ -270,6 +277,9 @@ export function BattleScreen({
               color: e.type === 'death' ? T.blood
                 : e.type === 'heal' ? '#6FBF8F'
                 : e.type === 'retreat' ? T.rare
+                : e.type === 'statusApplied' ? T.dim
+                : e.type === 'damage' && e.affinity === 'adv' ? '#FFB454'
+                : e.type === 'damage' && e.affinity === 'dis' ? '#7E93A8'
                 : T.text,
               opacity: 0.4 + (i / Math.max(1, log.length)) * 0.6,
               whiteSpace: 'nowrap',
@@ -278,8 +288,22 @@ export function BattleScreen({
             }}
           >
             {e.type === 'skillUse' && `${nameOf(e.actorUid)} — ${gameData.skills[e.skillId!]?.name ?? ''}`}
-            {e.type === 'damage' && `　└ ${e.amount} 피해${e.isCrit ? ' (치명타)' : ''}`}
-            {e.type === 'heal' && `　└ ${e.amount} 회복`}
+            {/*
+              예전엔 `　└ 120 피해`라 **누구를 때렸는지가 없었다.**
+              대상과 상성을 붙여야 "왜 이 숫자인지"가 읽힌다.
+            */}
+            {e.type === 'damage' && (
+              `　└ ${nameOf((e.targetUids ?? [])[0])}에게 ${e.amount} 피해`
+              + `${e.isCrit ? ' (치명타)' : ''}`
+              + `${e.affinity === 'adv' ? ' ▲효과적' : e.affinity === 'dis' ? ' ▼반감' : ''}`
+            )}
+            {e.type === 'heal' && (
+              `　└ ${nameOf((e.targetUids ?? [])[0])} ${e.amount} 회복`
+              + `${e.fromPotion ? ' (물약)' : ''}`
+            )}
+            {e.type === 'statusApplied' && (
+              `　└ ${nameOf((e.targetUids ?? [])[0])} ${STATUS_MARK[e.status!]?.sign ?? e.status}`
+            )}
             {e.type === 'death' && `✖ ${nameOf((e.targetUids ?? [])[0])} 쓰러짐`}
             {e.type === 'retreat' && `↩ ${nameOf((e.targetUids ?? [])[0])} 후퇴`}
           </div>

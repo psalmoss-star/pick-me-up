@@ -147,6 +147,49 @@ describe('속성 상성', () => {
     // water 상대(열세)의 턴당 딜이 earth 상대(중립)보다 낮아야 한다
     expect(dmgTo(vsWater)).toBeLessThan(dmgTo(vsEarth));
   });
+
+  /**
+   * 상성 표식은 **표시 전용**이다.
+   *
+   * `affinity`를 이벤트에 실으면서 전투가 갈라지지 않았음을 잠근다 —
+   * `affinity`만 빼면 이벤트 배열이 예전과 완전히 같아야 한다.
+   * 이게 깨지면 표시용 값이 엔진에 샌 것이다 (`power.test.ts`와 같은 형태의 격리).
+   */
+  it('affinity는 전투를 바꾸지 않는다 — 빼면 이벤트가 완전히 동일하다', () => {
+    const run = () => simulateBattle({
+      allies: [hero(HERO.ashen, 3, 30, 1), hero(HERO.bulwark, 3, 30, 2)],
+      enemyIds: [ENEMY.slime, ENEMY.hound],
+      data,
+      rng: createRng(4242),
+    });
+    const a = run();
+    const b = run();
+    // 같은 시드 → 완전히 동일 (affinity 포함)
+    expect(a.events).toEqual(b.events);
+    // affinity를 걷어내도 나머지가 온전하다 = 다른 필드에 영향을 주지 않았다
+    const strip = (r: ReturnType<typeof simulateBattle>) =>
+      r.events.map(({ affinity: _drop, ...rest }) => rest);
+    expect(strip(a)).toEqual(strip(b));
+    expect(a.outcome).toBe(b.outcome);
+    expect(a.turnsElapsed).toBe(b.turnsElapsed);
+  });
+
+  it('유리타에는 adv, 불리타에는 dis, 중립에는 표식이 없다', () => {
+    const advOf = (enemyId: Parameters<typeof simulateBattle>[0]['enemyIds'][number]) => {
+      const r = simulateBattle({
+        allies: [hero(HERO.ashen, 3, 30, 1)], // fire
+        enemyIds: [enemyId],
+        data,
+        rng: createRng(7),
+        maxTurns: 20,
+      });
+      return r.events.find((e) => e.type === 'damage' && e.actorUid?.startsWith('A:'))?.affinity;
+    };
+    // fire → wind 우위 / fire → water 열세 / fire → earth 중립
+    expect(advOf(ENEMY.wisp)).toBe('adv');    // wisp = wind
+    expect(advOf(ENEMY.slime)).toBe('dis');   // slime = water
+    expect(advOf(ENEMY.golem)).toBeUndefined(); // golem = earth
+  });
 });
 
 describe('밸런스 스모크 테스트', () => {

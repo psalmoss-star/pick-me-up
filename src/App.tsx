@@ -21,8 +21,13 @@ import { TabBar, type TabKey } from './ui/TabBar';
 import { useRunStore, isSquadLocked, restQuote } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
-import { floorAt } from './game/data';
-import { FLOORS, isFinalFloor } from './game/data/floors';
+import { floorAt, gameData } from './game/data';
+import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
+import { idleExpGain } from './game/data/facilities';
+import { revisitMultiplier } from './game/data/revisit';
+import { gainExp } from './game/progression';
+import { displayName } from './game/identity';
+import type { LevelUp } from './screens/ResultScreen';
 import { partyLimitAt, squadsOpen } from './game/data/party';
 import { livingHeroes } from './game/roster';
 import {
@@ -95,6 +100,7 @@ export default function App() {
     (s) => (lockedSquadRaw != null && isSquadLocked(s, lockedSquadRaw) ? lockedSquadRaw : null),
   );
   const maxFloorReached = useRunStore((s) => s.maxFloorReached);
+  const revisits = useRunStore((s) => s.revisits);
   const result = useRunStore((s) => s.result);
   const snapshot = useRunStore((s) => s.snapshot);
   const interventions = useRunStore((s) => s.interventions);
@@ -284,6 +290,54 @@ export default function App() {
       rng: questRng(seed, floor.id, battleCount),
       gearSeq: 0, // 표시에는 instId가 쓰이지 않는다
     });
+  };
+
+  /**
+   * 재도전 보상 배수.
+   *
+   * ⚠️ **버그였던 지점이다.** `ResultScreen`이 `floorRewards()`를 직접 다시 불러
+   * 배수를 빠뜨렸고, 그래서 **재도전하면 화면에 뜬 Exp와 실제 지급액이 달랐다**
+   * (스토어는 `runStore.ts:616-619`에서 배수를 곱한다).
+   * 표시와 지급이 같은 값을 쓰도록 여기서 한 번만 구해 내려보낸다.
+   */
+  const revisitMult = (): number =>
+    revisitMultiplier(floor.id, FLOORS[maxFloorReached].id, revisits[floor.id] ?? 0);
+
+  /**
+   * 이번 전투로 **레벨이 오른 영웅**을 미리 계산한다.
+   *
+   * 과제 미리보기(`previewQuests`)와 같은 사정이다 — 결과 화면은 `finish()`보다
+   * 먼저 뜨므로 스토어에서 읽을 수 없다. 그래서 `finish()`와 **같은 식**을
+   * 순수 계산으로 다시 돌려 표시만 만든다. 상태를 안 건드리므로 이중 지급이 없다.
+   *
+   * ⚠️ `finish()`의 규칙을 그대로 따라야 한다(`runStore.ts:735-755`):
+   *   - 참전 & 생존자 → 층 보상 exp(재도전 배수 적용)
+   *   - 미출전 & 생존자 → 훈련소 유휴 exp
+   *   - 둘은 **배타적**이다 (`else if`)
+   * 규칙이 갈리면 "화면엔 올랐다는데 실제로는 안 오른" 상태가 된다.
+   */
+  const previewLevelUps = (): LevelUp[] => {
+    if (!result || result.outcome !== 'victory') return [];
+
+    // ⚠️ `finish()`와 **같은 판정**이어야 한다 (`runStore.ts:594-596`) — side 기준이다
+    const fought = new Set<string>(
+      result.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId),
+    );
+    const casualties = new Set<string>(result.casualties);
+    const gained = Math.round(floorRewards(floor, result.turnsElapsed).exp * revisitMult());
+    const idle = idleExpGain(facilities.training);
+
+    const out: LevelUp[] = [];
+    for (const h of snapshot) {
+      if (h.isDead || casualties.has(h.instId)) continue;
+      const exp = fought.has(h.instId) ? gained : idle;
+      if (exp <= 0) continue;
+      const r = gainExp(h, exp, gameData.starScaling);
+      if (r.levelsGained > 0) {
+        out.push({ instId: h.instId, name: displayName(h, gameData.heroes), from: h.level, to: r.hero.level });
+      }
+    }
+    return out;
   };
 
   return (
@@ -490,6 +544,9 @@ export default function App() {
               쓰므로 결과가 갈리지 않는다.
             */
             questGrants={previewQuests()}
+            /* 표시와 지급이 같은 배수를 쓰도록 — 재도전에서 어긋나고 있었다 */
+            rewardMult={revisitMult()}
+            levelUps={previewLevelUps()}
             onFinish={() => {
               /*
                 무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야

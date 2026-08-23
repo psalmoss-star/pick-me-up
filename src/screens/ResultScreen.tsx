@@ -26,6 +26,14 @@ function rewardText(g: QuestGrant): string {
   return parts.join(' · ');
 }
 
+/** 이번 전투로 레벨이 오른 개체. 표시 전용 — 지급은 `finish()`가 한다 */
+export interface LevelUp {
+  instId: string;
+  name: string;
+  from: number;
+  to: number;
+}
+
 export interface ResultScreenProps {
   result: EncounterResult;
   /** 전투 직전의 로스터 — 사망자 정보를 여기서 찾는다 */
@@ -42,6 +50,15 @@ export interface ResultScreenProps {
   towerCleared?: boolean;
   /** 런 전체 누적 사망자 수. 엔딩 문구가 이 수를 그대로 말한다. */
   totalDeaths?: number;
+  /**
+   * 재도전 보상 배수. **`App`이 스토어와 같은 식으로 구해 내려준다.**
+   *
+   * ⚠️ 이 화면이 `floorRewards()`를 직접 부르면 배수가 빠져 **표시와 지급이 어긋난다**
+   * (재도전에서 실제로 어긋나고 있었다).
+   */
+  rewardMult?: number;
+  /** 이번 전투로 레벨이 오른 개체들. 훈련소 유휴 exp로 오른 것도 포함한다 */
+  levelUps?: LevelUp[];
   onFinish: () => void;
 }
 
@@ -50,14 +67,21 @@ export interface ResultScreenProps {
  * MVP와 사망자를 같은 화면에 둔다 — 기쁨과 상실을 분리하지 않는다.
  */
 export function ResultScreen({
-  result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0, onFinish,
+  result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
+  rewardMult = 1, levelUps = [], onFinish,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
   const find = (id: string) => roster.find((h) => h.instId === id);
 
   const mvp = result.mvp ? find(result.mvp) : undefined;
   const dead = result.casualties.map(find).filter((h): h is HeroInstance => !!h);
-  const rewards = floorRewards(floor, result.turnsElapsed);
+  // 재도전 배수를 반영한다 — 안 하면 표시와 실제 지급이 어긋난다(위 prop 주석 참조)
+  const base = floorRewards(floor, result.turnsElapsed);
+  const rewards = {
+    exp: Math.round(base.exp * rewardMult),
+    gold: Math.round(base.gold * rewardMult),
+    promotionStones: Math.round(base.promotionStones * rewardMult),
+  };
 
   /** 엔딩은 최상층을 '이겼을 때'만. 최상층에서 져도 뜨면 안 된다. */
   const ending = towerCleared && win;
@@ -138,6 +162,29 @@ export function ResultScreen({
             ? `Exp +${rewards.exp} · 골드 +${rewards.gold} · 승급석 +${rewards.promotionStones}`
             : '없음'}
         </div>
+
+        {/*
+          레벨업.
+
+          `gainExp()`는 예전부터 `levelsGained`를 돌려줬는데 스토어가 `.hero`만 꺼내
+          **버리고 있었다.** 그래서 경험치를 부어도 "올랐다"는 말이 어디에도 없었다.
+          훈련소 유휴 exp로 오른 것도 여기 함께 나온다 — 그래야 대기 영웅이
+          크고 있다는 게 보인다.
+        */}
+        {levelUps.length > 0 && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+            <div style={{ fontSize: 12, color: T.gold, letterSpacing: '.2em', marginBottom: 6 }}>
+              ▲ 성장
+            </div>
+            {levelUps.map((l) => (
+              <div key={l.instId} style={{ fontSize: 13, lineHeight: 1.9 }}>
+                {l.name}
+                <span style={{ color: T.dim }}> Lv.{l.from} → </span>
+                <span style={{ color: T.gold }}>Lv.{l.to}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/*
           과제 달성. 손실보다 위에 두되 같은 패널 안이다 —

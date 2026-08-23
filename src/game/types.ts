@@ -385,6 +385,15 @@ export type BattleEventType =
   | 'retreat'      // 마스터의 개입으로 한 턴 물러남
   | 'battleEnd';
 
+/**
+ * 속성 상성 결과 — **표시 전용 분류**.
+ *
+ * 상성 계수(유리 1.5 / 불리 0.7)는 예전에도 `computeDamage`가 계산했지만
+ * 이벤트에 실리지 않아 화면에서 유리타와 불리타가 **완전히 동일하게** 보였다.
+ * 데미지 계산은 그대로 두고 결과만 이름 붙여 내보낸다.
+ */
+export type Affinity = 'adv' | 'dis';
+
 /** UI 재생용 로그. 전투 엔진은 이 배열을 반환하고 UI는 이를 애니메이션으로 재생. */
 export interface BattleEvent {
   turn: number;
@@ -396,6 +405,13 @@ export interface BattleEvent {
   status?: StatusKind;
   /** damage 이벤트 전용 — 치명타 여부. UI가 연출을 다르게 한다. */
   isCrit?: boolean;
+  /**
+   * damage 이벤트 전용 — 속성 상성. 중립이면 **없다**(표식을 달지 않는다).
+   *
+   * ⚠️ 표시 전용이다. 이 값을 보고 전투가 갈라지면 안 된다 —
+   * 상성은 이미 `amount`에 반영돼 있고 여기 있는 것은 그 이유표뿐이다.
+   */
+  affinity?: Affinity;
   /**
    * heal 이벤트 전용 — 스킬이 아니라 포션으로 회복했는가.
    * 화면이 "누가 회복시켰나"가 아니라 "물약이 터졌다"로 읽어야 한다.

@@ -4,10 +4,13 @@ import { GuardArt } from '../../ui/art/GuardArt';
 import { enemyArtOf, guardArtOf, heroArtOf } from '../../ui/artMap';
 import { T } from '../../ui/tokens';
 import type { RosterUnit } from '../../game/encounter';
-import type { StatusKind } from '../../game/types';
+import type { Affinity, StatusKind } from '../../game/types';
 
-/** 상태이상 표시 — 엔진은 이벤트를 내는데 지금까지 화면이 버리고 있었다 */
-const STATUS_MARK: Record<StatusKind, { sign: string; color: string }> = {
+/**
+ * 상태이상 표시 — 엔진은 이벤트를 내는데 지금까지 화면이 버리고 있었다.
+ * 전투 로그도 같은 표를 쓴다(`BattleScreen`) — 라벨이 두 곳으로 갈리면 어긋난다.
+ */
+export const STATUS_MARK: Record<StatusKind, { sign: string; color: string }> = {
   atkUp: { sign: '↑공', color: '#E8C56A' },
   atkDown: { sign: '↓공', color: '#9A93A8' },
   defUp: { sign: '↑방', color: '#6FA8DC' },
@@ -25,7 +28,22 @@ export interface Floater {
   amount: number;
   heal: boolean;
   crit: boolean;
+  /** 속성 상성 — 유리/불리. 중립이면 없다 */
+  affinity?: Affinity;
+  /** 물약으로 회복했는가 — 스킬 회복과 구별해서 읽혀야 한다 */
+  fromPotion?: boolean;
 }
+
+/**
+ * 상성 표식.
+ *
+ * ⚠️ **색만으로 구분하지 않는다.** 기호를 함께 쓴다 —
+ * 등급을 색이 아니라 구조로 표현하는 규칙과 같은 이유다(색각·작은 화면).
+ */
+const AFFINITY_MARK: Record<Affinity, { sign: string; color: string; label: string }> = {
+  adv: { sign: '▲', color: '#FFB454', label: '효과적' },
+  dis: { sign: '▼', color: '#7E93A8', label: '반감' },
+};
 
 export interface BattleUnitProps {
   unit: RosterUnit;
@@ -64,27 +82,45 @@ export function BattleUnit({
   const body = (
     <>
       {/* 데미지/회복 숫자 */}
-      {floaters.map((f) => (
-        <div
-          key={f.id}
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: -4,
-            transform: 'translateX(-50%)',
-            animation: 'floatUp 720ms ease-out forwards',
-            color: f.heal ? '#6FBF8F' : f.crit ? T.gold : '#FF6B6B',
-            fontSize: f.crit ? 24 : 17,
-            fontWeight: 700,
-            textShadow: f.crit ? `0 0 12px ${T.gold}, 0 2px 6px #000` : '0 2px 6px #000',
-            pointerEvents: 'none',
-            whiteSpace: 'nowrap',
-            zIndex: 6,
-          }}
-        >
-          {f.heal ? '+' : ''}{f.amount}{f.crit ? ' !' : ''}
-        </div>
-      ))}
+      {floaters.map((f) => {
+        const aff = f.affinity ? AFFINITY_MARK[f.affinity] : null;
+        /*
+          상성이 붙은 타격은 숫자 색까지 바꾼다 — 유리타가 치명타처럼 눈에 띄어야
+          "왜 이번엔 크게 박혔지"가 설명된다. 치명타가 더 세므로 치명타가 우선한다.
+        */
+        const color = f.heal ? '#6FBF8F'
+          : f.crit ? T.gold
+          : aff ? aff.color
+          : '#FF6B6B';
+        return (
+          <div
+            key={f.id}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: -4,
+              transform: 'translateX(-50%)',
+              animation: 'floatUp 720ms ease-out forwards',
+              color,
+              fontSize: f.crit ? 24 : aff?.sign === '▲' ? 19 : 17,
+              fontWeight: 700,
+              textShadow: f.crit
+                ? `0 0 12px ${T.gold}, 0 2px 6px #000`
+                : aff ? `0 0 8px ${aff.color}, 0 2px 6px #000`
+                : '0 2px 6px #000',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              zIndex: 6,
+            }}
+          >
+            {/* 물약은 스킬 회복과 달리 "터졌다"로 읽혀야 한다 */}
+            {f.heal && f.fromPotion && <span style={{ fontSize: 12 }}>🜂 </span>}
+            {f.heal ? '+' : ''}{f.amount}
+            {f.crit ? ' !' : ''}
+            {aff && <span style={{ fontSize: 12 }}> {aff.sign}</span>}
+          </div>
+        );
+      })}
 
       {/* 시전 중인 스킬명 */}
       {castingSkill && !dead && (

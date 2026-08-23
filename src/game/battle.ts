@@ -7,7 +7,7 @@
  * - 결과뿐 아니라 턴별 BattleEvent 로그를 반환 (UI는 이를 재생만 한다)
  */
 import type {
-  ActiveStatus, BattleEvent, Combatant, Element, EnemyDefId,
+  ActiveStatus, Affinity, BattleEvent, Combatant, Element, EnemyDefId,
   GearInstId, GearInstance,
   HeroDef, HeroDefId, HeroInstId, HeroInstance, RNG, Skill, SkillId,
   Star, StarScaling, StatusKind, Stats,
@@ -231,7 +231,7 @@ export function computeDamage(
   scalesWith: keyof Stats,
   chart: Record<Element, Record<Element, number>>,
   rng: RNG,
-): { amount: number; isCrit: boolean } {
+): { amount: number; isCrit: boolean; affinity?: Affinity } {
   const base =
     scalesWith === 'atk' ? effAtk(attacker)
     : scalesWith === 'def' ? effDef(attacker)
@@ -245,7 +245,21 @@ export function computeDamage(
   const variance = 0.95 + rng() * 0.1; // ±5%
 
   const amount = Math.max(1, Math.round(raw * mitigation * elem * critMul * variance));
-  return { amount, isCrit };
+  /*
+    ⚠️ 상성 계수는 **원래도 계산되고 있었고 화면까지 오지 않았을 뿐**이다.
+    유리 1.5 / 불리 0.7은 전투에서 가장 큰 변수 중 하나인데, 그 결과가
+    "숫자가 좀 크다/작다"로만 보여서 플레이어가 이유를 알 수 없었다.
+    여기서 하는 일은 **이미 나온 값을 이름 붙여 내보내는 것뿐**이며
+    `amount` 계산에는 한 글자도 손대지 않는다 — 시드 재현성이 걸려 있다.
+  */
+  return { amount, isCrit, affinity: affinityOf(elem) };
+}
+
+/** 상성 계수 → 표시용 분류. 1이면 표식을 달지 않는다(중립을 표시하면 소음이 된다) */
+export function affinityOf(elem: number): Affinity | undefined {
+  if (elem > 1) return 'adv';
+  if (elem < 1) return 'dis';
+  return undefined;
 }
 
 // ------------------------------------------------------------
@@ -518,10 +532,10 @@ function applyEffect(
 
   switch (eff.kind) {
     case 'damage': {
-      const { amount, isCrit } = computeDamage(
+      const { amount, isCrit, affinity } = computeDamage(
         actor, target, eff.power ?? 1, eff.scalesWith ?? 'atk', d.elementChart, rng,
       );
-      applyDamage(target, amount, events, turn, actor.uid, isCrit);
+      applyDamage(target, amount, events, turn, actor.uid, isCrit, affinity);
       break;
     }
     case 'heal': {
@@ -576,7 +590,7 @@ function applyEffect(
 
 function applyDamage(
   target: Combatant, amount: number, events: BattleEvent[], turn: number,
-  actorUid?: string, isCrit?: boolean,
+  actorUid?: string, isCrit?: boolean, affinity?: Affinity,
 ): void {
   let remaining = amount;
   if (target.shield > 0) {
@@ -585,7 +599,9 @@ function applyDamage(
     remaining -= absorbed;
   }
   target.currentHp -= remaining;
-  events.push({ turn, type: 'damage', actorUid, targetUids: [target.uid], amount, isCrit });
+  events.push({
+    turn, type: 'damage', actorUid, targetUids: [target.uid], amount, isCrit, affinity,
+  });
 
   if (target.currentHp <= 0) {
     target.currentHp = 0;
