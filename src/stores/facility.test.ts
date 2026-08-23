@@ -11,7 +11,7 @@
  * 수치 테이블 자체(단조 증가·범위 clamp)는 game/facilities.test.ts의 몫이다.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createRunStore, initialWallet } from './runStore';
+import { createRunStore, initialWallet, restQuote } from './runStore';
 import { loadRun } from './save';
 import { restHealRate, FACILITY_COST, FACILITY_MAX_LEVEL } from '../game/data/facilities';
 import { statsOfInstance } from '../game/stats';
@@ -242,5 +242,91 @@ describe('시설 업그레이드', () => {
     const s2 = store();
     s2.getState().hydrate(saved);
     expect(s2.getState().facilities.training).toBe(2);
+  });
+});
+
+/**
+ * 숙소 휴식 — 금을 내고 즉시 회복 (STEP 30).
+ *
+ * 지키려는 것:
+ *   1. `currentHp === 0`은 **만피**다 — 멀쩡한 영웅에게 돈을 받으면 안 된다
+ *   2. 표시 비용과 실제 청구액이 같다 (restQuote 하나만 쓴다)
+ *   3. 죽은 영웅은 되살아나지 않는다 — 퍼머데스는 금으로 못 되돌린다
+ */
+describe('숙소 휴식', () => {
+  /** 첫 영웅을 절반 피로 만든다. 반환값은 최대 HP */
+  const injure = (s: ReturnType<typeof store>, idx = 0) => {
+    const h = s.getState().roster[idx];
+    const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+    s.setState({
+      roster: s.getState().roster.map(
+        (x, i) => (i === idx ? { ...x, currentHp: Math.floor(max / 2) } : x),
+      ),
+    });
+    return max;
+  };
+
+  it('전원 만전이면 휴식할 것이 없다 — currentHp 0을 부상으로 읽지 않는다', () => {
+    const s = store();
+    // 초기 로스터는 전부 currentHp: 0(=만피)이다
+    expect(restQuote(s.getState().roster).cost).toBeNull();
+    expect(s.getState().rest()).toEqual({ ok: false, reason: 'already-full' });
+  });
+
+  it('부상자가 있으면 회복하고 금을 낸다', () => {
+    const s = store();
+    const max = injure(s);
+    s.setState({ wallet: { ...s.getState().wallet, gold: 10_000 } });
+
+    const quoted = restQuote(s.getState().roster).cost!;
+    const r = s.getState().rest();
+
+    expect(r.ok).toBe(true);
+    // 표시된 비용과 실제 청구액이 같아야 한다
+    if (r.ok) expect(r.spent).toBe(quoted);
+    expect(s.getState().wallet.gold).toBe(10_000 - quoted);
+    expect(s.getState().roster[0].currentHp).toBe(max);
+  });
+
+  it('금이 모자라면 회복도 차감도 없다', () => {
+    const s = store();
+    injure(s);
+    s.setState({ wallet: { ...s.getState().wallet, gold: 0 } });
+    const before = s.getState().roster[0].currentHp;
+
+    const r = s.getState().rest();
+
+    expect(r.ok).toBe(false);
+    expect(s.getState().roster[0].currentHp).toBe(before);
+    expect(s.getState().wallet.gold).toBe(0);
+  });
+
+  it('죽은 영웅은 되살아나지 않는다', () => {
+    const s = store();
+    s.setState({
+      roster: s.getState().roster.map(
+        (x, i) => (i === 0 ? { ...x, isDead: true, currentHp: 0 } : x),
+      ),
+      wallet: { ...s.getState().wallet, gold: 10_000 },
+    });
+
+    s.getState().rest();
+
+    expect(s.getState().roster[0].isDead).toBe(true);
+    expect(s.getState().roster[0].currentHp).toBe(0);
+  });
+
+  it('잃은 HP가 많을수록 비싸다', () => {
+    const light = store();
+    injure(light);
+    const heavy = store();
+    const max = injure(heavy);
+    heavy.setState({
+      roster: heavy.getState().roster.map((x, i) => (i === 0 ? { ...x, currentHp: 1 } : x)),
+    });
+
+    expect(restQuote(heavy.getState().roster).cost!)
+      .toBeGreaterThan(restQuote(light.getState().roster).cost!);
+    expect(max).toBeGreaterThan(1);
   });
 });

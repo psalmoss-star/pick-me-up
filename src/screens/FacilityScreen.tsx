@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
@@ -11,7 +11,7 @@ import {
 } from '../game/data/facilities';
 import { fuseEfficiency } from '../game/progression';
 import type { Wallet } from '../game/types';
-import type { FacilityUpgradeResult } from '../stores/runStore';
+import type { FacilityUpgradeResult, RestResult } from '../stores/runStore';
 
 export interface FacilityScreenProps {
   facilities: Record<FacilityKind, number>;
@@ -26,6 +26,17 @@ export interface FacilityScreenProps {
    * 구동돼서, 정작 마을에서 온 진입에는 죽어 있었다(실기기에서 발견).
    */
   initialFocus?: FacilityKind;
+  /**
+   * 숙소 휴식 — 금을 내고 부상을 즉시 지운다.
+   *
+   * 비용·부상자 수는 화면이 계산하지 않고 받는다. HP 산식이 두 곳에 생기면
+   * 표시와 실제 청구액이 갈린다(합성소에서 겪은 함정과 같다).
+   */
+  onRest?: () => RestResult;
+  /** 지금 휴식에 드는 금. 부상자가 없으면 null */
+  restCost: number | null;
+  /** 부상자 수 */
+  restInjured: number;
 }
 
 const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
@@ -70,7 +81,7 @@ function nextText(kind: FacilityKind, level: number): string | null {
  * 그래서 효과를 현재값과 다음값으로 나란히 보여준다 — 투자 판단이 화면에서 끝나야 한다.
  */
 export function FacilityScreen({
-  facilities, wallet, onUpgrade, onBack, initialFocus,
+  facilities, wallet, onUpgrade, onBack, initialFocus, onRest, restCost, restInjured,
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
@@ -83,16 +94,11 @@ export function FacilityScreen({
   const [focus] = useState<FacilityKind | null>(initialFocus ?? null);
   const cardRefs = useRef<Partial<Record<FacilityKind, HTMLDivElement | null>>>({});
 
-  /**
-   * 들어오자마자 고른 시설로 스크롤한다.
-   *
-   * 카드가 붙은 뒤여야 `scrollIntoView`가 먹으므로 effect에서 한다.
-   * `initialFocus`가 없으면(탭 등으로 들어온 경우) 맨 위 그대로 둔다.
-   */
-  useEffect(() => {
-    if (!initialFocus) return;
-    cardRefs.current[initialFocus]?.scrollIntoView({ block: 'center' });
-  }, [initialFocus]);
+  /*
+    스크롤(`scrollIntoView`)은 쓰지 않는다 — 누른 시설을 목록 맨 위로 올리므로
+    이미 첫 화면에 보인다. 여기서 또 스크롤하면 머리글이 화면 밖으로 밀려
+    "어느 시설로 들어왔는지"가 오히려 안 보인다.
+  */
 
   /** 만렙이 아닌 시설이 남아 있는데 그중 무엇도 살 수 없는 상태인가 */
   const nothingAffordable = ORDER.some((k) => upgradeCost(facilities[k]) != null)
@@ -114,10 +120,34 @@ export function FacilityScreen({
     setNotice(`${FACILITY_META[kind].name} Lv.${r.level} — ${effectText(kind, r.level)} (금 ${r.spent} 소모)`);
   };
 
+  /**
+   * 누른 시설을 맨 위로 올린다.
+   *
+   * 나머지 셋을 숨기지는 않는다 — 시설끼리 금을 두고 경쟁하므로 무엇이 덜 자랐는지
+   * 같이 보여야 투자 판단이 화면에서 끝난다(§5-6: 허전하다고 빼지 말 것).
+   * 다만 **누른 것이 첫 화면에 보여야** 건물마다 다른 화면으로 읽힌다.
+   */
+  const ordered = focus ? [focus, ...ORDER.filter((k) => k !== focus)] : ORDER;
+
+  const doRest = () => {
+    if (!onRest) return;
+    const r = onRest();
+    if (!r.ok) {
+      setNotice(r.reason === 'already-full' ? '모두 만전입니다.' : '금이 부족합니다.');
+      return;
+    }
+    setNotice(`${r.heroes}명이 회복했습니다. HP +${r.healed} (금 ${r.spent} 소모)`);
+  };
+
   return (
     <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
+      {/*
+        머리글에 **누른 건물 이름**을 쓴다. 숙소를 눌렀는데 '시설'이라고만 떠 있으면
+        훈련소를 눌렀을 때와 화면이 구분되지 않는다 — 실기기에서 "숙소랑 훈련소는
+        같은 화면"으로 읽힌 이유다.
+      */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
-        <span>시설</span>
+        <span>{focus ? FACILITY_META[focus].name : '시설'}</span>
         <span>금 {wallet.gold.toLocaleString()}</span>
       </div>
 
@@ -131,7 +161,7 @@ export function FacilityScreen({
         (실기기에서 "쓸데없는 화면들"로 보고됨).
       */}
       <div style={{ display: 'grid', gap: 12 }}>
-        {ORDER.map((kind) => {
+        {ordered.map((kind) => {
           const level = facilities[kind];
           const cost = upgradeCost(level);
           const maxed = cost == null;
@@ -194,6 +224,30 @@ export function FacilityScreen({
                 <Button small onClick={() => doUpgrade(kind)} disabled={!affordable}>
                   {affordable ? `강화 · 금 ${cost}` : `금 ${cost} 필요`}
                 </Button>
+              )}
+
+              {/*
+                숙소만 '휴식'을 가진다 — 시설 레벨(자동 회복률)과 별개로
+                지금 금을 써서 부상을 지우는 **행동**이다. 시설이 수치 표가 아니라
+                장소로 읽히려면 누를 것이 있어야 한다.
+              */}
+              {kind === 'rest' && onRest && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, lineHeight: 1.7 }}>
+                    {restCost == null
+                      ? '전원 만전입니다'
+                      : `부상 ${restInjured}명 · 금 ${restCost}`}
+                  </div>
+                  <Button
+                    small
+                    onClick={doRest}
+                    disabled={restCost == null || wallet.gold < restCost}
+                  >
+                    {restCost == null
+                      ? '휴식 불필요'
+                      : wallet.gold >= restCost ? `휴식 · 금 ${restCost}` : `금 ${restCost} 필요`}
+                  </Button>
+                </div>
               )}
             </SystemPanel>
             </div>

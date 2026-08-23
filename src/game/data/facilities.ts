@@ -80,6 +80,24 @@ export const TRAINING_IDLE_EXP: readonly number[] = [0, 40, 90, 160];
  */
 export const FACILITY_COST: readonly number[] = [0, 300, 900, 2200];
 
+/**
+ * 숙소 휴식 — 금을 내고 **즉시** 부상을 회복한다.
+ *
+ * ⚠️ `REST_HEAL`(층 사이 자동 회복)과는 다른 손잡이다. 자동 회복은 등반 리듬을 정하고,
+ * 휴식은 "지금 금을 써서 한 층 더 갈까"라는 **선택**을 만든다.
+ *
+ * ⚠️ **비용을 낮추면 등반 난이도가 통째로 내려간다.** 층 보상이 층당 230~300금이라
+ * 여기가 싸지면 사실상 무한 회복이 된다. 만졌으면 `npx tsx climb-check.mts`를
+ * 반드시 다시 돌릴 것.
+ *
+ * 잃은 HP 1당 비용으로 잡는다 — 정액이면 살짝 다친 영웅에게 쓰는 게 손해라
+ * "만신창이가 될 때까지 기다리기"가 최적이 되어 버린다.
+ */
+export const REST_COST_PER_HP = 2;
+
+/** 휴식 1회의 최소 비용. 푼돈 결제가 반복되는 것을 막는다 */
+export const REST_COST_MIN = 20;
+
 /** 다음 레벨 비용. 만렙이면 null. */
 export function upgradeCost(level: number): number | null {
   const next = level + 1;

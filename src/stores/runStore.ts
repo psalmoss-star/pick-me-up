@@ -20,10 +20,12 @@ import { saveRun, type SavedRun } from './save';
 import { grantDevWallet, isDevMode } from './devWallet';
 import { gameData, FLOORS, floorAt, HERO } from '../game/data';
 import { floorRewards, isFinalFloor } from '../game/data/floors';
-import { partyLimitAt, SQUAD_COUNT } from '../game/data/party';
+import { partyLimitAt, squadsOpen, SQUAD_COUNT } from '../game/data/party';
+import { livingHeroes } from '../game/roster';
 import { revisitMultiplier } from '../game/data/revisit';
 import {
-  armoryAtkMult, idleExpGain, restHealRate, upgradeCost, type FacilityKind,
+  armoryAtkMult, idleExpGain, restHealRate, upgradeCost,
+  REST_COST_PER_HP, REST_COST_MIN, type FacilityKind,
 } from '../game/data/facilities';
 import { GEAR_DEFS, GEAR_TUNING, POTION_TUNING, dropWeights, dropTable } from '../game/data/gear';
 import {
@@ -286,6 +288,8 @@ export interface RunActions {
    * — summon()/fuse()와 같은 원칙이며, 실패 시 상태는 그대로다.
    */
   upgradeFacility: (kind: FacilityKind) => FacilityUpgradeResult;
+  /** 숙소 휴식 — 금을 내고 살아있는 영웅 전원의 HP를 즉시 만피로 되돌린다. */
+  rest: () => RestResult;
   /** 상점 구매. 금으로 장비를 사서 창고에 넣는다. */
   buyGear: (defId: GearDefId) => BuyGearResult;
   /** 장비 착용. 같은 슬롯에 있던 것은 자동으로 창고로 돌아간다. */
@@ -332,6 +336,10 @@ export type EnhanceGearResult =
 export type BuyPotionResult =
   | { ok: true; count: number; spent: number }
   | { ok: false; reason: 'not-enough-gold' };
+
+export type RestResult =
+  | { ok: true; healed: number; heroes: number; spent: number }
+  | { ok: false; reason: 'not-enough-gold' | 'already-full'; cost?: number };
 
 /**
  * 시작 재화.
@@ -392,6 +400,65 @@ export function squadMembers(s: Pick<RunSlice, 'squads'>, squad: number): HeroIn
 }
 
 /**
+ * 숙소 휴식 견적 — 부상자·잃은 HP 총합·비용.
+ *
+ * ⚠️ **화면과 스토어가 같은 함수를 써야 한다.** 비용 산식이 두 곳에 생기면
+ * "표시된 금액과 실제 청구액이 다르다"가 된다 — 합성소에서 이미 겪은 함정이다
+ * (ForgeScreen이 전환율을 하드코딩해 표시와 결과가 갈렸다).
+ *
+ * ⚠️ `currentHp === 0`은 **만피**를 뜻하지 빈사가 아니다(freshHero 주석).
+ * 0을 부상으로 읽으면 멀쩡한 영웅에게 돈을 받게 된다.
+ */
+export function restQuote(roster: HeroInstance[]) {
+  const injured = roster
+    .filter((h) => !h.isDead)
+    .map((h) => {
+      const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+      const cur = h.currentHp === 0 ? max : h.currentHp;
+      return { h, max, missing: Math.max(0, max - cur) };
+    })
+    .filter((x) => x.missing > 0);
+
+  const missingTotal = injured.reduce((n, x) => n + x.missing, 0);
+  return {
+    injured,
+    missingTotal,
+    /** 부상자가 없으면 null — 화면은 이걸로 버튼을 끈다 */
+    cost: missingTotal === 0
+      ? null
+      : Math.max(REST_COST_MIN, missingTotal * REST_COST_PER_HP),
+  };
+}
+
+/**
+ * 이 군이 지금 편성 잠금 상태인가.
+ *
+ * ⚠️ **전멸한 군은 잠그지 않는다.** 잠금 해제는 `start()` 안에서만 일어나는데,
+ * 그 군에 살아있는 사람이 없으면 `start()`가 실패해서 **해제가 영영 안 돈다.**
+ * 보충 편성까지 막히므로 "영웅이 죽었는데 탑을 오를 수 없는" 교착이 된다
+ * (실기기에서 보고됨). 잠금의 목적은 "이긴 파티를 그대로 다음 층에"이지
+ * 진행을 막는 것이 아니다.
+ */
+export function isSquadLocked(
+  s: Pick<RunSlice, 'squads' | 'lockedSquad' | 'roster' | 'maxFloorReached'>, squad: number,
+): boolean {
+  if (s.lockedSquad !== squad) return false;
+
+  /*
+    ⚠️ **2군이 열리기 전에는 잠그지 않는다.**
+    잠금은 "이번엔 어느 군을 보낼까"가 선택일 때만 리듬이 된다. 군이 하나뿐이면
+    고를 것이 없어서 리듬 장치가 아니라 그냥 "전투 후엔 편성 금지"가 된다 —
+    초반 내내 편성이 막힌다(실기기에서 "편성이 되질 않아"로 보고됨).
+  */
+  if (!squadsOpen(livingHeroes(s.roster).length, FLOORS[s.maxFloorReached].id)) return false;
+
+  return squadMembers(s, squad).some((id) => {
+    const h = s.roster.find((x) => x.instId === id);
+    return !!h && !h.isDead;
+  });
+}
+
+/**
  * 스토어 본체를 만든다. 테스트는 이 팩토리로 격리된 인스턴스를 얻는다.
  * (전역 훅 하나만 두면 테스트끼리 상태가 새어나간다)
  */
@@ -402,7 +469,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
     toggleSquadMember: (squad, id) =>
       set((s) => {
         // 잠긴 군은 못 바꾼다. 화면도 막지만 스토어가 정본이다.
-        if (s.lockedSquad === squad) return {};
+        if (isSquadLocked(s, squad)) return {};
         if (squad < 0 || squad >= SQUAD_COUNT) return {};
 
         const hero = s.roster.find((h) => h.instId === id);
@@ -427,7 +494,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           단, 상대 군이 잠겨 있으면 옮길 수 없다 — 잠금이 우회되기 때문이다.
         */
         const owner = s.squads.findIndex((m) => m.includes(id));
-        if (owner !== -1 && s.lockedSquad === owner) return {};
+        if (owner !== -1 && isSquadLocked(s, owner)) return {};
 
         const next = s.squads.map((m, i) => {
           if (i === owner) return m.filter((x) => x !== id);
@@ -1007,6 +1074,35 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       // 재화를 쓴 결과이므로 즉시 저장한다 (summon()/fuse()와 같은 원칙).
       saveRun(get());
       return { ok: true, kind, level: level + 1, spent: cost };
+    },
+
+    /**
+     * 숙소 휴식 — 금을 내고 살아있는 영웅 전원을 즉시 만피로 되돌린다.
+     *
+     * ⚠️ **`currentHp === 0`은 "만피"라는 뜻이지 빈사가 아니다**(freshHero 주석).
+     * 0을 부상으로 읽으면 멀쩡한 영웅에게 돈을 받게 된다.
+     *
+     * 죽은 영웅은 대상이 아니다 — 퍼머데스는 금으로 되돌리지 않는다.
+     */
+    rest: () => {
+      const { roster, wallet } = get();
+      const { injured, missingTotal, cost } = restQuote(roster);
+
+      if (missingTotal === 0 || cost == null) return { ok: false, reason: 'already-full' };
+      if (wallet.gold < cost) return { ok: false, reason: 'not-enough-gold', cost };
+
+      const healIds = new Set(injured.map((x) => x.h.instId));
+      set((s) => ({
+        roster: s.roster.map((h) => {
+          if (!healIds.has(h.instId)) return h;
+          const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+          return { ...h, currentHp: max };
+        }),
+        wallet: { ...s.wallet, gold: s.wallet.gold - cost },
+      }));
+      // 재화를 쓴 결과이므로 즉시 저장한다 (upgradeFacility와 같은 원칙).
+      saveRun(get());
+      return { ok: true, healed: missingTotal, heroes: injured.length, spent: cost };
     },
 
     buyGear: (defId) => {

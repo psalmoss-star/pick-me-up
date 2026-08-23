@@ -16,7 +16,7 @@ import { T } from './ui/tokens';
 import type { VillageSpot } from './ui/iso';
 import type { FacilityKind } from './game/data/facilities';
 import { TabBar, type TabKey } from './ui/TabBar';
-import { useRunStore } from './stores/runStore';
+import { useRunStore, isSquadLocked, restQuote } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt } from './game/data';
@@ -81,7 +81,14 @@ export default function App() {
    */
   const squads = useRunStore((s) => s.squads);
   const party = squads[0];
-  const lockedSquad = useRunStore((s) => s.lockedSquad);
+  /*
+    전멸한 군은 잠긴 것으로 보지 않는다 — 스토어의 `isSquadLocked`와 같은 규칙이다.
+    화면만 잠그면 버튼이 회색인데 스토어는 허용하는 어긋남이 생긴다.
+  */
+  const lockedSquadRaw = useRunStore((s) => s.lockedSquad);
+  const lockedSquad = useRunStore(
+    (s) => (lockedSquadRaw != null && isSquadLocked(s, lockedSquadRaw) ? lockedSquadRaw : null),
+  );
   const maxFloorReached = useRunStore((s) => s.maxFloorReached);
   const result = useRunStore((s) => s.result);
   const snapshot = useRunStore((s) => s.snapshot);
@@ -105,6 +112,7 @@ export default function App() {
   const promote = useRunStore((s) => s.promote);
   const facilities = useRunStore((s) => s.facilities);
   const upgradeFacility = useRunStore((s) => s.upgradeFacility);
+  const rest = useRunStore((s) => s.rest);
   const gear = useRunStore((s) => s.gear);
   const buyGear = useRunStore((s) => s.buyGear);
   const equipGear = useRunStore((s) => s.equipGear);
@@ -336,6 +344,9 @@ export default function App() {
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
             initialFocus={facilityFocus}
+            onRest={rest}
+            restCost={restQuote(roster).cost}
+            restInjured={restQuote(roster).injured.length}
           />
         )}
         {screen === 'grave' && (
