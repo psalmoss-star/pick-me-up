@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { tabSafePadding } from '../ui/TabBar';
-import { Button, TOUCH_MIN } from '../ui/Button';
+import { Button, HpBar, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import {
@@ -37,6 +37,28 @@ export interface FacilityScreenProps {
   restCost: number | null;
   /** 부상자 수 */
   restInjured: number;
+  /**
+   * 훈련 중인(=1군에 없는 생존) 영웅들.
+   *
+   * ⚠️ **훈련소에는 누를 것도 볼 것도 없었다.** 층을 깰 때 조용히 유휴 exp가
+   * 들어갈 뿐이라, 시설을 올려도 무슨 일이 일어나는지 화면에 흔적이 없었다.
+   * 숙소가 `onRest`로 "장소"가 된 것처럼(이 파일 아래 주석 참조),
+   * 훈련소는 **누가 크고 있는지**를 보여주는 것으로 장소가 된다.
+   */
+  trainees?: Trainee[];
+}
+
+/** 훈련소에 표시할 대기 영웅 한 명 */
+export interface Trainee {
+  instId: string;
+  name: string;
+  level: number;
+  /** 다음 레벨까지 남은 exp. 만렙이면 null */
+  toNext: number | null;
+  /** 다음 레벨까지 필요한 총량 — 진행 바의 분모 */
+  need: number;
+  /** 현재 누적 exp */
+  exp: number;
 }
 
 const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
@@ -82,6 +104,7 @@ function nextText(kind: FacilityKind, level: number): string | null {
  */
 export function FacilityScreen({
   facilities, wallet, onUpgrade, onBack, initialFocus, onRest, restCost, restInjured,
+  trainees = [],
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
@@ -231,6 +254,52 @@ export function FacilityScreen({
                 지금 금을 써서 부상을 지우는 **행동**이다. 시설이 수치 표가 아니라
                 장소로 읽히려면 누를 것이 있어야 한다.
               */}
+              {/*
+                훈련소 — 지금 크고 있는 영웅을 보여준다.
+
+                수치 표가 아니라 장소로 읽히려면 **여기서 무슨 일이 일어나는지**가
+                보여야 한다. 유휴 exp는 원래도 들어가고 있었지만 화면에 흔적이 없어서
+                "그냥 올라간다 설정하고 끝"으로 읽혔다.
+              */}
+              {kind === 'training' && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
+                  {level === 0 ? (
+                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
+                      아직 아무도 훈련하지 않는다 — 강화하면 대기 영웅이 층마다 성장한다
+                    </div>
+                  ) : trainees.length === 0 ? (
+                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
+                      대기 중인 영웅이 없다 — 파티에서 빠진 영웅이 여기서 큰다
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, letterSpacing: '.1em' }}>
+                        훈련 중 {trainees.length}명 · 층당 +{idleExpGain(level)} exp
+                      </div>
+                      <div style={{ display: 'grid', gap: 7 }}>
+                        {trainees.map((t) => (
+                          <div key={t.instId}>
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between',
+                              fontSize: 12, marginBottom: 3,
+                            }}>
+                              <span>{t.name}</span>
+                              <span style={{ color: T.dim }}>
+                                Lv.{t.level}
+                                {t.toNext == null ? ' · 만렙' : ` · ${t.toNext} exp 남음`}
+                              </span>
+                            </div>
+                            {t.toNext != null && (
+                              <HpBar cur={t.exp} max={t.need} color={T.gold} w="100%" h={4} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               {kind === 'rest' && onRest && (
                 <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
                   <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, lineHeight: 1.7 }}>

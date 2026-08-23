@@ -18,6 +18,15 @@ export interface ShopScreenProps {
   onBuy: (defId: GearDefId) => BuyGearResult;
   onBuyPotion: () => BuyPotionResult;
   onBack: () => void;
+  /**
+   * 산 장비를 바로 채우러 간다.
+   *
+   * ⚠️ **여기서 고리가 끊겨 있었다.** 사고 나면 `"…을(를) 손에 넣었습니다"`로 끝나고,
+   * 착용 경로(영웅 → 상세창 → 장비 슬롯)를 플레이어가 스스로 찾아야 했다.
+   * 그래서 산 장비가 창고에 잠들고 **"사나 마나"** 로 읽혔다 —
+   * 장비가 약해서가 아니라 효과를 볼 방법이 안 보여서다.
+   */
+  onGoEquip?: () => void;
 }
 
 /**
@@ -27,24 +36,30 @@ export interface ShopScreenProps {
  * 강함을 정하기 때문이다 (data/gear.ts 주석 참조).
  */
 export function ShopScreen({
-  wallet, ownedCount, potions, onBuy, onBuyPotion, onBack,
+  wallet, ownedCount, potions, onBuy, onBuyPotion, onBack, onGoEquip,
 }: ShopScreenProps) {
   const [slot, setSlot] = useState<GearSlot>('weapon');
   const [notice, setNotice] = useState<string | null>(null);
+  /** 방금 장비를 샀는가 — 착용 안내를 띄울지 정한다 */
+  const [boughtGear, setBoughtGear] = useState(false);
 
   const stock = shopStock(slot);
 
   const doBuyPotion = () => {
     const r = onBuyPotion();
+    setBoughtGear(false);
     setNotice(r.ok ? `치유 물약을 샀습니다. (금 ${r.spent} 소모)` : '금이 부족합니다.');
   };
 
   const doBuy = (def: GearDef) => {
     const r = onBuy(def.id);
     if (!r.ok) {
+      setBoughtGear(false);
       setNotice(r.reason === 'not-enough-gold' ? '금이 부족합니다.' : '판매하지 않는 물건입니다.');
       return;
     }
+    // 사는 것으로 끝내지 않는다 — 채워야 효과가 난다
+    setBoughtGear(true);
     setNotice(`${def.name}을(를) 손에 넣었습니다. (금 ${r.spent} 소모)`);
   };
 
@@ -159,6 +174,18 @@ export function ShopScreen({
         <div style={{ marginTop: 16 }}>
           <SystemPanel compact tone="rare">
             <div style={{ fontSize: 13, lineHeight: 1.7 }}>{notice}</div>
+            {/*
+              사는 것으로 끝나면 창고에 잠든다 — 채우는 곳까지 데려간다.
+              장비는 영웅에게 채워야 전투 스탯에 반영된다(battle.ts:136).
+            */}
+            {boughtGear && onGoEquip && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, lineHeight: 1.7 }}>
+                  장비는 영웅에게 채워야 효과가 난다
+                </div>
+                <Button small onClick={onGoEquip}>채우러 가기</Button>
+              </div>
+            )}
           </SystemPanel>
         </div>
       )}

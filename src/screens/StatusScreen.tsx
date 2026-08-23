@@ -1,6 +1,6 @@
 import { SystemPanel } from '../ui/SystemPanel';
 import { tabSafePadding } from '../ui/TabBar';
-import { Button, TOUCH_MIN } from '../ui/Button';
+import { Button, HpBar, TOUCH_MIN } from '../ui/Button';
 import { HeroPortrait } from '../ui/art/HeroPortrait';
 import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
@@ -167,9 +167,22 @@ export function StatusScreen({
         <Row label="HP / ATK" value={`${stats.hp.toLocaleString()} / ${stats.atk.toLocaleString()}`} />
         <Row label="DEF / SPD" value={`${stats.def.toLocaleString()} / ${stats.spd.toLocaleString()}`} />
         <Row label="치명" value={`${Math.round(stats.crit * 100)}%`} />
-        {!atMaxLevel && (
-          <Row label="다음 레벨까지" value={`${Math.max(0, expToNext(hero.star, hero.level) - hero.exp)} exp`} />
-        )}
+        {/*
+          경험치 진행 — 숫자만 있으면 "얼마나 남았나"가 안 읽힌다.
+          바는 `HpBar`를 그대로 쓴다. 프로젝트에 이미 서로 다른 바 구현이
+          여럿이라 여기서 또 만들면 넷째가 된다.
+        */}
+        {!atMaxLevel && (() => {
+          const need = expToNext(hero.star, hero.level);
+          return (
+            <div style={{ marginTop: 4 }}>
+              <Row label="다음 레벨까지" value={`${Math.max(0, need - hero.exp)} exp`} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                <HpBar cur={hero.exp} max={need} color={T.gold} w={160} h={5} />
+              </div>
+            </div>
+          );
+        })()}
       </SystemPanel>
 
       {/*

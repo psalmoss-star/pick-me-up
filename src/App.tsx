@@ -25,7 +25,7 @@ import { floorAt, gameData } from './game/data';
 import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
 import { idleExpGain } from './game/data/facilities';
 import { revisitMultiplier } from './game/data/revisit';
-import { gainExp } from './game/progression';
+import { expToNext, gainExp } from './game/progression';
 import { displayName } from './game/identity';
 import type { LevelUp } from './screens/ResultScreen';
 import { partyLimitAt, squadsOpen } from './game/data/party';
@@ -434,6 +434,25 @@ export default function App() {
             onRest={rest}
             restCost={restQuote(roster).cost}
             restInjured={restQuote(roster).injured.length}
+            /*
+              훈련 중인 영웅 = **출전하지 않는 생존자.**
+              판정은 `finish()`의 유휴 exp 규칙과 같아야 한다(1군에 없으면 훈련).
+            */
+            trainees={roster
+              .filter((h) => !h.isDead && !party.includes(h.instId))
+              .map((h) => {
+                const maxLevel = gameData.starScaling[h.star].maxLevel;
+                const atMax = h.level >= maxLevel;
+                const need = atMax ? 0 : expToNext(h.star, h.level);
+                return {
+                  instId: h.instId,
+                  name: displayName(h, gameData.heroes),
+                  level: h.level,
+                  toNext: atMax ? null : Math.max(0, need - h.exp),
+                  need,
+                  exp: h.exp,
+                };
+              })}
           />
         )}
         {screen === 'grave' && (
@@ -462,6 +481,11 @@ export default function App() {
             onBuy={buyGear}
             onBuyPotion={buyPotion}
             onBack={() => setScreen('base')}
+            /*
+              착용은 영웅 목록 → 상세창에서 한다. 사고 나서 그 경로를 스스로
+              찾아야 했던 것이 "사나 마나"의 원인이었다 — 여기서 이어준다.
+            */
+            onGoEquip={() => setScreen('heroes')}
           />
         )}
         {screen === 'smith' && (

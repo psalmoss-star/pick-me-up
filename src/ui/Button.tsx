@@ -44,10 +44,16 @@ export function Button({
   );
 }
 
+/**
+ * 얇은 진행 바. HP 말고 경험치·훈련 진행도에도 쓴다 —
+ * 프로젝트에 바 구현이 여럿 생기는 것을 막으려고 이걸 재사용한다.
+ *
+ * `w`에 문자열('100%')을 줄 수 있다 — 부모 폭을 채워야 하는 목록에서 쓴다.
+ */
 export function HpBar({
   cur, max, color = T.blood, w = 108, h = 6,
-}: { cur: number; max: number; color?: string; w?: number; h?: number }) {
-  const p = Math.max(0, Math.min(1, cur / max));
+}: { cur: number; max: number; color?: string; w?: number | string; h?: number }) {
+  const p = max > 0 ? Math.max(0, Math.min(1, cur / max)) : 0;
   return (
     <div style={{ width: w, height: h, background: '#1A1620', border: '1px solid #2A2434' }}>
       <div style={{ width: `${p * 100}%`, height: '100%', background: color, transition: 'width 220ms ease-out' }} />
