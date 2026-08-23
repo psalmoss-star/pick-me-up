@@ -53,7 +53,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 595개 통과)
+npm test           # Vitest 1회 실행 (현재 632개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -120,6 +120,8 @@ src/
 │     ├─ facilities.ts # 시설 4종 튜닝 (회복률·공격력·유휴 exp·비용)
 │     ├─ gear.ts      # 장비 도감 12종 + 튜닝 (회수율·강화·드롭)
 │     ├─ quests.ts    # 과제 13종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
+│     ├─ party.ts     # 파티 정원 규칙 — 층 구간별 정원, 2군 개방 조건. 상수가 아니라 함수다
+│     ├─ revisit.ts   # 기존 층 재도전 — 재도전 횟수별 보상 체감
 │     ├─ names.ts     # 개체 이름 어휘 (이름 66 × 수식어 44 + 이명 26)
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
@@ -156,6 +158,8 @@ scripts/
   gen-art.mts     # 영웅 일러스트 생성 (npm run gen-art)
   sigma-sweep.mts bias-solve.mts asym-check.mts dist-check.mts reveal-demo.mts
                   # 잠재치 σ=0.08 / bias=0.04의 도출 근거. 수치를 만지기 전에 먼저 볼 것
+  seed-search.mts # SEED_OFFSET 도출 근거. 초기 로스터를 만졌으면 여기서 다시 잰다
+                  # (sim은 자체 파티를 쓰므로 initialRoster 변경을 못 잡는다)
 ```
 
 ---
