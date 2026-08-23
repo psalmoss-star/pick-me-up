@@ -49,6 +49,21 @@ export const REST_HEAL: readonly number[] = [0.35, 0.45, 0.55, 0.65];
 export const ARMORY_ATK: readonly number[] = [1.0, 1.03, 1.06, 1.09];
 
 /**
+ * 합성소 — 제물 영웅의 가치가 경험치로 넘어가는 비율.
+ * 인덱스가 시설 레벨(0=미건설).
+ *
+ * ⚠️ **Lv.0과 Lv.1이 같으면 안 된다.** 예전에는 수치가 이 파일이 아니라
+ * `progression.ts`의 공식(`Math.max(1, level)`)에 있었고, 그 clamp가 Lv.0을 Lv.1로
+ * 끌어올려 **둘 다 65%**였다. 300금짜리 Lv.1 강화가 효과 0인 함정 구매였고
+ * 화면에도 "Lv.0 · 65%" → "다음 단계 → 65%"로 그대로 드러났다(실기기에서 발견).
+ *
+ * Lv.1~3(65/80/95%)은 기존 값 그대로다 — 바뀐 것은 Lv.0뿐이라
+ * 이미 검증된 합성 밸런스는 보존된다. 층별 승률과는 무관하다
+ * (`sim`·`climb-check` 어느 쪽도 합성을 쓰지 않는다).
+ */
+export const FORGE_RATE: readonly number[] = [0.5, 0.65, 0.8, 0.95];
+
+/**
  * 훈련소 — 전투에 나가지 않은 영웅이 층 돌파당 받는 유휴 경험치.
  *
  * 참전 영웅과 경쟁하지 않도록 작게 잡는다. 이게 크면 "안 내보내는 게 이득"이 되어
@@ -85,6 +100,11 @@ export function armoryAtkMult(level: number): number {
 /** 대기 영웅의 층당 유휴 경험치 */
 export function idleExpGain(level: number): number {
   return TRAINING_IDLE_EXP[clampLevel(level)];
+}
+
+/** 합성 경험치 전환율 */
+export function forgeRate(level: number): number {
+  return FORGE_RATE[clampLevel(level)];
 }
 
 function clampLevel(level: number): number {

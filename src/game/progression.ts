@@ -2,6 +2,7 @@ import type {
   HeroDef, HeroDefId, HeroInstance, Star, StarScaling, Wallet,
 } from './types';
 import { attributesOfInstance, isAtCap, klassFor } from './stats';
+import { forgeRate } from './data/facilities';
 
 /**
  * 성장의 세 갈래
@@ -146,9 +147,15 @@ export function needsPromotion(
 // 합성 — 영웅을 제물로 바친다
 // ------------------------------------------------------------
 
-/** 합성소 레벨에 따른 경험치 전환율 */
+/**
+ * 합성소 레벨에 따른 경험치 전환율.
+ *
+ * 수치는 `data/facilities.ts`의 `FORGE_RATE`가 단일 출처다 — 예전에는 여기에
+ * 공식으로 박혀 있었고, 그 안의 `Math.max(1, level)`이 Lv.0을 Lv.1로 끌어올려
+ * **미건설과 Lv.1이 같은 65%**가 되는 함정을 만들었다.
+ */
 export function fuseEfficiency(facilityLevel: number): number {
-  return 0.5 + Math.min(3, Math.max(1, facilityLevel)) * 0.15; // Lv1 0.65 → Lv3 0.95
+  return forgeRate(facilityLevel);
 }
 
 /** 제물 영웅이 가진 가치를 경험치로 환산 */

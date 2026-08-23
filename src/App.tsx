@@ -14,6 +14,7 @@ import { ResultScreen } from './screens/ResultScreen';
 import { DetailModal } from './screens/DetailModal';
 import { T } from './ui/tokens';
 import type { VillageSpot } from './ui/iso';
+import type { FacilityKind } from './game/data/facilities';
 import { TabBar, type TabKey } from './ui/TabBar';
 import { useRunStore } from './stores/runStore';
 import { loadRun } from './stores/save';
@@ -40,6 +41,16 @@ export default function App() {
    * screen을 스토어에 넣지 않는 이유는 runStore.ts 주석 참조 (저장 시 복원 불가).
    */
   const [screen, setScreen] = useState<Screen>('base');
+  /**
+   * 마지막으로 누른 탭.
+   *
+   * `heroes`·`status`·`party` 세 탭이 같은 `roster` 화면으로 가므로(아래 goToTab 주석),
+   * 화면만 봐서는 어느 탭에 불을 켜야 할지 알 수 없다. 그래서 눌린 탭을 따로 기억한다.
+   * 이게 없으면 파티를 눌러도 **영웅** 탭이 켜진다(실기기에서 발견).
+   */
+  const [lastTab, setLastTab] = useState<TabKey>('home');
+  /** 시설 화면에 들어갈 때 어느 건물을 눌렀는가 — 그 카드로 스크롤한다 */
+  const [facilityFocus, setFacilityFocus] = useState<FacilityKind | undefined>(undefined);
   const [detail, setDetail] = useState<HeroInstance | null>(null);
   /** 로스터 화면에서 지금 편성 중인 군(0=1군, 1=2군). 화면 전환과 무관하게 유지된다. */
   const [editingSquad, setEditingSquad] = useState(0);
@@ -49,6 +60,14 @@ export default function App() {
    * 무덤에 어디서 들어왔는가. 마을과 시설 화면 둘 다 무덤을 열 수 있어서
    * 돌아가기 대상이 진입 경로에 따라 달라져야 한다.
    * 엔딩(결과 화면)에서 들어오는 경우는 'base'로 둔다 — 그 런은 이미 끝났다.
+   */
+  /**
+   * 무덤에서 '돌아가기'로 갈 곳.
+   *
+   * STEP 30에서 시설 화면의 중복 부감 맵을 빼면서 `'facility'`로 설정되는 경로는
+   * 사라졌다(무덤은 이제 마을에서만 연다). 값과 아래 초기화는 남겨둔다 —
+   * 시설·다른 화면에서 무덤을 다시 열게 되면 즉시 필요해지는 방어선이고,
+   * 실제로 그 값이 남아 엔딩의 '돌아가기'가 튀었던 적이 있다.
    */
   const [graveFrom, setGraveFrom] = useState<'base' | 'facility'>('base');
 
@@ -138,9 +157,13 @@ export default function App() {
       // 마을의 '대장간' 건물은 무기창고(armory) 자리이고 실제 동작은 강화다.
       case 'armory': setScreen('smith'); break;
       case 'forge': setScreen('forge'); break;
-      // 여관·시설 — 시설 화면에서 레벨을 올린다.
+      /*
+        여관·시설 — 시설 화면에서 레벨을 올린다.
+        **어느 건물을 눌렀는지 함께 넘긴다.** 안 넘기면 숙소를 눌러도 카드 4개가
+        그냥 다 나와서 "쓸데없는 화면"이 된다(실기기에서 보고됨).
+      */
       case 'rest':
-      case 'training': setScreen('facility'); break;
+      case 'training': setFacilityFocus(spot); setScreen('facility'); break;
       /*
         탑 — 층 선택 화면으로. 예전엔 곧장 브리핑으로 갔지만, 기존 층 재도전(파밍)이
         들어오면서 "어느 층으로 들어갈지" 고르는 자리가 필요해졌다(TowerScreen).
@@ -180,6 +203,7 @@ export default function App() {
    * 별도 화면을 새로 만들면 같은 정보가 두 곳에 생겨 유지보수가 갈린다.
    */
   const goToTab = (tab: TabKey) => {
+    setLastTab(tab);
     switch (tab) {
       case 'home': setScreen('base'); break;
       case 'heroes':
@@ -206,9 +230,17 @@ export default function App() {
   const HUB_SCREENS = ['base', 'roster', 'summon', 'facility', 'shop', 'smith', 'forge'] as const;
   const showTabs = (HUB_SCREENS as readonly string[]).includes(screen);
 
-  /** 지금 화면이 어느 탭에 해당하는가 — 선택 표시가 실제 위치와 맞아야 한다 */
+  /**
+   * 지금 화면이 어느 탭에 해당하는가 — 선택 표시가 실제 위치와 맞아야 한다.
+   *
+   * `roster`만 `lastTab`을 본다. 세 탭(영웅·상태창·파티)이 같은 화면을 가리키므로
+   * "어느 탭으로 들어왔는가"가 화면에서 역산되지 않기 때문이다.
+   * 다만 마을 건물 클릭처럼 탭을 거치지 않고 온 경우 `lastTab`이 엉뚱할 수 있어,
+   * roster를 가리키는 탭일 때만 쓰고 아니면 `heroes`로 떨어뜨린다.
+   */
+  const ROSTER_TABS: readonly TabKey[] = ['heroes', 'status', 'party'];
   const activeTab: TabKey =
-    screen === 'roster' ? 'heroes'
+    screen === 'roster' ? (ROSTER_TABS.includes(lastTab) ? lastTab : 'heroes')
     : screen === 'summon' ? 'summon'
     : 'home';
 
@@ -303,10 +335,7 @@ export default function App() {
             wallet={wallet}
             onUpgrade={upgradeFacility}
             onBack={() => setScreen('base')}
-            deathCount={deathCount}
-            onOpenGrave={() => { setGraveFrom('facility'); setLegacy(loadLegacy()); setScreen('grave'); }}
-            onOpenSummon={() => setScreen('summon')}
-            onOpenShop={() => setScreen('shop')}
+            initialFocus={facilityFocus}
           />
         )}
         {screen === 'grave' && (
@@ -344,6 +373,7 @@ export default function App() {
             wallet={wallet}
             onEnhance={enhanceGear}
             onBack={() => setScreen('base')}
+            onOpenFacility={() => { setFacilityFocus('armory'); setScreen('facility'); }}
           />
         )}
         {screen === 'forge' && (
@@ -351,8 +381,10 @@ export default function App() {
             roster={roster}
             party={party}
             wallet={wallet}
+            forgeLevel={facilities.forge}
             onFuse={fuse}
             onPromote={promote}
+            onOpenFacility={() => { setFacilityFocus('forge'); setScreen('facility'); }}
           />
         )}
         {screen === 'summon' && (

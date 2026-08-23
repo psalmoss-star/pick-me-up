@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
+import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
@@ -21,8 +22,18 @@ export interface ForgeScreenProps {
   roster: HeroInstance[];
   party: HeroInstId[];
   wallet: Wallet;
+  /**
+   * 합성소 레벨 — 예상 경험치를 실제 획득량과 맞추는 데 쓴다.
+   *
+   * ⚠️ 예전에는 이 프롭이 없어 예상치가 `fuseEfficiency(1)`로 하드코딩돼 있었다.
+   * Lv.3에서 65%로 보여주고 실제로는 95%를 줘서 **표시와 결과가 갈렸고**,
+   * 시설 강화가 눈에 띄는 유일한 자리에서 효과가 없어 보였다(실기기에서 발견).
+   */
+  forgeLevel: number;
   onFuse: (targetId: HeroInstId, sacrificeId: HeroInstId) => FuseResult | FuseCheck;
   onPromote: (id: HeroInstId) => PromoteResult | PromoteCheck;
+  /** 합성소 시설 강화 카드로. 마을이 Lv.N을 약속하므로 여기서 닿아야 한다 */
+  onOpenFacility?: () => void;
 }
 
 /**
@@ -32,7 +43,7 @@ export interface ForgeScreenProps {
  * 그 사실을 화면이 숨기면 퍼머데스의 무게가 사라진다 (CLAUDE.md).
  */
 export function ForgeScreen({
-  roster, party, wallet, onFuse, onPromote,
+  roster, party, wallet, forgeLevel, onFuse, onPromote, onOpenFacility,
 }: ForgeScreenProps) {
   const [mode, setMode] = useState<Mode>('fuse');
   const [targetId, setTargetId] = useState<HeroInstId | null>(null);
@@ -102,7 +113,7 @@ export function ForgeScreen({
   };
 
   return (
-    <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>제단</span>
         <span>승급석 {wallet.promotionStones.toLocaleString()} · 각성석 {wallet.awakeningStones.toLocaleString()}</span>
@@ -153,7 +164,7 @@ export function ForgeScreen({
 
       {/* 예상 결과 */}
       {mode === 'fuse' && target && sacrifice && (() => {
-        const gain = Math.round(sacrificeValue(sacrifice, gameData.starScaling) * fuseEfficiency(1));
+        const gain = Math.round(sacrificeValue(sacrifice, gameData.starScaling) * fuseEfficiency(forgeLevel));
         const need = expToNext(target.star, target.level) - target.exp;
         const enough = gain >= need;
         return (
@@ -256,7 +267,16 @@ export function ForgeScreen({
         })}
       </div>
 
-      {/* 돌아갈 길은 App.tsx의 상시 탭 바('대기실')가 맡는다 */}
+      {/*
+        돌아갈 길은 App.tsx의 상시 탭 바('대기실')가 맡는다.
+        다만 **합성소 시설 강화**는 탭 바로 갈 수 없다 — 마을 부감도에는 이 건물에
+        Lv.N이 붙어 있는데 여기서는 그 레벨을 올릴 방법이 없었다(실기기에서 발견).
+      */}
+      {onOpenFacility && (
+        <div style={{ marginTop: 4, textAlign: 'center', minHeight: TOUCH_MIN }}>
+          <Button onClick={onOpenFacility}>시설 강화</Button>
+        </div>
+      )}
     </div>
   );
 }

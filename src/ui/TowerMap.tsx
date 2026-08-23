@@ -4,11 +4,26 @@ import { TOUCH_MIN } from './Button';
 import { MISSION_LABEL } from '../game/mission';
 import { FLOORS, FLOOR_SEGMENTS, segmentIndexOfFloor } from '../game/data/floors';
 
-type CellState = 'done' | 'now' | 'locked';
+export type CellState = 'done' | 'now' | 'locked';
 
-function stateOf(index: number, current: number, cleared: boolean): CellState {
+/**
+ * 층 한 칸의 상태.
+ *
+ * ⚠️ **잠김 판정의 기준은 `current`(=floorIndex)가 아니라 `maxFloorReached`다.**
+ * STEP 29 이전에는 `floorIndex` 하나가 "지금 위치"와 "최대 진행도"를 겸했으므로
+ * `index > current`로 잠글 수 있었다. 두 값이 갈린 지금 그렇게 하면
+ * **재도전으로 아래층을 고르는 순간 위층이 통째로 잠긴 것으로 바뀐다** —
+ * 2층까지 열어 두고 1층을 고르면 2층이 목록에서 사라졌다(실기기에서 발견).
+ *
+ * 'now'만 `current` 기준이다. 그래야 "지금 고른 층"이 계속 표시된다.
+ */
+export function stateOf(
+  index: number, current: number, cleared: boolean, maxFloorReached: number,
+): CellState {
+  if (index > maxFloorReached) return 'locked';
   // 정상 클리어 후에는 current가 마지막 층에 묶여 있어도 '현재'로 남으면 안 된다.
-  return cleared || index < current ? 'done' : index === current ? 'now' : 'locked';
+  if (cleared) return 'done';
+  return index === current ? 'now' : 'done';
 }
 
 function colorOf(state: CellState): string {
@@ -131,14 +146,14 @@ export function TowerMap({
       {FLOOR_SEGMENTS.map((seg, si) => {
         const open = si === openSeg;
         const floors = FLOORS.slice(seg.from - 1, seg.to);
-        const doneCount = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared) === 'done').length;
+        const doneCount = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared, maxFloorReached) === 'done').length;
         const hasCurrent = si === currentSeg && !cleared;
         const reached = doneCount > 0 || hasCurrent;
 
         // 펼쳤을 때 이름을 보여줄 층(도달했거나 현재) vs 아직 모르는 층.
         // 이름을 아는 층만 줄로 세우고 나머지는 격자로 눌러 담는다.
-        const known = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared) !== 'locked');
-        const lockedAhead = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared) === 'locked');
+        const known = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared, maxFloorReached) !== 'locked');
+        const lockedAhead = floors.filter((_, k) => stateOf(seg.from - 1 + k, current, !!cleared, maxFloorReached) === 'locked');
 
         return (
           <div key={seg.name + seg.from}>
@@ -184,7 +199,7 @@ export function TowerMap({
               >
                 {known.map((f) => {
                   const idx = FLOORS.indexOf(f);
-                  const state = stateOf(idx, current, !!cleared);
+                  const state = stateOf(idx, current, !!cleared, maxFloorReached);
                   // 해금된 층만 고를 수 있다 — 잠긴 층은 애초에 known에 안 들어오지만
                   // (§5-29의 상태 판정과 별개로) 상한을 다시 확인해 이중으로 막는다.
                   const selectable = !!onSelectFloor && idx <= maxFloorReached;
@@ -268,7 +283,7 @@ export function TowerMap({
               <FloorGrid
                 floors={floors}
                 size={compact ? 16 : 20}
-                cellState={(id) => stateOf(id - 1, current, !!cleared)}
+                cellState={(id) => stateOf(id - 1, current, !!cleared, maxFloorReached)}
               />
             )}
           </div>

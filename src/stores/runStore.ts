@@ -943,8 +943,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
       const r = fuseHeroes({
         /**
-         * 합성소 레벨. fuseEfficiency가 1~3으로 clamp하므로 미건설(0)은 Lv.1과 같은
-         * 0.65 전환율이 된다 — 시설 도입 전 밸런스가 하한으로 그대로 보존된다.
+         * 합성소 레벨. 전환율은 `data/facilities.ts`의 `FORGE_RATE`가 정한다 —
+         * 미건설(0)은 0.5, Lv.1부터 0.65로 시설 도입 전 밸런스를 잇는다.
          */
         target, sacrifice, facilityLevel: facilities.forge, scaling: gameData.starScaling,
       });

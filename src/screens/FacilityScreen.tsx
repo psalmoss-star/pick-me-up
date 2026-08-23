@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
-import { BaseMap } from '../ui/BaseMap';
+import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
@@ -18,16 +18,14 @@ export interface FacilityScreenProps {
   wallet: Wallet;
   onUpgrade: (kind: FacilityKind) => FacilityUpgradeResult;
   onBack: () => void;
-  /** 무덤으로. 부감 맵에서 무덤을 누르면 호출된다 */
-  onOpenGrave: () => void;
   /**
-   * 소환소·상점으로. 부감 맵은 이 화면에도 있으므로 여기서도 눌린다 —
-   * 대응 카드가 없다고 무시하면 '눌리지 않는 건물'이 되어 지도가 거짓말을 한다.
+   * 마을에서 어느 건물을 눌러 들어왔는가 — 그 카드로 스크롤하고 강조한다.
+   *
+   * ⚠️ 이게 없어서 숙소를 눌러도 **4개 카드가 그냥 다 나왔다.** 화면 안에 포커스
+   * 기계(`focus`/`cardRefs`)는 이미 있었는데 이 화면에 박혀 있던 두 번째 부감 맵으로만
+   * 구동돼서, 정작 마을에서 온 진입에는 죽어 있었다(실기기에서 발견).
    */
-  onOpenSummon: () => void;
-  onOpenShop: () => void;
-  /** 잃은 영웅 수 — 무덤에 비석이 몇 개 서는지 */
-  deathCount: number;
+  initialFocus?: FacilityKind;
 }
 
 const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
@@ -48,9 +46,9 @@ function effectText(kind: FacilityKind, level: number): string {
     }
     case 'forge': {
       // 수치는 반드시 progression의 함수에서 가져온다. 여기서 다시 계산하면
-      // 표시와 실제가 갈라진다. clamp 때문에 미건설도 Lv.1과 같은 전환율이다.
+      // 표시와 실제가 갈라진다.
       const pct = Math.round(fuseEfficiency(level) * 100);
-      return level === 0 ? `전환율 ${pct}% (기본)` : `전환율 ${pct}%`;
+      return `전환율 ${pct}%`;
     }
     case 'armory': {
       const pct = Math.round((armoryAtkMult(level) - 1) * 100);
@@ -72,23 +70,29 @@ function nextText(kind: FacilityKind, level: number): string | null {
  * 그래서 효과를 현재값과 다음값으로 나란히 보여준다 — 투자 판단이 화면에서 끝나야 한다.
  */
 export function FacilityScreen({
-  facilities, wallet, onUpgrade, onBack, onOpenGrave, onOpenSummon, onOpenShop, deathCount,
+  facilities, wallet, onUpgrade, onBack, initialFocus,
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
-   * 부감 맵에서 고른 시설. 해당 카드로 스크롤하고 강조만 한다.
+   * 마을에서 고른 시설. 해당 카드로 스크롤하고 강조만 한다.
    *
-   * 맵에서 바로 업그레이드하지 않는 이유: 업그레이드는 되돌릴 수 없는 금 소비라
-   * 효과·비용·다음 단계를 **보고 나서** 눌러야 한다. 맵은 '어디로 갈까'를 고르는 곳이고
+   * 여기서 바로 업그레이드하지 않는 이유: 업그레이드는 되돌릴 수 없는 금 소비라
+   * 효과·비용·다음 단계를 **보고 나서** 눌러야 한다. 마을은 '어디로 갈까'를 고르는 곳이고
    * 결정은 카드에서 한다.
    */
-  const [focus, setFocus] = useState<FacilityKind | null>(null);
+  const [focus] = useState<FacilityKind | null>(initialFocus ?? null);
   const cardRefs = useRef<Partial<Record<FacilityKind, HTMLDivElement | null>>>({});
 
-  const selectOnMap = (kind: FacilityKind) => {
-    setFocus(kind);
-    cardRefs.current[kind]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
+  /**
+   * 들어오자마자 고른 시설로 스크롤한다.
+   *
+   * 카드가 붙은 뒤여야 `scrollIntoView`가 먹으므로 effect에서 한다.
+   * `initialFocus`가 없으면(탭 등으로 들어온 경우) 맨 위 그대로 둔다.
+   */
+  useEffect(() => {
+    if (!initialFocus) return;
+    cardRefs.current[initialFocus]?.scrollIntoView({ block: 'center' });
+  }, [initialFocus]);
 
   /** 만렙이 아닌 시설이 남아 있는데 그중 무엇도 살 수 없는 상태인가 */
   const nothingAffordable = ORDER.some((k) => upgradeCost(facilities[k]) != null)
@@ -111,7 +115,7 @@ export function FacilityScreen({
   };
 
   return (
-    <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>시설</span>
         <span>금 {wallet.gold.toLocaleString()}</span>
@@ -120,26 +124,12 @@ export function FacilityScreen({
       <SectionLabel>대기실</SectionLabel>
 
       {/*
-        거점 부감 맵. 시설이 '항목'이 아니라 '장소'로 읽히게 하는 것이 목적이다.
-        정보는 아래 카드와 같지만, 레벨이 건물 높이·창·깃발로 보이므로
-        한눈에 "무엇이 덜 자랐나"가 잡힌다.
+        ⚠️ 여기에 부감 맵(`BaseMap`)을 두지 않는다.
+        이 화면은 **마을 부감도에서 건물을 눌러** 오는 곳이다. 방금 지도에서 고르고
+        들어왔는데 또 지도가 나오면 같은 선택을 두 번 시키는 셈이고,
+        그 두 번째 지도는 방금 무엇을 골랐는지도 기억하지 못했다
+        (실기기에서 "쓸데없는 화면들"로 보고됨).
       */}
-      <div style={{ marginBottom: 18 }}>
-        <BaseMap
-          facilities={facilities}
-          selected={focus}
-          deathCount={deathCount}
-          onSelect={(spot) => {
-            // 무덤은 시설이 아니다 — 강조·스크롤이 아니라 화면 전환이다.
-            if (spot === 'grave') { onOpenGrave(); return; }
-            // 소환소·상점도 시설이 아니다 — 각자 화면으로 바로 보낸다.
-            if (spot === 'summon') { onOpenSummon(); return; }
-            if (spot === 'shop') { onOpenShop(); return; }
-            selectOnMap(spot);
-          }}
-        />
-      </div>
-
       <div style={{ display: 'grid', gap: 12 }}>
         {ORDER.map((kind) => {
           const level = facilities[kind];

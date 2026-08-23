@@ -163,6 +163,20 @@ describe('합성', () => {
     expect(fuseEfficiency(3)).toBeLessThanOrEqual(1);
   });
 
+  /**
+   * 예전에 `Math.max(1, level)` clamp가 Lv.0을 Lv.1로 끌어올려 둘이 같은 65%였다.
+   * 300금짜리 Lv.1 강화가 효과 0인 함정 구매였다 — 실기기 확인에서 드러났다.
+   */
+  it('미건설(Lv.0)이 Lv.1보다 나쁘다 — 첫 강화가 헛돈이면 안 된다', () => {
+    expect(fuseEfficiency(0)).toBeLessThan(fuseEfficiency(1));
+  });
+
+  it('레벨이 오를 때마다 전환율이 실제로 오른다', () => {
+    for (let lv = 0; lv < 3; lv++) {
+      expect(fuseEfficiency(lv)).toBeLessThan(fuseEfficiency(lv + 1));
+    }
+  });
+
   it('합성으로도 등급 만렙을 넘지 못한다 — 승급 없이는 벽을 못 넘는다', () => {
     const target = hero(HERO.ashen, 1, 9);
     const r = fuse({ target, sacrifice: hero(HERO.bolt, 5, 80, 2), facilityLevel: 3, scaling: starScaling });

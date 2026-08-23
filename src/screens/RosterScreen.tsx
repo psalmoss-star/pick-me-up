@@ -1,5 +1,6 @@
 import { HeroCard } from '../ui/HeroCard';
 import { SystemPanel } from '../ui/SystemPanel';
+import { tabSafePadding } from '../ui/TabBar';
 import { TOUCH_MIN } from '../ui/Button';
 import { useViewport } from '../ui/useViewport';
 import { heroArtOf } from '../ui/artMap';
@@ -49,7 +50,7 @@ export function RosterScreen({
 
   return (
     // 하단 여백은 sticky 바 높이만큼 — 없으면 마지막 카드가 바 뒤에 가린다
-    <div style={{ padding: '14px 12px 78px' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 18 }}>
         <span>영웅</span>
         <span>생존 {alive.length} / {roster.length}</span>

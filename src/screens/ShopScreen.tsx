@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
+import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
@@ -60,7 +61,7 @@ export function ShopScreen({
   };
 
   return (
-    <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>상점</span>
         <span>금 {wallet.gold.toLocaleString()}</span>

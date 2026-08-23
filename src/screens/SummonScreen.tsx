@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
+import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
@@ -116,7 +117,7 @@ export function SummonScreen({
   const playing = phase === 'sigil' || phase === 'pillar' || phase === 'flash';
 
   return (
-    <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 18 }}>
         <span>소환</span>
         {/*

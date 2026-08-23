@@ -19,6 +19,25 @@ import { TOUCH_MIN } from './Button';
 
 export type TabKey = 'home' | 'heroes' | 'status' | 'summon' | 'party';
 
+/**
+ * 탭 바가 차지하는 높이(px). 안전 영역은 **포함하지 않는다** — 쓰는 쪽에서
+ * `env(safe-area-inset-bottom)`을 따로 더한다.
+ *
+ * ⚠️ **탭 바가 뜨는 화면은 하단 여백에 이 값을 반드시 더해야 한다.**
+ * 탭 바는 `position: sticky`라 문서 끝에 닿기 전까지 **내용 위에 겹친다.**
+ * 예전에는 화면들이 `calc(24px + env(...))`만 두어 마지막 줄 카드가 잘렸다
+ * (실기기 스크린샷에서 영웅 목록·합성소 카드 하단이 잘려 나왔다).
+ *
+ * 내역: 아이콘 20 + gap 3 + 라벨 ~12 + 표식 4 + 패딩 15 + 테두리 1 ≈ 55.
+ * 아이콘·라벨 크기를 바꾸면 이 값도 같이 고칠 것.
+ */
+export const TAB_BAR_H = 56;
+
+/** 탭 바가 뜨는 화면의 하단 여백. 화면 고유 여백을 인자로 받는다 */
+export function tabSafePadding(own = 24): string {
+  return `calc(${TAB_BAR_H + own}px + env(safe-area-inset-bottom))`;
+}
+
 export interface TabBarProps {
   onSelect: (tab: TabKey) => void;
   /** 지금 보고 있는 탭 — 대기실에서는 'home' */

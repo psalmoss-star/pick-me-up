@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
+import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
@@ -19,6 +20,8 @@ export interface SmithScreenProps {
   wallet: Wallet;
   onEnhance: (gearId: GearInstId) => EnhanceGearResult;
   onBack: () => void;
+  /** 무기창고 시설 강화 카드로. 마을이 Lv.N을 약속하므로 여기서 닿아야 한다 */
+  onOpenFacility?: () => void;
 }
 
 /**
@@ -28,7 +31,7 @@ export interface SmithScreenProps {
  * 퍼머데스가 이 게임의 유일한 상실이어야 하고, 강화까지 파괴를 넣으면
  * 상실이 흔해져서 영웅을 잃는 무게가 오히려 줄어든다 (data/gear.ts 주석).
  */
-export function SmithScreen({ gear, roster, wallet, onEnhance, onBack }: SmithScreenProps) {
+export function SmithScreen({ gear, roster, wallet, onEnhance, onBack, onOpenFacility }: SmithScreenProps) {
   const [selected, setSelected] = useState<GearInstId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -77,7 +80,7 @@ export function SmithScreen({ gear, roster, wallet, onEnhance, onBack }: SmithSc
   const maxed = target != null && cost == null;
 
   return (
-    <div style={{ padding: '14px 12px calc(24px + env(safe-area-inset-bottom))' }}>
+    <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.dim, letterSpacing: '.1em', borderBottom: `1px solid ${T.panelHi}`, paddingBottom: 10, marginBottom: 16 }}>
         <span>대장간</span>
         <span>금 {wallet.gold.toLocaleString()}</span>
@@ -191,8 +194,14 @@ export function SmithScreen({ gear, roster, wallet, onEnhance, onBack }: SmithSc
         </div>
       )}
 
-      <div style={{ marginTop: 20, textAlign: 'center', minHeight: TOUCH_MIN }}>
+      {/*
+        무기창고 건물에는 마을 부감도에 Lv.N이 붙어 있다 — 그런데 이 화면에는
+        강화 카드가 없어 **자기 건물로 들어오면 자기 레벨을 올릴 방법이 없었다.**
+        지도가 약속한 것을 화면이 지키게 한다.
+      */}
+      <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'center', minHeight: TOUCH_MIN }}>
         <Button onClick={onBack}>돌아가기</Button>
+        {onOpenFacility && <Button onClick={onOpenFacility}>시설 강화</Button>}
       </div>
     </div>
   );
