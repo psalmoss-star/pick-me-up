@@ -41,6 +41,11 @@ import {
 } from '../game/progression';
 import { displayName, displayTitle } from '../game/identity';
 import { mergeMaterials, rollFloorLoot } from '../game/loot';
+import {
+  adventureRng, dispatchedHeroIds, isComplete, resolveAdventure,
+  type AdventureOutcome,
+} from '../game/adventure';
+import { ADVENTURE_BY_ID, type AdventureId, type Dispatch } from '../game/data/adventures';
 import type {
   BannerKind, CodexEntry, GachaState, GearDefId, GearInstId, GearInstance, GearSlot,
   HeroDefId, HeroInstId, HeroInstance, MaterialBag, Star, Wallet,
@@ -202,6 +207,23 @@ export interface RunSlice {
    */
   materials: MaterialBag;
   /**
+   * 진행 중인 모험 파견.
+   *
+   * ⚠️ **영웅에 `away` 플래그를 박지 않는 이유**는 동기화 지점이 셋(세이브 마이그레이션 ·
+   * 사망 처리 · 새 런)으로 늘어나기 때문이다. 레코드로 두면 "명단에 있는데 로스터에 없다"를
+   * 정산 시점에 한 곳에서 걸러낼 수 있다.
+   *
+   * ⚠️ **파견은 등반을 절대 막지 않는다.** 잠금 교착(`isSquadLocked` 주석)과 같은 모양의
+   * 위험이다 — 해제가 다른 행동의 성공에 의존하면 "영웅이 묶였는데 풀 방법이 없는" 상태가
+   * 생긴다. 그래서 `recallDispatch`는 **무조건** 성공한다.
+   */
+  dispatches: Dispatch[];
+  /**
+   * 직전 층 돌파에서 정산된 모험 결과. 화면 표시용이며 저장하지 않는다.
+   * (`questGrants`와 같은 성격 — 다음 전투가 시작되면 의미가 없다)
+   */
+  adventureOutcomes: AdventureOutcome[];
+  /**
    * 이번 전투에 들려 보낸 개수.
    *
    * 개입으로 재시뮬레이션할 때 같은 값을 넘겨야 재현성이 유지된다 —
@@ -309,6 +331,20 @@ export interface RunActions {
   /** 포션 구매 */
   buyPotion: (count?: number) => BuyPotionResult;
   /**
+   * 모험 파견. 실패(해금 전/인원 불일치/이미 나간 영웅/사망자)는 예외가 아니라
+   * 결과로 돌아온다 — summon()/fuse()와 같은 원칙이며 실패 시 상태는 그대로다.
+   */
+  dispatchAdventure: (advId: AdventureId, heroIds: HeroInstId[]) => DispatchResult;
+  /**
+   * 조기 복귀 — 보상을 포기하고 즉시 데려온다.
+   *
+   * ⚠️ **어떤 조건도 붙이면 안 된다.** 이것이 교착 방지의 유일한 탈출구다.
+   * 금도 받지 않고, 완료 여부도 보지 않고, 파티가 비었는지도 묻지 않는다.
+   * 조건이 하나라도 붙는 순간 "영웅이 묶였는데 풀 방법이 없는" 상태가 가능해진다
+   * (`isSquadLocked` 주석의 잠금 교착과 같은 모양이다).
+   */
+  recallDispatch: (index: number) => void;
+  /**
    * 저장된 런을 불러와 상태에 얹는다.
    * 전투 중 상태는 받지 않는다 — 복원 시점은 항상 대기실이다.
    */
@@ -349,6 +385,13 @@ export type RestResult =
   | { ok: true; healed: number; heroes: number; spent: number }
   | { ok: false; reason: 'not-enough-gold' | 'already-full'; cost?: number };
 
+export type DispatchResult =
+  | { ok: true; dispatch: Dispatch }
+  | {
+    ok: false;
+    reason: 'unknown-adventure' | 'locked' | 'wrong-party-size' | 'already-away' | 'dead-hero';
+  };
+
 /**
  * 시작 재화.
  *
@@ -385,6 +428,8 @@ function freshSlice(): RunSlice {
     battleCount: 0,
     potions: 0,
     materials: {},
+    dispatches: [],
+    adventureOutcomes: [],
     carriedPotions: 0,
     claimedQuests: [],
     questGrants: [],
@@ -692,6 +737,43 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       const idleExp = cleared ? idleExpGain(get().facilities.training) : 0;
 
       /**
+       * 모험 정산.
+       *
+       * ⚠️ **`battleCount`가 아직 증가하기 전이라 여기서는 이번 전투를 세지 않는다.**
+       * 아래 set()에서 `battleCount + 1`이 되므로, 완료 판정도 그 값을 써야
+       * "5전투짜리 모험이 5번째 전투 직후에 끝난다"가 성립한다.
+       *
+       * 정산 대상은 **로스터에 남아 있는 인원만**이다. 명단에 있지만 사라진 영웅은
+       * 걸러진다 — 파견 상태를 영웅 플래그가 아니라 레코드로 둔 이유가 이것이다.
+       *
+       * 승패와 무관하게 정산한다. 모험은 탑 밖의 일이라 이번 층을 졌다고
+       * 돌아오던 사람이 안 돌아올 이유가 없다.
+       */
+      const nextBattleCount = get().battleCount + 1;
+      const settled = get().dispatches.filter((d) => isComplete(d, nextBattleCount));
+      const stillAway = get().dispatches.filter((d) => !isComplete(d, nextBattleCount));
+      const outcomes = settled.map((d) => resolveAdventure({
+        dispatch: d,
+        heroes: get().roster.filter((h) => !h.isDead && d.heroIds.includes(h.instId)),
+        rng: adventureRng(get().seed, d.advId, d.startedAtBattle),
+      }));
+
+      /** 정산으로 exp를 받을 영웅 → 받을 양 */
+      const advExp = new Map<string, number>();
+      /** 정산으로 다칠 영웅 → 잃을 최대 HP 비율 */
+      const advInjury = new Map<string, number>();
+      for (const o of outcomes) {
+        for (const id of o.heroIds) {
+          if (o.expEach > 0) advExp.set(id, (advExp.get(id) ?? 0) + o.expEach);
+          if (o.injuryRatio > 0) advInjury.set(id, Math.max(advInjury.get(id) ?? 0, o.injuryRatio));
+        }
+      }
+      const advMaterials = outcomes.reduce<MaterialBag>((bag, o) => mergeMaterials(bag, o.materials), {});
+      const advStones = outcomes.reduce((n, o) => n + o.awakeningStones, 0);
+      /** 이번 전투 시점에 아직 나가 있던 인원 — 훈련소 유휴 exp에서 제외한다 */
+      const awayNow = dispatchedHeroIds(get().dispatches);
+
+      /**
        * 과제 판정.
        *
        * 전투를 다시 돌리지 않고 이미 나온 기록만 다시 읽는다 → 개입해도 판정이 안 바뀐다.
@@ -750,12 +832,36 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
               const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
               next = { ...next, currentHp: Math.min(max, hp + Math.round(max * healRate)) };
             }
-          } else if (idleExp > 0 && !h.isDead) {
+          } else if (idleExp > 0 && !h.isDead && !awayNow.has(h.instId)) {
             /**
              * 훈련소 — 전투에 나가지 않은 영웅만 받는다.
              * 참전 영웅과 경쟁시키면 "안 내보내는 게 이득"이 되어 퍼머데스의 긴장이 사라진다.
+             *
+             * ⚠️ **파견 중인 영웅은 제외한다(`awayNow`).** 유휴 exp와 모험 exp를 둘 다 받으면
+             * 파견이 순이득이 되어 같은 함정에 정면으로 걸린다 — 대기실에 두는 것보다
+             * 항상 나으므로 "일단 다 내보내기"가 유일한 최적해가 된다.
              */
             next = gainExp(next, idleExp, gameData.starScaling).hero;
+          }
+
+          /**
+           * 모험 정산 — 참전·유휴와 **별개로** 얹는다.
+           *
+           * 파견 인원은 이번 전투에 나가지 않았으므로 위 `fought` 분기에 안 걸리고,
+           * `awayNow`에 걸려 유휴 exp도 못 받았다. 여기서만 받는다.
+           */
+          if (!h.isDead) {
+            const gained = advExp.get(h.instId);
+            if (gained) next = gainExp(next, gained, gameData.starScaling).hero;
+
+            const ratio = advInjury.get(h.instId);
+            if (ratio) {
+              const max = statsOfInstance(next, gameData.heroes[next.defId], gameData.starScaling).hp;
+              // ⚠️ currentHp === 0은 "만피"라는 뜻이지 빈사가 아니다(freshHero 주석)
+              const cur = next.currentHp === 0 ? max : next.currentHp;
+              // 최소 1은 남긴다 — 모험에서는 죽지 않는다(사용자 결정)
+              next = { ...next, currentHp: Math.max(1, cur - Math.round(max * ratio)) };
+            }
           }
 
           // 사망 표시는 참전 여부와 무관하게 casualties만 보고 판단한다 —
@@ -788,7 +894,10 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 들고 나간 수를 그냥 빼면 안 쓰고 이긴 전투에서도 사라진다.
          */
         potions: Math.max(0, s.potions - potionsUsed) + questPotions,
-        materials: mergeMaterials(s.materials, droppedMaterials),
+        materials: mergeMaterials(mergeMaterials(s.materials, droppedMaterials), advMaterials),
+        // 완료된 파견은 명단에서 빠진다 — 남겨두면 영영 나가 있는 유령이 된다
+        dispatches: stillAway,
+        adventureOutcomes: outcomes,
         carriedPotions: 0,
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
@@ -799,6 +908,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           gold: s.wallet.gold + scaledGold + questGold,
           promotionStones:
             s.wallet.promotionStones + scaledStones + questStones,
+          /**
+           * ⚠️ **모험이 각성석의 유일한 공급원이다.**
+           * 여기 말고 다른 경로를 열면 ★5의 희소성이 사라진다
+           * (`data/adventures.ts`의 `awakeningChance` 주석 참조).
+           */
+          awakeningStones: s.wallet.awakeningStones + advStones,
         },
         /**
          * ⚠️ 클리어했을 때만 올린다. 져도 올리면 "실패로 보상을 깎는"
@@ -1206,6 +1321,38 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       return { ok: true, count: n, spent: cost };
     },
 
+    dispatchAdventure: (advId, heroIds) => {
+      const s = get();
+      const def = ADVENTURE_BY_ID[advId];
+      if (!def) return { ok: false, reason: 'unknown-adventure' };
+      if (def.unlockFloor > FLOORS[s.maxFloorReached].id) return { ok: false, reason: 'locked' };
+
+      const ids = [...new Set(heroIds)];
+      if (ids.length !== def.partySize) return { ok: false, reason: 'wrong-party-size' };
+
+      const away = dispatchedHeroIds(s.dispatches);
+      if (ids.some((id) => away.has(id))) return { ok: false, reason: 'already-away' };
+
+      // 죽은 영웅은 못 보낸다. 로스터에 없는 id도 마찬가지 — 유령 파견이 되면
+      // 정산 때 주인 없는 보상이 나온다
+      const alive = new Set(livingHeroes(s.roster).map((h) => h.instId));
+      if (ids.some((id) => !alive.has(id))) return { ok: false, reason: 'dead-hero' };
+
+      const dispatch: Dispatch = { advId, heroIds: ids, startedAtBattle: s.battleCount };
+      set((cur) => ({ dispatches: [...cur.dispatches, dispatch] }));
+      saveRun(get());
+      return { ok: true, dispatch };
+    },
+
+    /**
+     * ⚠️ **무조건 성공한다.** 조건을 붙이지 말 것 — 위 인터페이스 주석 참조.
+     * 범위 밖 index도 조용히 무시한다(던지면 화면이 죽고, 그것도 일종의 교착이다).
+     */
+    recallDispatch: (index) => {
+      set((s) => ({ dispatches: s.dispatches.filter((_, i) => i !== index) }));
+      saveRun(get());
+    },
+
     markLegendarySeen: () => {
       if (get().seenFirstLegendary) return;
       set({ seenFirstLegendary: true });
@@ -1247,6 +1394,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         battleCount: saved.battleCount,
         potions: saved.potions,
         materials: saved.materials,
+        dispatches: saved.dispatches,
         claimedQuests: saved.claimedQuests,
         seenFirstLegendary: saved.seenFirstLegendary,
         towerCleared: saved.towerCleared,

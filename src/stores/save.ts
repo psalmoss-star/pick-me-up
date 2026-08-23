@@ -23,6 +23,7 @@ import { SQUAD_COUNT } from '../game/data/party';
 import { questById, type QuestId } from '../game/data/quests';
 import { initialGachaState } from '../game/gacha';
 import { MATERIAL_DEFS } from '../game/data/materials';
+import { ADVENTURE_BY_ID, type AdventureId, type Dispatch } from '../game/data/adventures';
 import type {
   GearDefId, GearInstId, GearInstance, GearSlot, HeroInstId, HeroInstance,
   MaterialBag, MaterialId,
@@ -44,7 +45,7 @@ export type SavedRun = Pick<
   'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'squads' | 'lockedSquad'
   | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
-  | 'materials'
+  | 'materials' | 'dispatches'
 >;
 
 interface SaveFile {
@@ -79,6 +80,13 @@ export function serialize(s: RunSlice): string {
       potions: s.potions,
       claimedQuests: s.claimedQuests,
       materials: s.materials,
+      /**
+       * ⚠️ **파견은 반드시 저장된다.** 저장하지 않으면 새로고침으로 영웅이
+       * 즉시 돌아오고, 그건 곧 "기다림 없이 보상"이라 모험이 성립하지 않는다.
+       * 진행도는 `startedAtBattle`에 들어 있고 `battleCount`도 저장되므로
+       * 남은 전투 수가 그대로 복원된다.
+       */
+      dispatches: s.dispatches,
     },
   };
   return JSON.stringify(file);
@@ -317,6 +325,33 @@ export function deserialize(raw: string): SavedRun | null {
   }
 
   /*
+    모험 파견은 STEP 37에서 추가됐다. 없는 세이브는 빈 목록으로 읽는다.
+
+    ⚠️ **정의에 없는 모험은 버린다.** 모험을 빼거나 이름을 바꿨을 때 유령 레코드가
+    남으면 그 영웅이 영영 나가 있는 상태가 되고, 화면에 목록이 안 뜨니 복귀시킬
+    방법도 없다 — 곧 교착이다(`isSquadLocked` 주석의 잠금 교착과 같은 모양).
+
+    `startedAtBattle`이 미래이거나 음수인 세이브(손으로 고친 것)는 0으로 눕힌다.
+    미래면 `battlesRemaining`이 영원히 안 줄어든다.
+  */
+  const rawDispatches = Array.isArray(r.dispatches) ? r.dispatches : [];
+  const dispatches: Dispatch[] = [];
+  for (const d of rawDispatches) {
+    const o = asObject(d);
+    if (!o) continue;
+    const advId = o.advId;
+    if (typeof advId !== 'string' || !ADVENTURE_BY_ID[advId as AdventureId]) continue;
+    const heroIds = Array.isArray(o.heroIds)
+      ? o.heroIds.filter((id): id is HeroInstId => typeof id === 'string')
+      : [];
+    if (heroIds.length === 0) continue; // 인원 없는 파견은 의미가 없다
+    const started = typeof o.startedAtBattle === 'number' && Number.isFinite(o.startedAtBattle)
+      ? Math.max(0, Math.min(battleCount, Math.floor(o.startedAtBattle)))
+      : 0;
+    dispatches.push({ advId: advId as AdventureId, heroIds, startedAtBattle: started });
+  }
+
+  /*
     달성 과제는 STEP 8에서 추가됐다. 없는 세이브는 미달성으로 읽는다.
 
     정의에 없는 id는 버린다 — 과제를 빼거나 이름을 바꿨을 때 유령 id가 남으면
@@ -336,7 +371,7 @@ export function deserialize(raw: string): SavedRun | null {
     {
       floorIndex, maxFloorReached, revisits, roster: fixedRoster, squads, lockedSquad,
       deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
-      gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials,
+      gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials, dispatches,
     },
     version,
   );

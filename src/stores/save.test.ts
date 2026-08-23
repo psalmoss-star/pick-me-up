@@ -40,6 +40,8 @@ const sample = (): RunSlice => {
     battleCount: 0,
     potions: 0,
     materials: {},
+    dispatches: [],
+    adventureOutcomes: [],
     carriedPotions: 0,
     claimedQuests: [],
     questGrants: [],
