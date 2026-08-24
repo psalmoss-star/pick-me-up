@@ -56,7 +56,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 761개 통과)
+npm test           # Vitest 1회 실행 (현재 794개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -110,6 +110,7 @@ src/
 │  ├─ quest.ts       # 층 돌파 과제 — 전투 기록 재판정 (전투를 다시 돌리지 않는다)
 │  ├─ loot.ts       # 층 전리품 — 회수→장비→재료. **소비 순서의 단일 출처**
 │  ├─ adventure.ts  # 모험 파견 판정 — 사망 없음(부상만). 각성석의 유일한 공급원
+│  ├─ craft.ts     # 제작 — 재료→유물. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
