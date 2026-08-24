@@ -32,6 +32,7 @@ import {
   equip as equipGearPure, unequip as unequipGearPure, enhance as enhanceGearPure,
   makeGear,
 } from '../game/gear';
+import { craft as craftPure, spendMaterials, type CraftResult } from '../game/craft';
 import { evaluateQuests, questContext, questRng, type QuestGrant } from '../game/quest';
 import type { QuestId } from '../game/data/quests';
 import { BANNERS, initialGachaState, pull, registerCodex, type PullResult } from '../game/gacha';
@@ -328,6 +329,11 @@ export interface RunActions {
   unequipGear: (heroId: HeroInstId, slot: GearSlot) => void;
   /** 장비 강화. 실패해도 파괴되지 않고 금만 잃는다. */
   enhanceGear: (gearId: GearInstId) => EnhanceGearResult;
+  /**
+   * 제작 — 재료를 유물로 바꾼다. **확률이 없다**(`game/craft.ts` 주석 참조):
+   * 성공하면 반드시 나오고, 조건이 안 되면 아무것도 소모되지 않는다.
+   */
+  craftGear: (defId: GearDefId) => CraftResult;
   /** 포션 구매 */
   buyPotion: (count?: number) => BuyPotionResult;
   /**
@@ -1323,6 +1329,36 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       // 실패해도 금은 나갔다 — 되돌릴 수 없으므로 즉시 저장한다.
       saveRun(get());
       return { ok: true, success: r.success, enhance: r.gear.enhance, spent: r.spent };
+    },
+
+    craftGear: (defId) => {
+      const { materials, wallet, maxFloorReached, gearSeq } = get();
+      const seq = gearSeq + 1;
+
+      /*
+        해금 판정은 **도달한 최고 층**이다 — 지금 고른 층이 아니다.
+        층 선택으로 저층에 내려가 있어도 이미 연 레시피가 닫히면 안 된다
+        (revisit이 같은 이유로 maxFloorReached를 본다).
+      */
+      const r = craftPure({
+        gearDefId: defId,
+        have: materials,
+        gold: wallet.gold,
+        highestFloor: FLOORS[maxFloorReached].id,
+        seq,
+      });
+      // 조건 미달이면 아무것도 소모되지 않는다. 실패는 예외가 아니라 결과다.
+      if (!r.ok) return r;
+
+      set((s) => ({
+        gear: [...s.gear, r.gear],
+        gearSeq: seq,
+        materials: spendMaterials(s.materials, r.spentMaterials),
+        wallet: { ...s.wallet, gold: s.wallet.gold - r.spentGold },
+      }));
+      // 재화를 쓴 결과이므로 즉시 저장한다 (buyGear()와 같은 원칙).
+      saveRun(get());
+      return r;
     },
 
     buyPotion: (count = 1) => {
