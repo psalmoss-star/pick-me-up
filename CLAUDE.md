@@ -48,7 +48,13 @@
 - 등급과 캐릭터 유형은 **독립**이다. ★5 카일도, ★1 이스카도 나올 수 있다.
 - 합성 UI에서 **"제물"이라는 단어를 그대로 쓴다.** 순화하지 말 것.
 - 승급은 레벨을 1로 리셋한다 → 승급 직후는 이전보다 약하다. 이건 버그가 아니라 설계다.
+  **소환 시작 레벨(`summonLevel`)을 승급에 적용하지 말 것** — 그 대가가 사라진다.
 - MVP와 사망자는 **같은 결과 화면에** 표시한다. 기쁨과 상실을 분리하면 퍼머데스의 무게가 사라진다.
+  도감의 `잃음`도 같은 이유로 `만남` 옆에 둔다.
+- **즐겨찾기(favorite)는 밸런스에도 정렬에도 넣지 않는다.** 표식이 취향이 아니라
+  최적화가 되기 때문이다. 하는 일은 제물 확인 창 한 단계와 **필터**뿐이다.
+- **`STREAM` 번호는 재배치·재사용 금지, 신규는 반드시 뒤에 추가.** 바꾸면 기존 개체의
+  잠재치·초상·서사가 전부 달라지고 무덤 기록이 거짓이 된다.
 
 ---
 
@@ -56,7 +62,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 794개 통과)
+npm test           # Vitest 1회 실행 (현재 826개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -64,9 +70,14 @@ npm run typecheck
 
 ```bash
 npx tsx climb-check.mts   # 연속 등반 — 층간 HP·숙소 레벨별 도달 층 + 구간별 완주율
+npx tsx scripts/fresh-check.mts         # 갓 뽑은 개체 — 등급×레벨 저층 승률
 npx tsx scripts/floor-tune.mts          # 생성 층(21~100) 승률 점검
 npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
 ```
+
+⚠️ **소환 시작 레벨(`summonLevel`)·성장 곡선을 만졌으면 `fresh-check`를 돌릴 것.**
+`sim`과 `climb-check`는 **자체 기준 파티(★2 Lv.15~★4 Lv.50)만** 쓰므로 이 축을
+구조적으로 못 본다 — 두 표가 안 움직이는 것이 정상이다(§STEP 33·39).
 
 ⚠️ **적 수치·깊이 배수·기준 파티를 만졌으면 `floor-tune`을 다시 돌릴 것.**
 `floorVariants.ts`는 실측으로 고른 변형 번호 표라서, 입력이 바뀌면 조용히 낡는다
@@ -112,6 +123,8 @@ src/
 │  ├─ adventure.ts  # 모험 파견 판정 — 사망 없음(부상만). 각성석의 유일한 공급원
 │  ├─ craft.ts     # 제작 — 재료→유물. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
+│  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
+│  ├─ rosterSort.ts  # 목록 정렬 — 화면마다 따로 쓰지 말 것. favorite은 정렬 키가 아니다
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
 │  ├─ reveal.ts        # 발굴 — 잠재치 구간 추정, 전투로 진행도 상승
@@ -138,6 +151,7 @@ src/
 │     ├─ materials.ts # 제작 재료 3종 — 금으로 살 수 없다(주석에 이유)
 │     ├─ adventures.ts # 모험 3종. exp는 **정액**이어야 한다(1층 참전 exp가 상한)
 │     ├─ names.ts     # 개체 이름 어휘 (이름 66 × 수식어 44 + 이명 26)
+│     ├─ origins.ts   # 생전 서사 어휘 — 등급별 지위 12 × 최후 38. **순서를 바꾸면 재배치된다**
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처
@@ -161,6 +175,7 @@ src/
 │                     # / SummonScreen / ForgeScreen / FacilityScreen
 │                     # / ShopScreen / SmithScreen / DetailModal / TowerScreen
 │                     # / AdventureScreen (모험 파견 — 마을 '모험 관문')
+│                     # / GraveScreen (무덤 — '기록/도감' 두 탭) + CodexPanel(도감)
 │                     # 하단 탭 3개는 각자 화면이다 (STEP 32에서 갈랐다):
 │                     # / HeroesScreen(목록) / StatusScreen(판독) / PartyScreen(편성)
 ├─ reference/
