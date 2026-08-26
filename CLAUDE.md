@@ -62,7 +62,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 826개 통과)
+npm test           # Vitest 1회 실행 (현재 830개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -145,12 +145,12 @@ src/
 │     ├─ potential.ts # 잠재치/발굴 튜닝 상수 단일 출처
 │     ├─ facilities.ts # 시설 4종 튜닝 (회복률·공격력·유휴 exp·비용)
 │     ├─ gear.ts      # 장비 도감 12종 + 튜닝 (회수율·강화·드롭)
-│     ├─ quests.ts    # 과제 13종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
+│     ├─ quests.ts    # 과제 18종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
 │     ├─ party.ts     # 파티 정원 규칙 — 층 구간별 정원, 2군 개방 조건. 상수가 아니라 함수다
 │     ├─ revisit.ts   # 기존 층 재도전 — 재도전 횟수별 보상 체감
 │     ├─ materials.ts # 제작 재료 3종 — 금으로 살 수 없다(주석에 이유)
 │     ├─ adventures.ts # 모험 3종. exp는 **정액**이어야 한다(1층 참전 exp가 상한)
-│     ├─ names.ts     # 개체 이름 어휘 (이름 66 × 수식어 44 + 이명 26)
+│     ├─ names.ts     # 개체 이름 어휘 (이름 65 × 수식어 49 + 이명 26)
 │     ├─ origins.ts   # 생전 서사 어휘 — 등급별 지위 12 × 최후 38. **순서를 바꾸면 재배치된다**
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
