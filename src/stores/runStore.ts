@@ -432,6 +432,63 @@ function registerInitialCodex(
   return codex;
 }
 
+/**
+ * 무덤 도감 + 런 도감 병합.
+ *
+ * ⚠️ **`{ ...legacy, ...run }`로 덮으면 안 된다** — 실측으로 잡힌 버그다(2026-08-26).
+ * 런 도감은 **상실을 기록하지 않는다**(`recordLoss`는 무덤에만 쓴다).
+ * 그래서 런 값으로 통째로 덮으면 누적된 `timesLost`가 0으로 되돌아간다.
+ * 새로고침이 끼면 런 도감이 0인 채로 복원되므로 실제로 이 경로를 탄다 —
+ * 같은 종류를 두 번 잃어도 도감에는 1로 남았다.
+ *
+ * **필드마다 정본이 다르다.** 획득 수·최고 등급은 런이 최신이고(소환이 런에서 일어난다),
+ * 상실 수는 무덤이 최신이다. 그래서 항목별로 더 큰 쪽을 남긴다.
+ * 최초 획득 시각만 반대로 **이른 쪽**을 남긴다.
+ */
+function mergeCodex(
+  legacy: Record<HeroDefId, CodexEntry>,
+  run: Record<HeroDefId, CodexEntry>,
+): Record<HeroDefId, CodexEntry> {
+  const out = { ...legacy };
+  for (const [id, e] of Object.entries(run) as [HeroDefId, CodexEntry][]) {
+    const prev = out[id];
+    out[id] = prev
+      ? {
+        ...e,
+        timesAcquired: Math.max(prev.timesAcquired, e.timesAcquired),
+        timesLost: Math.max(prev.timesLost, e.timesLost),
+        highestStarReached: Math.max(prev.highestStarReached, e.highestStarReached) as Star,
+        firstAcquiredAt: Math.min(prev.firstAcquiredAt, e.firstAcquiredAt),
+      }
+      : e;
+  }
+  return out;
+}
+
+/**
+ * 저장된 도감에 **빠진 종류만** 채운다.
+ *
+ * 기존 세이브는 도감이 비어 있거나 소환분만 갖고 있다(시작 로스터가 빠져 있다).
+ * 그대로 로드하면 도감이 "기록 0 / 12"로 뜬다 — 실제로 6명을 데리고 있는데도.
+ *
+ * ⚠️ **이미 있는 항목은 절대 다시 등록하지 않는다.** `registerCodex`는
+ * `timesAcquired`를 올리므로, 새로고침할 때마다 돌면 획득 수가 계속 부풀려진다.
+ * 세이브를 고쳐 쓰지 않고 **읽는 시점에만 메우는** 이유도 같다 —
+ * 마이그레이션으로 처리하면 `SAVE_VERSION`을 올려야 하는데,
+ * 이건 파생 가능한 값이라 스키마를 건드릴 일이 아니다.
+ */
+function backfillCodex(
+  saved: Record<HeroDefId, CodexEntry>,
+  roster: readonly HeroInstance[],
+): Record<HeroDefId, CodexEntry> {
+  let codex = saved;
+  for (const h of roster) {
+    if (codex[h.defId]) continue;
+    codex = registerCodex(codex, h, 0);
+  }
+  return codex;
+}
+
 function freshSlice(): RunSlice {
   const roster = initialRoster();
   return {
@@ -1058,7 +1115,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 합성 제물은 여기 오지 않는다 — casualties는 전투 사망자만 담는다.
          * 제물은 죽음이 아니라 흡수이므로 상실로 세지 않는다(identity.ts와 같은 판단).
          */
-        let nextCodex = { ...legacy.codex, ...after.codex };
+        let nextCodex = mergeCodex(legacy.codex, after.codex);
         for (const f of newlyFallen) nextCodex = recordLoss(nextCodex, f.defId);
 
         saveLegacy({
@@ -1176,7 +1233,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        * 그대로 덮어쓰면 이전 회차들이 쌓아온 영구 도감이 통째로 사라진다.
        */
       const lg = loadLegacy();
-      saveLegacy({ ...lg, codex: { ...lg.codex, ...get().codex } });
+      // 병합 규칙은 mergeCodex 하나가 갖는다 — 덮어쓰면 timesLost가 0으로 돌아간다
+      saveLegacy({ ...lg, codex: mergeCodex(lg.codex, get().codex) });
 
       // 소환은 되돌릴 수 없다 — 뽑는 즉시 저장한다.
       saveRun(get());
@@ -1479,7 +1537,19 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         deathCount: saved.deathCount,
         wallet: saved.wallet,
         gacha: saved.gacha,
-        codex: saved.codex,
+        /**
+         * 로스터를 도감에 메운다 — **기존 세이브 때문이다.**
+         *
+         * `registerInitialCodex`는 `freshSlice()`에서만 도므로 새 런에만 적용된다.
+         * 이 필드 이전에 만들어진 세이브는 도감이 비어 있고, 로드하면 그대로
+         * 복원되어 **화면에 "기록 0 / 12"에 전부 ???** 가 뜬다(폰에서 실측).
+         * §5-38("시작값을 바꿔도 이미 세이브가 있으면 화면은 그대로다")이다.
+         *
+         * `registerCodex`는 이미 있는 항목의 `timesAcquired`를 올리므로
+         * **저장된 도감을 먼저 깔고 그 위에 로스터를 덮으면 수치가 부풀려진다.**
+         * 그래서 이미 있는 defId는 건드리지 않고 **빠진 것만** 채운다.
+         */
+        codex: backfillCodex(saved.codex, saved.roster),
         facilities: saved.facilities,
         gear: saved.gear,
         gearSeq: saved.gearSeq,

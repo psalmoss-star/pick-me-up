@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRunStore } from './runStore';
 import { loadLegacy } from './legacy';
+import { loadRun } from './save';
 import { gameData } from '../game/data';
 import type { HeroInstId } from '../game/types';
 
@@ -118,6 +119,70 @@ describe('도감 — 상실', () => {
     expect(lg.codex[victim.defId].timesLost).toBe(1);
   });
 
+  it('같은 종류를 두 번 잃으면 2가 된다 (새로고침이 끼어도)', () => {
+    /*
+      ⚠️ 폰 실측에서 잡힌 버그다. 도감은 **종류**의 집계이므로 같은 defId를
+      두 번 잃으면 2여야 하는데 1로 남았다.
+
+      원인: `{ ...legacy.codex, ...run.codex }`가 런 도감으로 무덤을 덮었다.
+      런 도감은 상실을 기록하지 않으므로(무덤만 한다), 새로고침으로 런 도감이
+      0인 채 복원되면 누적된 timesLost가 통째로 0으로 되돌아갔다.
+    */
+    const s = store();
+    const a = s.getState().roster[0];
+    // 같은 종류의 두 번째 개체
+    const clone = { ...a, instId: `${a.instId}-c` as any, name: '복제된 자' };
+    s.setState({ roster: [...s.getState().roster, clone] });
+
+    const kill = (instId: string) => {
+      s.setState({
+        snapshot: s.getState().roster,
+        result: {
+          outcome: 'defeat', events: [], survivors: [], casualties: [instId],
+          turnsElapsed: 3, roster: s.getState().roster, mvp: null,
+        } as any,
+      });
+      s.getState().finish();
+    };
+
+    kill(a.instId);
+    expect(loadLegacy().codex[a.defId].timesLost).toBe(1);
+
+    // 새로고침 — 런 도감은 상실을 모른 채 복원된다
+    const saved = loadRun();
+    if (saved) s.getState().hydrate(saved);
+
+    kill(clone.instId);
+    expect(loadLegacy().codex[a.defId].timesLost).toBe(2);
+  });
+
+  it('다음 전투를 치러도 이전 상실 기록이 남는다', () => {
+    /*
+      ⚠️ 폰 실측에서 잡힌 버그다. 무덤 명부에는 죽은 영웅이 있는데
+      도감은 `잃음 0`이었다.
+
+      원인: `{ ...legacy.codex, ...after.codex }`가 **런 도감으로 무덤 도감을
+      덮어썼다.** 런 도감은 상실을 기록하지 않으므로(무덤만 한다),
+      전투가 끝날 때마다 누적된 timesLost가 런의 값(0)으로 되돌아갔다.
+    */
+    const s = store();
+    const victim = killFirstPartyMember(s);
+    expect(loadLegacy().codex[victim.defId].timesLost).toBe(1);
+
+    // 아무도 안 죽는 두 번째 전투
+    s.setState({
+      snapshot: s.getState().roster,
+      result: {
+        outcome: 'victory', events: [], survivors: [], casualties: [],
+        turnsElapsed: 3, roster: s.getState().roster, mvp: null,
+      } as any,
+    });
+    s.getState().finish();
+
+    // 첫 전투의 상실이 살아 있어야 한다
+    expect(loadLegacy().codex[victim.defId].timesLost).toBe(1);
+  });
+
   it('사망자가 없으면 상실이 오르지 않는다', () => {
     const s = store();
     const before = s.getState().roster[0].defId;
@@ -130,6 +195,46 @@ describe('도감 — 상실', () => {
     });
     s.getState().finish();
     expect(loadLegacy().codex[before]?.timesLost ?? 0).toBe(0);
+  });
+});
+
+describe('도감 — 기존 세이브 메우기 (hydrate)', () => {
+  /*
+    ⚠️ 폰 실측에서 잡힌 버그다. registerInitialCodex는 freshSlice()에서만 돌므로
+    이 필드 이전에 만들어진 세이브는 도감이 빈 채로 복원되어
+    화면에 "기록 0 / 12"에 전부 ???가 떴다 — 실제로 6명을 데리고 있는데도.
+    §5-38("시작값을 바꿔도 이미 세이브가 있으면 화면은 그대로다").
+  */
+  it('도감이 빈 세이브를 로드하면 로스터가 도감에 채워진다', () => {
+    const s = store();
+    const roster = s.getState().roster;
+    s.getState().hydrate({
+      ...(s.getState() as any),
+      roster,
+      codex: {}, // 옛 세이브
+    });
+    const codex = s.getState().codex;
+    for (const h of roster) {
+      expect(codex[h.defId], `${h.defId}가 도감에 없다`).toBeDefined();
+    }
+  });
+
+  it('이미 있는 항목의 획득 수를 부풀리지 않는다', () => {
+    /*
+      registerCodex는 timesAcquired를 올린다. 무조건 다시 등록하면
+      새로고침할 때마다 획득 수가 계속 오른다 — 그래서 빠진 것만 채운다.
+    */
+    const s = store();
+    const roster = s.getState().roster;
+    const target = roster[0].defId;
+    const saved = { ...s.getState().codex };
+    const before = saved[target].timesAcquired;
+
+    // 두 번 로드해도 수치가 그대로여야 한다
+    s.getState().hydrate({ ...(s.getState() as any), roster, codex: saved });
+    s.getState().hydrate({ ...(s.getState() as any), roster, codex: s.getState().codex });
+
+    expect(s.getState().codex[target].timesAcquired).toBe(before);
   });
 });
 
