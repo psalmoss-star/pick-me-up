@@ -139,13 +139,18 @@ for (const floorId of floorIds) {
 
   /*
     승률만 보고 합격시키지 말 것 — 사망을 함께 봐야 한다(§5-22).
-    Lv.1 열은 이 도구의 존재 이유이므로 사망·턴까지 펼쳐 보여준다.
+
+    ⚠️ **여기가 이 도구의 존재 이유다.** 위 격자는 "임의 레벨에서 어떤가"를
+    보여줄 뿐이고, 실제로 물어야 하는 것은 **소환이 내놓는 그 레벨에서 어떤가**이다.
+    §STEP 39 이전에는 소환이 전부 Lv.1이라 둘이 같았지만 이제 다르다 —
+    Lv.1 열을 "가챠 산출물"로 읽으면 낡은 정보가 된다.
   */
-  console.log(`\n     Lv.1 상세 (소환 직후 = 가챠 산출물의 실제 전력)`);
+  console.log(`\n     소환 직후 상세 (summonLevel — 가챠 산출물의 실제 전력)`);
   for (const star of STARS) {
-    const m = measure(star, 1, floorId, N);
+    const lv = starScaling[star].summonLevel;
+    const m = measure(star, lv, floorId, N);
     console.log(
-      `     ★${star} | 승률 ${m.win.toFixed(0).padStart(3)}%` +
+      `     ★${star} Lv.${String(lv).padStart(2)} | 승률 ${m.win.toFixed(0).padStart(3)}%` +
       ` | 사망 ${m.death.toFixed(2)} | 턴 ${m.turn.toFixed(1)}`,
     );
   }
