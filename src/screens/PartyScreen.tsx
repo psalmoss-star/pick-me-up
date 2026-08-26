@@ -11,6 +11,7 @@ import { SQUAD_OPEN_ROSTER } from '../game/data/party';
 import { LINE_KR } from '../game/data/formation';
 import { formationOf, elementSpread, pickAutoParty } from '../game/formation';
 import { heroPower, partyPower } from '../game/power';
+import { sortRoster } from '../game/rosterSort';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { livingHeroes } from '../game/roster';
@@ -49,6 +50,15 @@ export function PartyScreen({
   squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie,
 }: PartyScreenProps) {
   const alive = livingHeroes(roster);
+  /*
+    영웅 탭의 **기본 정렬과 같게** 맞춘다. 예전엔 원본 배열 순서라
+    같은 로스터가 두 화면에서 다른 순서로 나왔다 — 편성하러 넘어오면
+    방금 본 목록과 배치가 달라 같은 영웅을 다시 찾아야 했다.
+
+    여기엔 정렬 선택 UI를 두지 않는다. 이 화면은 이미 진형·통계·버튼으로
+    세로가 빡빡하고(375×667), 편성의 관심사는 "누가 센가" 하나다.
+  */
+  const sorted = sortRoster(alive, 'power', gameData.heroes, gameData.starScaling);
   const { width } = useViewport();
   // 대기실·영웅 탭과 같은 산식 — 화면마다 카드 크기가 갈리면 같은 영웅이 달라 보인다
   const cardWidth = Math.max(112, Math.min(150, Math.floor((Math.min(width, 480) - 42) / 2)));
@@ -246,7 +256,7 @@ export function PartyScreen({
           justifyItems: 'center',
         }}
       >
-        {alive.map((h) => {
+        {sorted.map((h) => {
           const def = gameData.heroes[h.defId];
           const memberOf = squads.findIndex((m) => m.includes(h.instId));
           return (

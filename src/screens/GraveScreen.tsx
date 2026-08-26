@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
-import { Button } from '../ui/Button';
+import { Button, TOUCH_MIN } from '../ui/Button';
+import { CodexPanel } from './CodexPanel';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
 import { T } from '../ui/tokens';
@@ -30,6 +31,7 @@ export function GraveScreen({
   legacy, runNo, floorIndex, deathCount, towerCleared, onStartNewRun, onBack,
 }: GraveScreenProps) {
   const [confirming, setConfirming] = useState(false);
+  const [tab, setTab] = useState<'grave' | 'codex'>('grave');
 
   // 최신 회차가 위로 — 방금 잃은 것이 먼저 보여야 한다.
   const fallen = [...legacy.fallen].reverse();
@@ -41,10 +43,43 @@ export function GraveScreen({
         명부에 오른 수를 그대로 말한다. deathCount(이번 런)를 더하면 이중 계산이 된다 —
         finish()가 이미 사망자를 legacy.fallen에 넣었기 때문이다.
       */}
-      <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.2em', marginBottom: 22 }}>
+      <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.2em', marginBottom: 18 }}>
         {runNo}회차 · 잃은 영웅 {legacy.fallen.length}
       </div>
 
+      {/*
+        탭 전환 — 대장간(SmithScreen)의 벼리기/만들기와 같은 모양.
+        도감을 새 화면으로 만들지 않은 이유는 **회차를 넘어 남는 기록**이라는
+        성격이 무덤과 같기 때문이다. 도감은 gdd-v3 §7이 명시한 계승의 유일한
+        예외이고, 무덤도 계승되는 기록이다 — 둘은 같은 서랍에 있어야 한다.
+        (마을에 자리를 하나 더 여는 것은 별개 결정이기도 하다)
+      */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+        {(['grave', 'codex'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              flex: 1,
+              minHeight: TOUCH_MIN,
+              background: 'transparent',
+              border: `1px solid ${tab === t ? T.frame : T.panelHi}`,
+              color: tab === t ? T.text : T.dim,
+              fontFamily: 'inherit',
+              fontSize: 13,
+              letterSpacing: '.16em',
+              cursor: 'pointer',
+            }}
+          >
+            {t === 'grave' ? '기록' : '도감'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'codex' && <CodexPanel codex={legacy.codex} />}
+
+      {tab === 'grave' && (
+      <>
       <SectionLabel>사망자 명부</SectionLabel>
       {fallen.length === 0 ? (
         <SystemPanel>
@@ -122,7 +157,11 @@ export function GraveScreen({
           </div>
         </div>
       </SystemPanel>
+      </>
+      )}
 
+      {/* 새 회차 시작은 탭 밖에 둔다 — 도감을 보다가도 눌러야 하는 조작이 아니라,
+          어느 탭에 있든 같은 자리에 있어야 하는 화면 전체의 조작이다 */}
       <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {towerCleared && !confirming && (
           <Button onClick={() => setConfirming(true)}>새로운 등반을 시작한다</Button>

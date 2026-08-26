@@ -241,10 +241,17 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
     };
     saveLegacy(legacyWithEmber);
 
-    // 런은 도감이 비어 있는 채로 시작한다(예: startNewRun()을 거치지 않은 새 스토어 —
-    // C1의 새로고침 경로와 동일한 전제).
+    /*
+      런의 도감에는 **시작 로스터가 이미 올라가 있다**(STEP 41).
+      예전엔 여기가 `toEqual({})`였는데, 시작 파티가 도감에 없으면
+      "어떤 종류를 만났는가"의 기록이 거짓이 되고 그들이 죽어도
+      recordLoss가 조용히 무시된다(항목이 없으면 no-op).
+
+      이 테스트가 지키려는 것은 **병합이지 대체가 아니라는 것**이므로,
+      전제는 "런 도감이 비어 있다"가 아니라 "무덤에 없는 항목을 갖고 있다"면 된다.
+    */
     const store = createRunStore(() => 42);
-    expect(store.getState().codex).toEqual({});
+    expect(Object.keys(store.getState().codex)).not.toContain('h_ember');
 
     // 소환 1회. 결과와 무관하게 codex가 최소 1건은 등록된다.
     const result = store.getState().summon('free');

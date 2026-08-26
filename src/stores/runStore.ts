@@ -35,7 +35,7 @@ import {
 import { craft as craftPure, spendMaterials, type CraftResult } from '../game/craft';
 import { evaluateQuests, questContext, questRng, type QuestGrant } from '../game/quest';
 import type { QuestId } from '../game/data/quests';
-import { BANNERS, initialGachaState, pull, registerCodex, type PullResult } from '../game/gacha';
+import { BANNERS, initialGachaState, pull, recordLoss, registerCodex, type PullResult } from '../game/gacha';
 import {
   fuse as fuseHeroes, promote as promoteHero, gainExp,
   type FuseCheck, type FuseResult, type PromoteCheck, type PromoteResult,
@@ -414,6 +414,24 @@ export function initialWallet(): Wallet {
   return { gold: 300, gems: 500, promotionStones: 0, awakeningStones: 0, revivalTokens: 0 };
 }
 
+/**
+ * 시작 로스터를 도감에 올린다.
+ *
+ * ⚠️ 예전엔 `codex: {}`로 시작해서 **처음 받은 6인이 도감에 없었다.**
+ * 도감은 "어떤 종류를 만났는가"의 기록인데 시작 파티를 빼면 거짓말이 되고,
+ * 이들이 죽어도 `recordLoss`가 조용히 무시한다(항목이 없으면 no-op).
+ *
+ * `firstAcquiredAt: 0`은 "시작부터 있었다"는 뜻이다. 소환으로 얻은 것과
+ * 구분되지만 화면은 그 차이를 쓰지 않는다 — 만난 것은 만난 것이다.
+ */
+function registerInitialCodex(
+  roster: readonly HeroInstance[],
+): Record<HeroDefId, CodexEntry> {
+  let codex = {} as Record<HeroDefId, CodexEntry>;
+  for (const h of roster) codex = registerCodex(codex, h, 0);
+  return codex;
+}
+
 function freshSlice(): RunSlice {
   const roster = initialRoster();
   return {
@@ -427,7 +445,7 @@ function freshSlice(): RunSlice {
     lastSortieSquad: 0,
     wallet: initialWallet(),
     gacha: initialGachaState(0),
-    codex: {} as Record<HeroDefId, CodexEntry>,
+    codex: registerInitialCodex(roster),
     facilities: { rest: 0, training: 0, forge: 0, armory: 0 },
     gear: [],
     gearSeq: 0,
@@ -1025,10 +1043,29 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           ? [{ runNo: legacy.runNo, heroes: summitHeroes }]
           : [];
 
+        /**
+         * 도감의 상실 기록.
+         *
+         * ⚠️ `recordLoss`는 **여태 아무도 부르지 않았다**(2026-08-26 확인).
+         * 함수와 필드(`CodexEntry.timesLost`)는 처음부터 있었는데 호출부가 없어
+         * 항상 0이었다 — §STEP 37(각성석)·§STEP 38(유물 제작)과 같은 종류의
+         * "데이터는 있는데 닿는 길이 없는" 구멍이다. 도감 화면을 만들면서 드러났다.
+         *
+         * 무덤(`fallen`)과 따로 세는 이유: 무덤은 **개체**의 명부이고
+         * 도감은 **종류**의 집계다. 같은 defId를 세 번 잃으면 무덤엔 세 줄,
+         * 도감엔 `timesLost: 3`이 남는다.
+         *
+         * 합성 제물은 여기 오지 않는다 — casualties는 전투 사망자만 담는다.
+         * 제물은 죽음이 아니라 흡수이므로 상실로 세지 않는다(identity.ts와 같은 판단).
+         */
+        let nextCodex = { ...legacy.codex, ...after.codex };
+        for (const f of newlyFallen) nextCodex = recordLoss(nextCodex, f.defId);
+
         saveLegacy({
           ...legacy,
           fallen: [...legacy.fallen, ...newlyFallen],
           summit: [...legacy.summit, ...summitAdd],
+          codex: nextCodex,
         });
       }
 
@@ -1115,6 +1152,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         roster,
         /** 회차를 넘어 봉인된 이름 — 무덤의 사망자 (identity.ts 참조) */
         sealed: sealedNames(loadLegacy()),
+        /** 시작 레벨(summonLevel)의 출처. 없으면 Lv.1이라 등반이 시작되지 않는다 */
+        scaling: gameData.starScaling,
       });
 
       // 실패는 상태를 건드리지 않는다. 재화 부족/쿨다운은 정상 흐름이다.
