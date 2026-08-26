@@ -47,6 +47,7 @@ export const STREAM = {
   QUEST: 23,    // 과제 보상 (등급만 정해진 장비의 종류 추첨)
   VARIANT: 31,  // 초상 변형 — 개체별 아트 슬롯. 겉모습만, 전투 수치 영향 없음
   ADVENTURE: 37, // 모험 파견 판정 — 성공 여부·각성석 추첨
+  ORIGIN: 41,   // 생전 서사 — 지위·최후. 표시 전용, 전투 수치 영향 없음
 } as const;
 
 export type StreamId = (typeof STREAM)[keyof typeof STREAM];

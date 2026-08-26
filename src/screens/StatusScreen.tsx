@@ -9,6 +9,7 @@ import { SectionLabel } from './SectionLabel';
 import { statsOfInstance, attributesOfInstance, klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
+import { originOf, originText } from '../game/origin';
 import { livingHeroes } from '../game/roster';
 import { canPromote, expToNext } from '../game/progression';
 import { heroPower } from '../game/power';
@@ -92,6 +93,8 @@ export function StatusScreen({
   const atMaxLevel = hero.level >= maxLevel;
   const promo = canPromote(hero, wallet, gameData.starScaling);
   const squadOf = squads.findIndex((m) => m.includes(hero.instId));
+  /** 개체의 생전 서사. seed가 없는 옛 세이브는 null이라 패널이 안 뜬다 */
+  const origin = originOf(hero);
 
   return (
     <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
@@ -242,12 +245,33 @@ export function StatusScreen({
         })}
       </SystemPanel>
 
-      {def.lore && (
+      {(def.lore || origin) && (
         <>
           <div style={{ marginTop: 18 }} />
       <SectionLabel>기록</SectionLabel>
           <SystemPanel compact>
-            <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.9 }}>{def.lore}</div>
+            {/*
+              종류의 설정(def.lore)이 먼저, 개체의 생전(origin)이 그 아래.
+              둘은 다른 층위다 — 앞은 "이런 종류의 영웅", 뒤는 "이 사람".
+              종류 설정을 지우지 않는 이유가 이것이다(같이 있어야 층위가 보인다).
+            */}
+            {def.lore && (
+              <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.9 }}>{def.lore}</div>
+            )}
+            {origin && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: T.gold,
+                  lineHeight: 1.9,
+                  marginTop: def.lore ? 10 : 0,
+                  paddingTop: def.lore ? 10 : 0,
+                  borderTop: def.lore ? `1px solid ${T.panelHi}` : undefined,
+                }}
+              >
+                {originText(origin)}
+              </div>
+            )}
           </SystemPanel>
         </>
       )}

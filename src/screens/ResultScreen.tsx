@@ -8,6 +8,7 @@ import { MISSION_LABEL } from '../game/mission';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
+import { originOf, originText } from '../game/origin';
 import { gameData } from '../game/data';
 import { floorRewards } from '../game/data/floors';
 import { MATERIAL_DEFS, MATERIAL_ORDER } from '../game/data/materials';
@@ -247,11 +248,22 @@ export function ResultScreen({
                 (roster는 전투 직전 스냅샷이라 사망 시점의 진행도가 그대로 남아 있다)
               */
               const r = estimatePotential(h);
+              /*
+                생전 서사도 여기 붙인다. 발굴 진행도가 "알아내던 중에 잃었다"라면
+                이쪽은 "무엇이었던 사람을 잃었다"이다 — 둘 다 손실의 무게에 속한다.
+                이름만 남기고 보내면 개체가 숫자로 읽힌다.
+              */
+              const o = originOf(h);
               return (
                 <div key={h.instId} style={{ lineHeight: 2 }}>
                   <div style={{ fontSize: 14, color: T.blood }}>
                     ✖ {displayName(h, gameData.heroes)}({'★'.repeat(h.star)}) — 되살릴 수 없습니다
                   </div>
+                  {o && (
+                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
+                      {originText(o)}
+                    </div>
+                  )}
                   {r.stage !== 'unknown' && (
                     <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7, marginBottom: 6 }}>
                       발굴 {Math.round(r.progress * 100)}% · {r.label}
