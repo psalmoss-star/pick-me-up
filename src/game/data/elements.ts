@@ -86,11 +86,64 @@ export const RAMP_START = 0.8;
 // ------------------------------------------------------------
 // 등급 스케일링
 // ------------------------------------------------------------
+/**
+ * ── `summonLevel` — 소환 개체의 시작 레벨 ───────────────────────
+ *
+ * ⚠️ **이게 없으면 가챠 산출물로는 등반이 시작되지 않는다.**
+ * 소환은 개체를 `level: 1`로 만드는데, 실측 1층 승률이 다음과 같았다
+ * (`npx tsx scripts/fresh-check.mts`, 동일 등급 파티 300회):
+ *
+ *   등급 | Lv.1  Lv.5  Lv.10 Lv.15
+ *   ★1   |   0%    0%  100%   --
+ *   ★2   |   0%    0%   45%  100%
+ *   ★3   |   0%    0%    2%   89%
+ *   ★4   |  30%   55%   83%   96%
+ *
+ * 즉 게임이 **"받은 초기 로스터"로만 성립**하고 있었다. 젬 500짜리 심연의
+ * 소환진조차 1층에서 30%였다. §STEP 33이 능력치 채움비를 고쳤지만
+ * 그건 "등급 역전"을 고친 것이고, **시작 레벨 자체는 그대로였다.**
+ *
+ * ── 값을 어떻게 골랐나 (실측) ──────────────────────────────────
+ * 등급별로 "1~3층을 승률 90%↑·사망 0.5↓로 넘는 최소 레벨"을 쟀다:
+ *
+ *   등급 | 1층    2층    3층   | 만렙 대비
+ *   ★1   | Lv.10  없음   Lv.9  | 100%  ← 만렙이어야 1층을 넘는다
+ *   ★2   | Lv.13  Lv.15  Lv.12 |  65%
+ *   ★3   | Lv.17  Lv.20  Lv.15 |  43%
+ *   ★4   | Lv.17  Lv.19  Lv.9  |  28%
+ *   ★5   | Lv.1   Lv.5   Lv.1  |   1%
+ *
+ * **★1·★2를 전투 가능하게 만들지 않는다.** 금 소환(★1~3)은 설계상
+ * **"양 — 합성 제물·파티 보충"**이고 ★1이 그 60%다(`gacha.ts`의 배너 주석).
+ * ★1을 1층 통과선(만렙 Lv.10)에 두면 제물이 곧 주력이 되어 배너 구분이 무너진다.
+ * 그래서 저등급은 "즉시 쓸 수는 없지만 예전만큼 무의미하지도 않은" 지점에 둔다.
+ *
+ * **★3부터 등반이 시작 가능해야 한다** — 금 소환의 상한이고, 여기서도 못 쓰면
+ * 금 배너 전체가 제물 공장이 된다. 1층 통과선 Lv.17보다 낮은 Lv.12를 주어
+ * "조금 키우면 나간다"로 둔다(즉시 투입은 아니다).
+ *
+ * **★4·★5는 즉시 쓸 수 있어야 한다** — 젬 500은 희소 재화다. 1층 통과선
+ * (★4 Lv.17)을 그대로 주면 소환 즉시 최전선 투입이 되어 육성이 사라지므로,
+ * 통과선 부근인 Lv.15/Lv.10을 준다. ★5는 Lv.1에서도 이미 1층 100%라
+ * 낮은 값으로 충분하다(만렙 80의 12.5%).
+ *
+ * ⚠️ **만렙 비율로 정하지 않는다.** 같은 25%가 ★1에는 Lv.2, ★6에는 Lv.25로
+ * 전혀 다른 의미가 된다. 비율은 등급이 오를수록 저절로 낮아지는 값이라
+ * (statMultiplier가 maxLevel보다 빨리 큰다) 여기서는 **실측 통과선**을 기준으로 잡는다.
+ *
+ * ⚠️ **승급에는 적용하지 않는다.** `progression.ts`의 Lv.1 리셋은 그대로다 —
+ * gdd-v3 §3이 "승급 직후는 이전보다 약하다"를 설계로 못박았고,
+ * 여기에 하한을 주면 그 대가가 사라진다.
+ *
+ * **만졌으면 `npx tsx scripts/fresh-check.mts`를 돌릴 것.**
+ * `npm run sim`과 `climb-check.mts`는 자체 파티를 쓰므로 **이 값을 구조적으로 못 본다**
+ * — 두 표가 안 움직이는 것이 정상이고, 움직이면 소환 코드가 엔진에 샌 것이다.
+ */
 export const starScaling: Record<Star, StarScaling> = {
-  1: { star: 1, maxLevel: 10, statMultiplier: 1.0, promotionStones: 1 },
-  2: { star: 2, maxLevel: 20, statMultiplier: 1.35, promotionStones: 3 },
-  3: { star: 3, maxLevel: 40, statMultiplier: 1.9, promotionStones: 8 },
-  4: { star: 4, maxLevel: 60, statMultiplier: 2.7, promotionStones: 20 },
-  5: { star: 5, maxLevel: 80, statMultiplier: 3.8, promotionStones: 0, requiresAwakening: true },
-  6: { star: 6, maxLevel: 99, statMultiplier: 5.4, promotionStones: 0 },
+  1: { star: 1, maxLevel: 10, statMultiplier: 1.0, promotionStones: 1, summonLevel: 3 },
+  2: { star: 2, maxLevel: 20, statMultiplier: 1.35, promotionStones: 3, summonLevel: 6 },
+  3: { star: 3, maxLevel: 40, statMultiplier: 1.9, promotionStones: 8, summonLevel: 12 },
+  4: { star: 4, maxLevel: 60, statMultiplier: 2.7, promotionStones: 20, summonLevel: 15 },
+  5: { star: 5, maxLevel: 80, statMultiplier: 3.8, promotionStones: 0, requiresAwakening: true, summonLevel: 10 },
+  6: { star: 6, maxLevel: 99, statMultiplier: 5.4, promotionStones: 0, summonLevel: 12 },
 };

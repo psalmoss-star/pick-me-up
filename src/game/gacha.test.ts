@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BANNERS, initialGachaState, pull, registerCodex, recordLoss, validateBanner, validatePool } from './gacha';
 import { createRng } from './rng';
 import { heroes } from './data/sample';
+import { starScaling } from './data/elements';
+import { promote } from './progression';
 import type { HeroInstance, Wallet } from './types';
 
 // 금 소환(free 배너)도 비용이 생겼으므로 둘 다 채워준다.
@@ -244,10 +246,11 @@ describe('비용과 쿨다운', () => {
 });
 
 describe('결과의 무결성', () => {
-  it('뽑은 영웅은 Lv.1이고 등급에 맞는 클래스를 갖는다', () => {
+  it('scaling을 안 넘기면 Lv.1이고 등급에 맞는 클래스를 갖는다', () => {
     for (let i = 0; i < 200; i++) {
       const r = doPull('premium', initialGachaState(0), wallet(), i);
       if (!r.ok) continue;
+      // scaling 미주입 시의 폴백. 실제 경로(runStore.summon)는 반드시 넘긴다
       expect(r.hero.level).toBe(1);
       expect(r.hero.star).toBe(r.star);
       expect(r.hero.isDead).toBe(false);
@@ -262,6 +265,74 @@ describe('결과의 무결성', () => {
       if (r.ok) ids.add(r.hero.instId);
     }
     expect(ids.size).toBe(100);
+  });
+});
+
+/**
+ * 소환 시작 레벨.
+ *
+ * ⚠️ **`npm run sim`과 `climb-check.mts`는 이 축을 구조적으로 못 본다** —
+ * 둘 다 자체 기준 파티(★2 Lv.15~★4 Lv.50)를 쓰므로 소환 레벨을 밟지 않는다.
+ * §STEP 33에서 "★4 Lv.1이 ★1 Lv.1보다 약한" 결함이 있는 채로 두 표가
+ * 완전히 정상이었던 것과 같은 사각지대다.
+ * **그래서 표가 아니라 여기서 잠근다.**
+ */
+describe('소환 시작 레벨', () => {
+  const pullWithScaling = (kind: 'free' | 'premium', seed: number) =>
+    pull({
+      banner: BANNERS[kind], wallet: wallet(), gacha: initialGachaState(0),
+      pool: heroes, codex: {}, rng: createRng(seed), now: 0, currentFloor: 1, makeId,
+      scaling: starScaling,
+    });
+
+  it('소환 개체는 등급이 정한 시작 레벨을 갖는다 (Lv.1이 아니다)', () => {
+    for (const kind of ['free', 'premium'] as const) {
+      for (let i = 0; i < 100; i++) {
+        const r = pullWithScaling(kind, i);
+        if (!r.ok) continue;
+        expect(r.hero.level).toBe(starScaling[r.star].summonLevel);
+      }
+    }
+  });
+
+  it('모든 등급의 시작 레벨이 Lv.1보다 높다', () => {
+    // 하나라도 1이면 그 등급은 예전 결함(1층 승률 0%)으로 되돌아간 것이다
+    for (const s of [1, 2, 3, 4, 5, 6] as const) {
+      expect(starScaling[s].summonLevel).toBeGreaterThan(1);
+    }
+  });
+
+  it('시작 레벨은 그 등급의 만렙을 넘지 않는다', () => {
+    // 넘으면 소환 즉시 승급 대기 상태가 되어 육성 구간이 통째로 사라진다
+    for (const s of [1, 2, 3, 4, 5, 6] as const) {
+      expect(starScaling[s].summonLevel).toBeLessThanOrEqual(starScaling[s].maxLevel);
+    }
+  });
+
+  it('★1·★2는 여전히 저층 통과선보다 낮다 — 금 소환은 제물이 본분이다', () => {
+    /*
+      금 배너(★1~3)는 설계상 "양 — 합성 제물·파티 보충"이다(gacha.ts 배너 주석).
+      실측 1층 통과선은 ★1 Lv.10(=만렙) / ★2 Lv.13이므로 그 아래여야
+      "뽑자마자 주력"이 되지 않는다. 여기가 무너지면 배너 두 개의 역할이 겹친다.
+    */
+    expect(starScaling[1].summonLevel).toBeLessThan(10);
+    expect(starScaling[2].summonLevel).toBeLessThan(13);
+  });
+
+  it('승급은 시작 레벨을 쓰지 않는다 — Lv.1 리셋은 의도된 대가다', () => {
+    /*
+      gdd-v3 §3: "승급은 레벨을 1로 리셋한다 → 승급 직후는 이전보다 약하다.
+      이건 버그가 아니라 설계다." 승급에도 하한을 주면 그 대가가 사라진다.
+    */
+    const hero: HeroInstance = {
+      instId: 'p1' as any, defId: 'h_ashen' as any, star: 2,
+      klass: '견습병' as any, level: starScaling[2].maxLevel, exp: 0,
+      currentHp: 0, isDead: false, acquiredAtFloor: 1,
+    };
+    const w: Wallet = { gold: 0, gems: 0, promotionStones: 99, awakeningStones: 99, revivalTokens: 0 };
+    const r = promote(hero, w, starScaling);
+    if (!('hero' in r)) throw new Error('승급이 실패했다');
+    expect(r.hero.level).toBe(1);
   });
 });
 

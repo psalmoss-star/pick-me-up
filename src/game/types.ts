@@ -93,6 +93,14 @@ export interface StarScaling {
   statMultiplier: number;      // 기본 스탯에 곱
   promotionStones: number;     // 다음 등급 승급에 필요한 승급석
   requiresAwakening?: boolean; // ★5 → ★6 등, 각성석 필요 여부
+  /**
+   * 소환으로 얻은 개체의 시작 레벨.
+   *
+   * **승급(promote)에는 적용되지 않는다** — 승급은 Lv.1 리셋이 의도된 대가다
+   * (gdd-v3 §3: "승급 직후는 이전보다 약하다. 버그가 아니라 설계다").
+   * 근거와 실측은 `data/elements.ts`의 `starScaling` 주석에 있다.
+   */
+  summonLevel: number;
 }
 
 // ============================================================

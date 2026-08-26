@@ -1,6 +1,6 @@
 import type {
   BannerKind, CodexEntry, GachaBanner, GachaState, HeroDef, HeroDefId,
-  HeroInstId, HeroInstance, RNG, Star, Wallet,
+  HeroInstId, HeroInstance, RNG, Star, StarScaling, Wallet,
 } from './types';
 import { klassFor } from './stats';
 import { rollHeroSeed } from './potential';
@@ -161,9 +161,19 @@ export function pull(args: {
    * 생략하면 봉인 없이 생성된다 — 테스트·시뮬레이터용이며 실제 경로는 반드시 넘긴다.
    */
   sealed?: ReadonlySet<string>;
+  /**
+   * 등급 스케일링 — 시작 레벨(`summonLevel`)을 여기서 읽는다.
+   *
+   * `pool`과 같이 주입으로 받는다. `game/`은 `data/`를 직접 import하지 않는다는
+   * 규칙(CLAUDE.md: 밸런스 수치는 `data/`에)을 지키기 위해서다.
+   * 생략하면 Lv.1 — 이 필드 이전에 쓰인 테스트·시뮬레이터를 위한 폴백이며,
+   * 실제 소환 경로(runStore.summon)는 반드시 넘긴다.
+   */
+  scaling?: Record<Star, StarScaling>;
 }): PullResult {
   const {
     banner, wallet, gacha, pool, codex, rng, now, currentFloor, makeId, roster = [], sealed,
+    scaling,
   } = args;
 
   // 쿨다운
@@ -201,7 +211,14 @@ export function pull(args: {
     defId,
     star,
     klass: klassFor(star),
-    level: 1,
+    /*
+      시작 레벨은 **등급의 함수**다 (data/elements.ts의 summonLevel).
+      Lv.1로 주면 ★1~★3이 1층 승률 0%라 가챠 산출물로 등반이 시작되지 않는다.
+
+      ⚠️ 난수를 소비하지 않는다 — 등급이 정해지면 값이 결정된다.
+      여기서 rng를 굴리면 §5-18(난수 밀림)로 이후 전원의 잠재치가 이동한다.
+    */
+    level: scaling?.[star].summonLevel ?? 1,
     exp: 0,
     // 같은 종류를 다시 뽑아도 다른 인물이어야 한다 (identity.ts 참조).
     name: identity.name,
