@@ -144,7 +144,8 @@ export function ShopScreen({
         포션 — 슬롯 장비가 아니므로 탭 밖에 항상 둔다.
         전투 전에 사두는 물건이라 탭 안에 숨기면 살 타이밍을 놓친다.
       */}
-      <div style={{ marginTop: 18 }}>
+      {/* 위 여백은 SectionLabel이 갖는다 — 여기 또 주면 두 배가 된다 */}
+      <div>
         <SectionLabel>소모품</SectionLabel>
         <SystemPanel compact>
           <div style={{ fontSize: 15, letterSpacing: '.1em', marginBottom: 2 }}>
