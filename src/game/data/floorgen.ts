@@ -441,7 +441,24 @@ function pickUnderCaps(
 
 export function buildEnemyVariant(floorId: number, tier: Tier, variant: number): EnemyDefId[] {
   const [lo, hi] = tier.count;
-  const n = lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1));
+  /**
+   * ⚠️ **기수도 변형에 따라 달라져야 한다.**
+   *
+   * 예전에는 `pick01(floorId, 1)`뿐이라 기수가 **층에만** 달렸다. 그래서 한 층의
+   * 변형 24개가 전부 같은 기수였고, **기수가 원인인 층은 튜너가 영영 못 고쳤다.**
+   * 실제로 96층이 그랬다(실측): 구성을 아무리 바꿔도 36%인데
+   *
+   *   힐러 2→1  36% · 힐러 0기 48% · **기수 6→5  100%**
+   *
+   * 원인은 구성이 아니라 6기였는데 24개 변형이 전부 6기라 탈출구가 없었다.
+   * `variant`를 섞어 앞쪽 변형은 기존 기수를, 뒤쪽 변형은 다른 기수를 고르게 한다.
+   *
+   * 변형 0은 **기존 값을 그대로 유지한다** — 이미 합격한 층의 판단이 흔들리면
+   * 표 전체를 다시 수렴시켜야 하고, 그건 이 변경의 목적이 아니다.
+   */
+  const n = variant === 0
+    ? lo + Math.floor(pick01(floorId, 1) * (hi - lo + 1))
+    : lo + Math.floor(pick01(floorId, 1 + variant * 100) * (hi - lo + 1));
 
   const first = pickOne(tier.taunts, floorId, 2 + variant * 100);
   const out: EnemyDefId[] = [first];

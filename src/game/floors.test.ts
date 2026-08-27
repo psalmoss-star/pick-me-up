@@ -15,10 +15,13 @@ import {
   segmentIndexOfFloor,
 } from './data/floors';
 import {
+  buildEnemyVariant,
   generateFloor,
   HANDCRAFTED_UNTIL,
   NAME_REPEAT_GAP,
   PLACE_REPEAT_GAP,
+  tierOf,
+  VARIANT_COUNT,
 } from './data/floorgen';
 import { enemies } from './data/sample';
 import type { SceneKind } from '../ui/art/Scene';
@@ -406,6 +409,43 @@ describe('생성 층 — 적 기수와 역할 중복', () => {
       const n = floor.enemyIds.length;
       expect(n, `${floor.id}층`).toBeGreaterThanOrEqual(4);
       expect(n, `${floor.id}층`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('한 층의 변형들이 서로 다른 기수를 낼 수 있다', () => {
+    /*
+      ⚠️ 예전엔 기수가 `pick01(floorId, 1)`뿐이라 **층에만** 달렸다.
+      한 층의 변형 24개가 전부 같은 기수여서, **기수가 원인인 층은 튜너가
+      영영 못 고쳤다** — 실제로 96층이 그랬다(36%, 합격 변형 0건).
+      구성을 아무리 바꿔도 안 풀렸는데 기수 6→5에서 100%가 됐다.
+
+      튜너가 쓸 수 있는 손잡이가 실재하는지를 여기서 잠근다.
+      (전 층이 그래야 하는 건 아니다 — 하나라도 있으면 탈출구가 있는 것이다.)
+    */
+    const someFloorVariesCount = FLOORS
+      .filter((f) => f.id > HANDCRAFTED_UNTIL && !f.isBoss)
+      .some((f) => {
+        const tier = tierOf(f.id);
+        const sizes = new Set<number>();
+        for (let v = 0; v < VARIANT_COUNT; v++) {
+          sizes.add(buildEnemyVariant(f.id, tier, v).length);
+        }
+        return sizes.size > 1;
+      });
+    expect(someFloorVariesCount).toBe(true);
+  });
+
+  it('변형 0은 기존 기수를 유지한다 — 이미 합격한 층이 흔들리면 안 된다', () => {
+    /*
+      변형 0을 바꾸면 표에 없는(=기본값을 쓰는) 층들의 판단이 통째로 흔들려
+      매번 전체 재수렴이 필요해진다. 기수 손잡이는 **변형 1 이상에만** 준다.
+    */
+    for (const f of FLOORS.filter((x) => x.id > HANDCRAFTED_UNTIL && !x.isBoss)) {
+      const tier = tierOf(f.id);
+      const [lo, hi] = tier.count;
+      const n = buildEnemyVariant(f.id, tier, 0).length;
+      expect(n, `${f.id}층 변형0`).toBeGreaterThanOrEqual(Math.min(lo, 4));
+      expect(n, `${f.id}층 변형0`).toBeLessThanOrEqual(hi);
     }
   });
 
