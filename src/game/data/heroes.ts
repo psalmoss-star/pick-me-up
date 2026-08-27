@@ -8,6 +8,16 @@ import type { HeroDef, HeroDefId, SkillId } from '../types';
 
 const id = <T extends string>(s: string) => s as T;
 
+/**
+ * 도감 항목의 검사용 타입.
+ *
+ * `id`만 brand를 벗긴다 — 문자열 리터럴은 brand 타입에 못 들어가서
+ * 예전엔 배열 전체를 `as HeroDef[]`로 캐스팅했고, 그 캐스팅이
+ * **`attackAttr: 'agi'` 같은 타입 밖 값까지 통째로 삼켰다**(STEP 43).
+ * id 하나만 열어두면 나머지 필드는 정상적으로 검사된다.
+ */
+type HeroDefEntry = Omit<HeroDef, 'id'> & { id: string };
+
 export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
   ([
     {
@@ -175,7 +185,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       // 두 번째 탱커 — 오르나와 달리 도발 대신 광역 보호막을 쓴다
       skillIds: ['sk_taunt_hit', 'sk_bulwark'] as SkillId[],
     },
-  ] as HeroDef[]).map((h) => [h.id, h]),
+  ] satisfies HeroDefEntry[]).map((h) => [h.id, h]),
 ) as Record<HeroDefId, HeroDef>;
 
 export const HERO = {

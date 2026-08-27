@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { capsFor, computeAttributes, computeHeroStats, deriveStats, isAtCap, klassFor } from './stats';
 import { heroes, starScaling, HERO } from './data/sample';
 import { MIN_ATTR_FILL, RAMP_START } from './data/elements';
+import type { HeroDefId } from './types';
 
 const ashen = heroes[HERO.ashen];
 const bulwark = heroes[HERO.bulwark];
 const tide = heroes[HERO.tide];
+// 민첩 기반 공격 영웅 둘. hush는 HERO 상수에 없어 id로 집는다
+const thorn = heroes[HERO.thorn];
+const hush = heroes['h_hush' as HeroDefId];
 
 describe('능력치 — 상한과 채움', () => {
   it('해당 등급 만렙이면 모든 능력치가 상한에 도달한다', () => {
@@ -66,6 +70,42 @@ describe('파생 스탯', () => {
   it('치명타율은 60%를 넘지 않는다', () => {
     const a = computeAttributes(ashen, 6, 99, starScaling);
     expect(deriveStats(a, 6, 'str').crit).toBeLessThanOrEqual(0.6);
+  });
+
+  it('민첩형 영웅의 ATK는 민첩에서 나온다', () => {
+    const a = computeAttributes(thorn, 3, 40, starScaling);
+    const s = deriveStats(a, 3, 'agi');
+    expect(s.atk).toBe(a.agi.current * 6);
+  });
+});
+
+/**
+ * `attackAttr: 'agi'`가 타입 밖 값이라 `deriveStats`가 조용히 str로 떨어뜨렸고,
+ * str이 최약인 두 영웅이 의도보다 약한 채 방치됐다(마르 -31% / 예니 -47%).
+ * `heroes.ts`의 `as HeroDef[]` 캐스팅이 타입 에러를 먹어 아무도 몰랐다.
+ *
+ * ⚠️ 캐스팅을 되살리면 여기가 깨져야 한다. 그게 이 describe의 존재 이유다.
+ */
+describe('민첩 기반 공격 — 캐스팅이 숨겼던 결함', () => {
+  it('마르·예니는 민첩으로 때린다 (str 폴백이 아니다)', () => {
+    expect(thorn.attackAttr).toBe('agi');
+    expect(hush.attackAttr).toBe('agi');
+  });
+
+  it('두 영웅 다 str보다 agi가 높다 — 폴백이면 최약 능력치로 때리는 셈이었다', () => {
+    for (const def of [thorn, hush]) {
+      expect(def.baseCaps.agi).toBeGreaterThan(def.baseCaps.str);
+    }
+  });
+
+  it('실제 ATK가 str 기준이 아니라 agi 기준으로 계산된다', () => {
+    for (const def of [thorn, hush]) {
+      const a = computeAttributes(def, 3, 40, starScaling);
+      const actual = computeHeroStats(def, 3, 40, starScaling).atk;
+      expect(actual).toBe(a.agi.current * 6);
+      // 폴백이 살아 있었다면 이 값이었다
+      expect(actual).toBeGreaterThan(a.str.current * 6);
+    }
   });
 });
 

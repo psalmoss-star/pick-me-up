@@ -163,8 +163,14 @@ export interface HeroDef {
   baseStar: Star;         // 가챠에서 뽑힐 때의 최초 등급
   element: Element;
   role: Role;
-  /** 공격력이 힘(str) 기반인지 지능(int) 기반인지 */
-  attackAttr: 'str' | 'int';
+  /**
+   * 공격력이 어느 능력치 기반인지.
+   *
+   * ⚠️ 여기에 없는 값을 쓰면 `deriveStats`가 조용히 str로 떨어뜨렸다 —
+   * `heroes.ts`의 `as HeroDef[]` 캐스팅이 타입 에러를 먹어 마르·예니가
+   * 최약 능력치로 때리고 있었다(STEP 43). 캐스팅을 되살리지 말 것.
+   */
+  attackAttr: 'str' | 'int' | 'agi';
   /** ★1 기준 능력치 상한. 승급마다 statMultiplier가 곱해진다. */
   baseCaps: AttrCaps;
   skillIds: SkillId[];

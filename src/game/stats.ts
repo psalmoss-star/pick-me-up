@@ -91,11 +91,21 @@ export function isAtCap(a: Attributes): boolean {
 // 파생 전투 스탯
 // ------------------------------------------------------------
 
-export function deriveStats(a: Attributes, star: Star, attackAttr: 'str' | 'int'): Stats {
+/**
+ * ⚠️ **폴백을 두지 않는다.** 예전에는 `int가 아니면 str`이라 `attackAttr: 'agi'`가
+ * 조용히 str로 떨어졌고, str이 최약인 두 영웅이 의도보다 약한 채로 방치됐다(STEP 43).
+ * 능력치를 표에서 직접 꺼내므로 새 값을 넣으면 타입이 먼저 막는다.
+ */
+export function deriveStats(a: Attributes, star: Star, attackAttr: HeroDef['attackAttr']): Stats {
   const { str, int, vit, agi } = a;
+  const attackSource: Record<HeroDef['attackAttr'], number> = {
+    str: str.current,
+    int: int.current,
+    agi: agi.current,
+  };
   return {
     hp: vit.current * 20 + star * 100,
-    atk: (attackAttr === 'int' ? int.current : str.current) * 6,
+    atk: attackSource[attackAttr] * 6,
     def: vit.current * 2 + str.current,
     spd: agi.current * 3,
     crit: Math.min(0.6, 0.03 + agi.current * 0.002),
