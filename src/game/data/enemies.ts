@@ -9,6 +9,14 @@ import type { EnemyDef, EnemyDefId, SkillId } from '../types';
 
 const id = <T extends string>(s: string) => s as T;
 
+/**
+ * 도감 항목의 검사용 타입 — `heroes.ts`의 `HeroDefEntry`와 같은 이유다.
+ *
+ * `id`만 brand를 벗긴다. 예전엔 배열 전체를 `as EnemyDef[]`로 캐스팅했는데,
+ * 같은 모양의 캐스팅이 `heroes.ts`에서 **`attackAttr: 'agi'`를 통째로 삼켰다**(STEP 43).
+ */
+type EnemyDefEntry = Omit<EnemyDef, 'id'> & { id: string };
+
 export const enemies: Record<EnemyDefId, EnemyDef> = Object.fromEntries(
   ([
     {
@@ -273,7 +281,7 @@ export const enemies: Record<EnemyDefId, EnemyDef> = Object.fromEntries(
       skillIds: ['sk_maul', 'sk_sap', 'sk_mire'] as SkillId[],
       isBoss: true,
     },
-  ] as EnemyDef[]).map((e) => [e.id, e]),
+  ] satisfies EnemyDefEntry[]).map((e) => [e.id, e]),
 ) as Record<EnemyDefId, EnemyDef>;
 
 export const ENEMY = {

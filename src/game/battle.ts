@@ -7,7 +7,7 @@
  * - 결과뿐 아니라 턴별 BattleEvent 로그를 반환 (UI는 이를 재생만 한다)
  */
 import type {
-  ActiveStatus, Affinity, BattleEvent, Combatant, Element, EnemyDefId,
+  ActiveStatus, Affinity, BattleEvent, Combatant, Element, EnemyDef, EnemyDefId,
   GearInstId, GearInstance,
   HeroDef, HeroDefId, HeroInstId, HeroInstance, RNG, Skill, SkillId,
   Star, StarScaling, StatusKind, Stats,
@@ -32,7 +32,12 @@ import { rngChance } from './rng';
 
 export interface BattleData {
   heroes: Record<HeroDefId, HeroDef>;
-  enemies: Record<EnemyDefId, { id: EnemyDefId; name: string; element: Element; stats: Stats; skillIds: SkillId[] }>;
+  /*
+    ⚠️ 예전엔 여기가 `role`을 뺀 인라인 구조 타입이었다. 그래서 엔진이 적 role을
+    **읽을 수단 자체가 없었고**, buildEnemy가 `'dealer'`를 하드코딩할 수밖에 없었다.
+    `enemies.ts`는 19종에 role을 성실히 적어뒀는데 그것이 통째로 사장됐다(STEP 44).
+  */
+  enemies: Record<EnemyDefId, EnemyDef>;
   skills: Record<SkillId, Skill>;
   starScaling: Record<Star, StarScaling>;
   elementChart: Record<Element, Record<Element, number>>;
@@ -171,7 +176,13 @@ function buildEnemy(eid: EnemyDefId, index: number, d: BattleData, mult = 1): Co
     sourceId: eid,
     name: e.name,
     element: e.element,
-    role: 'dealer',
+    /*
+      ⚠️ 예전엔 `'dealer'` 하드코딩이라 `enemies.ts`의 role 선언이 통째로 버려졌다 —
+      19종 중 14종(탱커 5·브레이커 5·힐러 2·서포트 2)이 전부 딜러로 싸웠다.
+      아군 타겟팅이 `role === 'tank'`로 어그로를 가르므로(아래 pickTargets),
+      적 탱커가 앞에 서지 못하고 뒤의 힐러가 그대로 노출됐다.
+    */
+    role: e.role,
     stats,
     currentHp: stats.hp,
     shield: 0,
