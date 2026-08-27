@@ -42,7 +42,15 @@ export const enemies: Record<EnemyDefId, EnemyDef> = Object.fromEntries(
       name: '균열의 골렘',
       element: 'earth',
       role: 'tank',
-      stats: { hp: 4100, atk: 190, def: 55, spd: 44, crit: 0.08 },
+      // ⚠️ 4100 → 4250 (STEP 44). role이 살아나면서 6층이 **쉬워졌다** —
+      // 보스 승률 76.7%로 스모크 테스트 상한(75%)을 넘었고, gear.test의
+      // "40회 안에 사망" 유도는 400회에 0명이 될 만큼 무해해졌다.
+      // 골렘은 **단독 출현**이라 어그로 재분배가 이득도 손해도 아닌데,
+      // 아군이 도발에 끌려다니지 않게 되면서 딜이 온전히 들어간 것이다.
+      //
+      // 4400 → 보스 62.0% / 6층 59%·사망 1.54 (기준선 70%·1.35보다 어렵다)
+      // 4250 → 보스 68.0% / 6층 65%·사망 1.40  ← 채택. 기준선에 가장 가깝다
+      stats: { hp: 4250, atk: 190, def: 55, spd: 44, crit: 0.08 },
       skillIds: ['sk_maul', 'sk_taunt_hit'] as SkillId[],
       isBoss: true,
     },

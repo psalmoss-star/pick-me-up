@@ -195,17 +195,26 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
    * 회수율을 극단으로 고정해 결과를 확정시킨다.
    * 확률 자체는 game/gear.test.ts가 검증하므로, 여기서는 "인벤토리에 어떻게 반영되나"만 본다.
    */
+  /**
+   * ⚠️ **층을 하나로 못박지 말 것.** 예전엔 6층만 40회 반복했는데, 골렘 수치를
+   * 만질 때마다(STEP 44) 사망이 안 나와 이 테스트가 깨졌다. 여기서 재려는 것은
+   * "죽으면 장비를 놓는가"이지 **"6층이 얼마나 치명적인가"가 아니다.**
+   *
+   * 그래서 위로 올라가며 더 어려운 층도 시도한다. 어느 한 층의 튜닝에
+   * 매달리지 않으므로 밸런스를 만져도 이 테스트는 계속 제 일을 한다.
+   */
   const fightUntilDeath = (s: ReturnType<typeof store>) => {
-    // 보스층(6층)은 사망이 잦다
-    s.setState({ floorIndex: 5 });
-    for (let i = 0; i < 40; i++) {
-      s.getState().start();
-      const res = s.getState().result;
-      if (!res) break;
-      const died = res.casualties.length > 0;
-      s.getState().finish();
-      if (died) return true;
-      s.setState({ floorIndex: 5 });
+    // 6층(보스) → 10·12·16층 순으로 점점 치명적인 층을 시도한다
+    for (const floorIndex of [5, 9, 11, 15]) {
+      for (let i = 0; i < 40; i++) {
+        s.setState({ floorIndex });
+        s.getState().start();
+        const res = s.getState().result;
+        if (!res) break;
+        const died = res.casualties.length > 0;
+        s.getState().finish();
+        if (died) return true;
+      }
     }
     return false;
   };

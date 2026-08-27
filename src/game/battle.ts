@@ -114,7 +114,35 @@ const STATUS_MAGNITUDE: Record<StatusKind, number> = {
 };
 
 const DEFENSE_CONSTANT = 300; // 방어력 감쇠 상수
-const TANK_AGGRO = 0.6;       // 단일 대상 공격이 탱커에게 갈 확률
+
+/**
+ * 단일 대상 공격이 탱커에게 갈 확률. **진영마다 다르다.**
+ *
+ * 0.6은 원래 **아군 탱커가 파티를 지키는** 값으로 맞춰졌다(적은 role이 전부
+ * dealer라 이 분기가 아예 안 돌았다 — §STEP 44). 적 role을 살리면서 같은 값을
+ * 적 진영에도 쓰자 **토벌 층이 무너졌다**: 아군 딜의 60%가 적 탱커에게 강제로
+ * 빨려 들어가는데, 토벌은 전멸이 승리 조건이라 그 HP를 결국 다 깎아야 한다.
+ * 그 사이 뒤의 딜러·힐러가 멀쩡히 일한다.
+ *
+ *   실측(0.6 공용): 10층 61%→26% · 13층 89%→30% · 16층 79%→25%
+ *
+ * 적 탱커는 **"먼저 자를지 말지"를 묻는 존재**여야지 반드시 통과해야 하는
+ * 관문이면 안 된다. 그래서 적 쪽만 낮춘다. 아군 쪽 0.6은 검증된 값이라 유지한다.
+ *
+ * ── 0.2를 고른 근거 (climb-check 구간 완주율) ──────────
+ *   계수  | 중층 | 상층 | 21~40 | 41~60 | 61~80 | 81~100
+ *   0.6   |   2% |   3% |   12% |   20% |    0% |     1%   ← 무너진다
+ *   0.3   |   9% |   7% |   23% |   31% |   20% |     4%
+ *   0.2   |  14% |  10% |   24% |   30% |   23% |     8%   ← 채택
+ *   0.15  |  14% |   7% |   32% |   34% |   26% |     8%
+ * (기준선: 중층 20% · 상층 9% · 51/43/20/18%)
+ *
+ * 0.15가 생성 구간 수치는 더 좋지만 **적 탱커가 사실상 무의미해진다** —
+ * 그러면 role을 살린 의미가 없다. 0.2는 상층이 기준선(9%)을 넘고
+ * 중층도 14%로 회복하면서 탱커가 여전히 "다섯 대 중 한 대"를 가져간다.
+ */
+const TANK_AGGRO_VS_ALLY = 0.6;  // 적이 아군 탱커를 노릴 확률 (기존 값)
+const TANK_AGGRO_VS_ENEMY = 0.2; // 아군이 적 탱커를 노릴 확률
 
 // ------------------------------------------------------------
 // 셋업
@@ -325,7 +353,9 @@ function selectTargets(
       }
       // 탱커 우선 피격 — 단, 확정이 아니라 확률 (무한 사수 방지)
       const tanks = pool.filter((c) => c.role === 'tank');
-      const useTank = skill.targetSide === 'enemy' && tanks.length > 0 && rng() < TANK_AGGRO;
+      // 노리는 쪽이 적이면 '아군이 적 탱커를 친다' — 진영마다 계수가 다르다(위 주석)
+      const aggro = actor.side === 'ally' ? TANK_AGGRO_VS_ENEMY : TANK_AGGRO_VS_ALLY;
+      const useTank = skill.targetSide === 'enemy' && tanks.length > 0 && rng() < aggro;
       const candidates = useTank ? tanks : pool;
       return [candidates[Math.floor(rng() * candidates.length)]];
     }
