@@ -62,7 +62,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 830개 통과)
+npm test           # Vitest 1회 실행 (현재 834개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -71,6 +71,7 @@ npm run typecheck
 ```bash
 npx tsx climb-check.mts   # 연속 등반 — 층간 HP·숙소 레벨별 도달 층 + 구간별 완주율
 npx tsx scripts/fresh-check.mts         # 갓 뽑은 개체 — 등급×레벨 저층 승률
+npx tsx scripts/agi-impact.mts          # 마르·예니 — 위 세 도구가 안 쓰는 두 영웅
 npx tsx scripts/floor-tune.mts          # 생성 층(21~100) 승률 점검
 npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
 ```
@@ -98,6 +99,12 @@ sim 표는 미동도 하지 않는다 — `climb-check.mts`를 함께 돌릴 것
 **갓 뽑은 저레벨 개체를 아예 밟지 않는다** — 실제로 "★4 Lv.1이 ★1 Lv.1보다 약한"
 결함이 있는 채로 두 표가 완전히 정상이었다(STEP 33). 성장 곡선·소환 보상·초기 스탯을
 만졌으면 **표가 아니라 테스트로 잠글 것.** 표가 안 움직이는 것은 안전의 증거가 아니다.
+
+⚠️ **세 도구가 쓰는 영웅은 5~6종뿐이다** — ashen/bulwark/tide/gale/bolt·banner.
+**마르(`h_thorn`)·예니(`h_hush`)는 세 표 어디에도 안 나온다.** 실제로 두 영웅이
+최약 능력치로 때리는 결함이 있는 채로 세 표가 전부 정상이었다(STEP 43).
+**특정 영웅의 스탯을 만졌으면 그 영웅이 표에 있는지부터 확인할 것.**
+없으면 `agi-impact.mts`처럼 그 축을 재는 수단을 따로 만들어야 한다.
 
 ⚠️ **승률만 보고 층을 합격시키지 말 것.** 7층은 승률 90%지만 사망 1.16이다 —
 이기는데 매번 한 명 죽고, 3인이 2인이 되면 다음 층 승률이 78%→0~4%로 무너진다.
