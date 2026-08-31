@@ -303,6 +303,87 @@ for (let pass = 0; pass < 6; pass++) {
   console.log(`  (정리 ${pass + 1}회차: ${changed}개 층 재선택)`);
 }
 
+/*
+  ── 마지막: 이웃에게 자리를 비켜달라고 한다 ────────────
+  위의 두 루프는 **막힌 층 자신만** 움직인다. 그래서 어떤 층의 유일한 합격 변형을
+  이웃이 이미 쓰고 있으면, 그 이웃에게 다른 합격 변형이 있어도 영영 안 풀린다.
+
+  실제로 94층이 그랬다. v19가 **100%/사망 0.17**(양쪽 편성)인데 96층(v14)과 구성이
+  같아 막혔고, 96층에는 v3(100%/0.10)이라는 멀쩡한 대안이 있었다. STEP 45가 96층을
+  고치면서 94층이 필요한 자리를 먼저 가져간 것이다. 튜너는 "94층 합격 변형 없음"이라고
+  보고했지만 **사실이 아니었다** — 탐색 범위 밖이었을 뿐이다(§STEP 45와 같은 모양).
+
+  그래서 막힌 층이 남았을 때만, 그 층을 막고 있는 이웃을 **다른 합격 변형으로** 옮겨
+  자리를 비우게 한다. 이웃이 합격을 유지하는 경우에만 옮긴다 — 문제를 떠넘기면 안 된다.
+*/
+{
+  let yielded = 0;
+  for (const fid of Object.keys(chosen).map(Number)) {
+    const curIds = buildEnemyVariant(fid, tierOf(fid), chosen[fid]);
+    if (!tooHard(fid, measure(fid, curIds))) continue; // 안 막혔으면 볼 것 없다
+
+    for (let v = 0; v < VARIANT_COUNT; v++) {
+      const ids = buildEnemyVariant(fid, tierOf(fid), v);
+      const m = measure(fid, ids);
+      if (!ok(fid, m)) continue; // 합격하는 변형만 자리를 다툴 가치가 있다
+
+      // 이 변형을 막고 있는 이웃을 찾는다
+      const key = [...ids].sort().join(',');
+      const blockers: number[] = [];
+      for (let back = 1; back <= MIN_REPEAT_GAP; back++) {
+        for (const other of [fid - back, fid + back]) {
+          if (other <= HANDCRAFTED_UNTIL || other > TOWER_HEIGHT) continue;
+          if (other % BOSS_EVERY === 0) continue;
+          if (composition(other) === key) blockers.push(other);
+        }
+      }
+      if (blockers.length === 0) continue; // 안 막혔는데 여태 못 골랐다면 다른 이유다
+
+      /*
+        이웃 각각이 "합격을 유지하면서 다른 구성으로" 옮길 수 있어야 한다.
+        하나라도 못 옮기면 이 변형은 포기한다 — 이웃을 불합격으로 만들면서까지
+        자리를 뺏으면 총량이 그대로다.
+      */
+      const moves = new Map<number, number>();
+      for (const b of blockers) {
+        let moved = false;
+        for (let bv = 0; bv < VARIANT_COUNT; bv++) {
+          const bIds = buildEnemyVariant(b, tierOf(b), bv);
+          const bKey = [...bIds].sort().join(',');
+          if (bKey === key) continue; // 여전히 같은 자리다
+          if (!ok(b, measure(b, bIds))) continue;
+          // 이웃의 새 구성이 또 다른 층과 겹치면 안 된다
+          let clash = false;
+          for (let back = 1; back <= MIN_REPEAT_GAP && !clash; back++) {
+            for (const other of [b - back, b + back]) {
+              if (other === fid) continue; // fid는 곧 key로 바뀐다
+              if (other <= HANDCRAFTED_UNTIL || other > TOWER_HEIGHT) continue;
+              if (other % BOSS_EVERY === 0) continue;
+              if (composition(other) === bKey) clash = true;
+            }
+          }
+          if (clash) continue;
+          moves.set(b, bv);
+          moved = true;
+          break;
+        }
+        if (!moved) { moves.clear(); break; }
+      }
+      if (moves.size === 0) continue;
+
+      for (const [b, bv] of moves) {
+        chosen[b] = bv;
+        report.push(`  ${String(b).padStart(3)}층 (자리 양보) → v${bv}`);
+      }
+      chosen[fid] = v;
+      yielded++;
+      report.push(`  ${String(fid).padStart(3)}층 (이웃 양보로 해결) → v${v} ${m.win.toFixed(0)}%/${m.death.toFixed(2)}`);
+      break;
+    }
+  }
+  if (yielded > 0) console.log(`  (자리 양보로 ${yielded}개 층 해결)`);
+}
+
 console.log(
   `\n  합격 구간 ${MIN_WIN}~${MAX_WIN}% · 사망 정원×${MAX_DEATH_RATIO}` +
   ` (생성 구간 ${maxDeathAt(TOWER_HEIGHT).toFixed(1)}) 이하 · ${N}회\n`,
