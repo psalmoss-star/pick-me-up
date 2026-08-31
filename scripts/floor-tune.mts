@@ -83,6 +83,30 @@ const MAX_DEATH_RATIO = 0.4;
 const maxDeathAt = (fid: number) => partyLimitAt(fid) * MAX_DEATH_RATIO;
 
 /**
+ * 사망 상한을 **면제**하는 층 — 승률은 합격인데 대가가 비싼 층이다.
+ *
+ * ⚠️ **탈출구가 없다는 것을 실측으로 확인한 층만 넣을 것.** 그냥 어려운 층을 여기
+ * 넣으면 튜너를 무력화하는 뒷문이 된다. 넣기 전에 변형 24개를 전수로 재고,
+ * 합격이 정말 하나도 없는지부터 볼 것(§STEP 46 — 94층은 "없다"가 거짓이었다).
+ *
+ * **99층 (STEP 46, 2026-08-31)**
+ * 승률 61%로 합격 구간(55~96%) 안인데 사망 2.76이 상한 2.0을 넘는다.
+ * 조작 실험에서 원인이 구성이 아니라 **기수**로 확인됐다:
+ *
+ *   현재 5기 67%/2.51  →  4기로 줄이면 **97%/0.78**
+ *
+ * 그런데 `TIERS`가 전부 `count: [5, 6]`이라 생성기가 4기를 못 만든다.
+ * 변형 24개를 300회씩 정밀 측정해도 5~6기 안에는 합격이 **하나도 없다**
+ * (승률 55%를 넘는 것이 v17 하나뿐이고 그마저 사망 2.44).
+ *
+ * `count`를 `[4, 6]`으로 넓히면 생성 층 80개 전체가 움직여 표를 통째로
+ * 재수렴시켜야 한다. **얻는 것이 한 층뿐이라 대가가 맞지 않는다**(§5-5).
+ * 100층 직전이라 "이기지만 비싸게 이기는 층"이 서사적으로도 맞는다 —
+ * 그래서 고치는 대신 **의도된 예외로 못박는다.**
+ */
+const DEATH_CAP_EXEMPT = new Set<number>([99]);
+
+/**
  * ⚠️ **"너무 쉬움"과 "너무 어려움"을 같이 취급하면 안 된다.**
  *
  * 처음에 합격 구간을 벗어나면 전부 재추첨했더니, 98%/사망 0.00짜리 멀쩡한 층까지
@@ -93,7 +117,8 @@ const maxDeathAt = (fid: number) => partyLimitAt(fid) * MAX_DEATH_RATIO;
  * 그래서 재추첨 대상은 `tooHard`만으로 좁힌다. 상한은 보고용으로만 남긴다.
  */
 const tooHard = (fid: number, m: { win: number; death: number }) =>
-  m.win < MIN_WIN || m.death > maxDeathAt(fid);
+  // 면제 층도 **승률은 본다** — 면제한 것은 사망 상한 하나뿐이다.
+  m.win < MIN_WIN || (!DEATH_CAP_EXEMPT.has(fid) && m.death > maxDeathAt(fid));
 
 /**
  * 편성마다 N회씩 돌리므로 실제 전투 수는 2N이다.
@@ -390,7 +415,26 @@ console.log(
 );
 console.log(report.join('\n') || '  (조정 대상 없음)');
 console.log(`\n  손 안 댐 ${untouched} | 변형으로 해결 ${fixed} | 합격 변형 없음 ${failed}`);
-console.log(`  (그중 ${MAX_WIN}% 초과로 쉬운 층 ${tooEasy.length}개 — 숨돌림이므로 건드리지 않는다)\n`);
+console.log(`  (그중 ${MAX_WIN}% 초과로 쉬운 층 ${tooEasy.length}개 — 숨돌림이므로 건드리지 않는다)`);
+
+/*
+  면제 층은 **매번 실측을 찍는다.** 조용히 통과시키면 뒷문이 되고, 나중에 적 수치나
+  파티 기준이 바뀌어 면제가 필요 없어져도(또는 더 나빠져도) 아무도 모른다.
+*/
+if (DEATH_CAP_EXEMPT.size > 0) {
+  const lines = [...DEATH_CAP_EXEMPT].sort((a, b) => a - b).map((fid) => {
+    const ids = chosen[fid] != null
+      ? buildEnemyVariant(fid, tierOf(fid), chosen[fid])
+      : generateFloor(fid).enemyIds;
+    const m = measure(fid, ids);
+    const within = m.death <= maxDeathAt(fid);
+    return `    ${fid}층 ${m.win.toFixed(0)}%/사망 ${m.death.toFixed(2)}` +
+      (within ? '  ← 상한 안으로 들어왔다. 면제를 지울 것' : ` (상한 ${maxDeathAt(fid).toFixed(1)})`);
+  });
+  console.log(`\n  사망 상한 면제 ${DEATH_CAP_EXEMPT.size}개 — 의도된 예외다(§STEP 46):`);
+  console.log(lines.join('\n'));
+}
+console.log('');
 
 if (process.argv.includes('--write')) {
   const here = dirname(fileURLToPath(import.meta.url));

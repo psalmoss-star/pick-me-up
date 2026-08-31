@@ -62,7 +62,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 836개 통과)
+npm test           # Vitest 1회 실행 (현재 837개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -83,6 +83,11 @@ npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
 ⚠️ **적 수치·깊이 배수·기준 파티를 만졌으면 `floor-tune`을 다시 돌릴 것.**
 `floorVariants.ts`는 실측으로 고른 변형 번호 표라서, 입력이 바뀌면 조용히 낡는다
 (생성기가 옛 판단을 그대로 쓴다).
+
+⚠️ **튜너가 "합격 변형 없음"이라고 해도 그대로 믿지 말 것.** 94층이 그렇게 보고됐지만
+실제로는 v19가 100%/사망 0.17이었고, 이웃(96층)이 자리를 쥐고 있었을 뿐이다 —
+**탐색 범위 밖이었지 없는 게 아니었다**(HANDOFF §STEP 46). 고치기 전에 변형 24개를
+전수로 재볼 것. `DEATH_CAP_EXEMPT`(현재 99층 하나)는 그 전수 조사를 통과한 층만 넣는다.
 
 **실기기(폰) 확인** — `vite.config.ts`에 `server.host`가 켜져 있어 `npm run dev` 출력의
 `Network: http://<LAN IP>:5173/` 주소로 같은 WiFi의 폰에서 접속된다.

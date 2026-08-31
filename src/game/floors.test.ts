@@ -21,6 +21,7 @@ import {
   NAME_REPEAT_GAP,
   PLACE_REPEAT_GAP,
   tierOf,
+  TIERS,
   VARIANT_COUNT,
 } from './data/floorgen';
 import { enemies } from './data/sample';
@@ -433,6 +434,25 @@ describe('생성 층 — 적 기수와 역할 중복', () => {
         return sizes.size > 1;
       });
     expect(someFloorVariesCount).toBe(true);
+  });
+
+  it('티어의 기수 하한이 5다 — 99층 사망 면제가 이것에 기대고 있다', () => {
+    /*
+      §STEP 46: 99층은 승률 61%(합격)인데 사망 2.76으로 상한 2.0을 넘는다.
+      조작 실험에서 원인이 구성이 아니라 **기수**로 확인됐다 —
+      5기 67%/2.51 → **4기로 줄이면 97%/0.78**.
+
+      그런데 `TIERS`가 전부 `count: [5, 6]`이라 생성기가 4기를 못 만든다.
+      변형 24개를 300회씩 재도 5~6기 안에는 합격이 하나도 없어서,
+      99층은 고치는 대신 `floor-tune`의 `DEATH_CAP_EXEMPT`로 면제했다.
+
+      ⚠️ **하한을 4로 낮추면 그 면제의 근거가 사라진다.** 99층에 탈출구가
+      생기므로 면제를 지우고 튜너를 다시 수렴시켜야 한다(생성 층 80개가 전부
+      움직인다). 그 결정이 조용히 일어나지 않도록 여기서 잠근다.
+    */
+    for (const tier of TIERS) {
+      expect(tier.count[0], `${tier.name} 티어의 기수 하한`).toBe(5);
+    }
   });
 
   it('변형 0은 기존 기수를 유지한다 — 이미 합격한 층이 흔들리면 안 된다', () => {
