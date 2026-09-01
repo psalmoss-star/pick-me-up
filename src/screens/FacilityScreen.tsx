@@ -6,8 +6,8 @@ import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import {
   FACILITY_META, FACILITY_MAX_LEVEL, upgradeCost,
-  restHealRate, armoryAtkMult, idleExpGain,
-  type FacilityKind,
+  restHealRate, armoryAtkMult, idleExpWithAssign, ASSIGN_SLOTS, ASSIGNABLE,
+  type FacilityKind, type AssignableFacility,
 } from '../game/data/facilities';
 import { fuseEfficiency } from '../game/progression';
 import type { Wallet } from '../game/types';
@@ -46,6 +46,18 @@ export interface FacilityScreenProps {
    * 훈련소는 **누가 크고 있는지**를 보여주는 것으로 장소가 된다.
    */
   trainees?: Trainee[];
+  /**
+   * 시설 배치 — 잉여 영웅의 세 번째 출구(제물·파견에 이어).
+   *
+   * 배치자는 유휴 exp를 받지 않는 대신 그 시설의 산출을 올린다.
+   * 훈련소·합성소만 받는다 — 숙소·무기창고는 전투력에 직접 닿아
+   * 배치가 승률을 밀어 올리기 때문이다.
+   */
+  assignments?: Record<AssignableFacility, string[]>;
+  /** 배치 가능한(=살아있고 파견·배치 안 된) 영웅. 이름과 함께 받는다 */
+  assignable?: { instId: string; name: string; level: number }[];
+  onAssign?: (kind: AssignableFacility, instId: string) => void;
+  onUnassign?: (instId: string) => void;
 }
 
 /** 훈련소에 표시할 대기 영웅 한 명 */
@@ -69,18 +81,19 @@ const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
  * 화면이 수치를 직접 계산하지 않고 data/facilities.ts의 함수를 부른다 —
  * 밸런스 수치가 두 곳으로 갈라지면 표시와 실제가 어긋난다.
  */
-function effectText(kind: FacilityKind, level: number): string {
+function effectText(kind: FacilityKind, level: number, assigned = 0): string {
   switch (kind) {
     case 'rest':
       return `층 사이 회복 ${Math.round(restHealRate(level) * 100)}%`;
     case 'training': {
-      const exp = idleExpGain(level);
+      // 배치 인원이 반영된 값이다 — 화면이 따로 더하면 실제 지급과 갈라진다
+      const exp = idleExpWithAssign(level, assigned);
       return exp === 0 ? '유휴 경험치 없음' : `대기 영웅 층당 +${exp} exp`;
     }
     case 'forge': {
       // 수치는 반드시 progression의 함수에서 가져온다. 여기서 다시 계산하면
       // 표시와 실제가 갈라진다.
-      const pct = Math.round(fuseEfficiency(level) * 100);
+      const pct = Math.round(fuseEfficiency(level, assigned) * 100);
       return `전환율 ${pct}%`;
     }
     case 'armory': {
@@ -91,9 +104,14 @@ function effectText(kind: FacilityKind, level: number): string {
 }
 
 /** 다음 레벨에서 무엇이 좋아지는지 — 투자 판단의 근거 */
-function nextText(kind: FacilityKind, level: number): string | null {
+function nextText(kind: FacilityKind, level: number, assigned = 0): string | null {
   if (level >= FACILITY_MAX_LEVEL) return null;
-  return effectText(kind, level + 1);
+  return effectText(kind, level + 1, assigned);
+}
+
+/** 배치를 받는 시설인가 */
+function isAssignable(kind: FacilityKind): kind is AssignableFacility {
+  return (ASSIGNABLE as readonly FacilityKind[]).includes(kind);
 }
 
 /**
@@ -105,6 +123,8 @@ function nextText(kind: FacilityKind, level: number): string | null {
 export function FacilityScreen({
   facilities, wallet, onUpgrade, onBack, initialFocus, onRest, restCost, restInjured,
   trainees = [],
+  assignments = { training: [], forge: [] },
+  assignable = [], onAssign, onUnassign,
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
@@ -189,7 +209,9 @@ export function FacilityScreen({
           const cost = upgradeCost(level);
           const maxed = cost == null;
           const affordable = !maxed && wallet.gold >= cost;
-          const next = nextText(kind, level);
+          // 배치를 안 받는 시설은 항상 0이라 기존 표시와 완전히 같다
+          const assignedHere = isAssignable(kind) ? assignments[kind] : [];
+          const next = nextText(kind, level, assignedHere.length);
 
           return (
             /*
@@ -229,7 +251,7 @@ export function FacilityScreen({
               </div>
 
               <div style={{ fontSize: 13, marginBottom: 2 }}>
-                Lv.{level} · {effectText(kind, level)}
+                Lv.{level} · {effectText(kind, level, assignedHere.length)}
               </div>
 
               {next && (
@@ -274,7 +296,7 @@ export function FacilityScreen({
                   ) : (
                     <>
                       <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, letterSpacing: '.1em' }}>
-                        훈련 중 {trainees.length}명 · 층당 +{idleExpGain(level)} exp
+                        훈련 중 {trainees.length}명 · 층당 +{idleExpWithAssign(level, assignedHere.length)} exp
                       </div>
                       <div style={{ display: 'grid', gap: 7 }}>
                         {trainees.map((t) => (
@@ -296,6 +318,61 @@ export function FacilityScreen({
                         ))}
                       </div>
                     </>
+                  )}
+                </div>
+              )}
+
+              {/*
+                배치 — 잉여 영웅의 세 번째 출구.
+
+                제물이 "갈아 없앤다"라면 배치는 "곁에 두고 일을 시킨다"다.
+                둘 다 있어야 선택이 되므로 같은 무게로 보여야 한다.
+
+                ⚠️ **배치자는 성장하지 않는다**는 것을 문구로 밝힌다. 화면에 안 적으면
+                플레이어는 "왜 얘만 exp가 안 오르지"를 버그로 읽는다.
+              */}
+              {isAssignable(kind) && onAssign && onUnassign && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
+                  <div style={{
+                    fontSize: 11, color: T.dim, marginBottom: 8, letterSpacing: '.1em',
+                  }}>
+                    배치 {assignedHere.length}/{ASSIGN_SLOTS[kind]} · 성장 대신 산출
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {assignedHere.map((id) => {
+                      const who = assignable.find((a) => a.instId === id);
+                      return (
+                        <div
+                          key={id}
+                          style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            gap: 8, fontSize: 12,
+                          }}
+                        >
+                          <span>{who ? `${who.name} Lv.${who.level}` : '—'}</span>
+                          <Button small onClick={() => onUnassign(id)}>해제</Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {assignedHere.length < ASSIGN_SLOTS[kind] && (
+                    <div style={{ marginTop: assignedHere.length > 0 ? 8 : 0 }}>
+                      {assignable.length === 0 ? (
+                        <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
+                          배치할 수 있는 영웅이 없다
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {assignable.map((a) => (
+                            <Button key={a.instId} small onClick={() => onAssign(kind, a.instId)}>
+                              {a.name} 배치
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

@@ -25,7 +25,7 @@ import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt, gameData } from './game/data';
 import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
-import { idleExpGain } from './game/data/facilities';
+import { idleExpWithAssign, ASSIGNABLE } from './game/data/facilities';
 import { revisitMultiplier } from './game/data/revisit';
 import { expToNext, gainExp } from './game/progression';
 import { rollFloorLoot } from './game/loot';
@@ -127,6 +127,16 @@ export default function App() {
   const promote = useRunStore((s) => s.promote);
   const facilities = useRunStore((s) => s.facilities);
   const upgradeFacility = useRunStore((s) => s.upgradeFacility);
+  const assignments = useRunStore((s) => s.assignments);
+  const assign = useRunStore((s) => s.assign);
+  const unassign = useRunStore((s) => s.unassign);
+  /**
+   * 배치된 전원. 훈련소 목록과 배치 후보 목록이 **같은 집합**을 봐야 한다 —
+   * 갈라지면 "훈련 중인데 exp가 안 오르는" 어긋남이 생긴다(`finish()`의 규칙과 동일).
+   */
+  const assignedHeroIds = new Set<string>(
+    ASSIGNABLE.flatMap((k) => assignments[k] as string[]),
+  );
   const rest = useRunStore((s) => s.rest);
   const gear = useRunStore((s) => s.gear);
   const buyGear = useRunStore((s) => s.buyGear);
@@ -361,12 +371,21 @@ export default function App() {
     );
     const casualties = new Set<string>(result.casualties);
     const gained = Math.round(floorRewards(floor, result.turnsElapsed).exp * revisitMult());
-    const idle = idleExpGain(facilities.training);
+    /*
+      ⚠️ 배치 인원이 반영된 유휴 exp여야 한다 — `finish()`가 그 값을 쓴다.
+      출전한 배치자는 그 층 산출에서 빠지는 것까지 같은 규칙으로 센다.
+    */
+    const workingTrainees = assignments.training
+      .filter((id) => !fought.has(id) && !casualties.has(id)).length;
+    const idle = idleExpWithAssign(facilities.training, workingTrainees);
 
     const out: LevelUp[] = [];
     for (const h of snapshot) {
       if (h.isDead || casualties.has(h.instId)) continue;
-      const exp = fought.has(h.instId) ? gained : idle;
+      // 배치자는 유휴 exp를 받지 않는다 — `finish()`의 `assignedNow` 제외와 같다
+      const exp = fought.has(h.instId)
+        ? gained
+        : (assignedHeroIds.has(h.instId) ? 0 : idle);
       if (exp <= 0) continue;
       const r = gainExp(h, exp, gameData.starScaling);
       if (r.levelsGained > 0) {
@@ -472,15 +491,17 @@ export default function App() {
             restCost={restQuote(roster).cost}
             restInjured={restQuote(roster).injured.length}
             /*
-              훈련 중인 영웅 = **출전하지 않고 파견도 안 나간 생존자.**
+              훈련 중인 영웅 = **출전하지 않고 파견·배치도 안 된 생존자.**
               판정은 `finish()`의 유휴 exp 규칙과 **정확히 같아야 한다** —
-              거기서 파견 인원(`awayNow`)을 제외하므로 여기서도 빼야 한다.
-              안 빼면 훈련소에 이름이 떠 있는데 exp는 안 오르는 상태가 된다.
+              거기서 파견 인원(`awayNow`)과 배치 인원(`assignedNow`)을 제외하므로
+              여기서도 빼야 한다. 안 빼면 훈련소에 이름이 떠 있는데 exp는
+              안 오르는 상태가 된다.
             */
             trainees={roster
               .filter((h) => !h.isDead
                 && !party.includes(h.instId)
-                && !dispatchedHeroIds(dispatches).has(h.instId))
+                && !dispatchedHeroIds(dispatches).has(h.instId)
+                && !assignedHeroIds.has(h.instId))
               .map((h) => {
                 const maxLevel = gameData.starScaling[h.star].maxLevel;
                 const atMax = h.level >= maxLevel;
@@ -494,6 +515,24 @@ export default function App() {
                   exp: h.exp,
                 };
               })}
+            assignments={assignments}
+            /*
+              배치 후보 = 살아있고, 출전 편성에 없고, 파견·배치도 안 된 영웅.
+              편성 인원을 빼는 이유: 배치자가 출전하면 그 층 산출이 멈추므로
+              (전투력과 생산의 제로섬) 목록에 두면 헛일을 권하는 셈이다.
+            */
+            assignable={roster
+              .filter((h) => !h.isDead
+                && !party.includes(h.instId)
+                && !dispatchedHeroIds(dispatches).has(h.instId)
+                && !assignedHeroIds.has(h.instId))
+              .map((h) => ({
+                instId: h.instId,
+                name: displayName(h, gameData.heroes),
+                level: h.level,
+              }))}
+            onAssign={(kind, id) => assign(kind, id as HeroInstId)}
+            onUnassign={(id) => unassign(id as HeroInstId)}
           />
         )}
         {screen === 'adventure' && (

@@ -11,6 +11,25 @@
 
 export type FacilityKind = 'rest' | 'training' | 'forge' | 'armory';
 
+/**
+ * 배치를 받는 시설 — **훈련소·합성소 둘뿐이다.**
+ *
+ * ⚠️ 숙소(`restHeal`)와 무기창고(`armoryAtk`)는 뺐다. 이 파일 맨 위가 경고하듯
+ * 그 둘은 층별 승률을 통째로 밀어 올리는 칼날이라, 배치가 닿는 순간
+ * 검증된 구간 완주율 표를 전부 다시 수렴시켜야 한다.
+ *
+ * 훈련소·합성소는 `sim`도 `climb-check`도 쓰지 않으므로 **밸런스 재측정 의무가 없다**
+ * (`FORGE_RATE` 주석: "층별 승률과는 무관하다").
+ *
+ * `Record<FacilityKind, ...>`가 아니라 좁은 유니온을 쓰는 이유: 숙소·무기창고를
+ * 키로 가지면 "왜 여긴 항상 비어 있지?"가 되고 다음 사람이 채운다.
+ * 타입이 금지하면 그 실수가 **컴파일 에러**가 된다.
+ */
+export type AssignableFacility = 'training' | 'forge';
+
+/** 배치 가능 시설 목록 — 화면 순회용. 늘어나면 테스트가 잡는다 */
+export const ASSIGNABLE: readonly AssignableFacility[] = ['training', 'forge'];
+
 /** 시설 최대 레벨. GDD v2 §2.2 "Lv.3까지". */
 export const FACILITY_MAX_LEVEL = 3;
 
@@ -81,6 +100,57 @@ export const FORGE_RATE: readonly number[] = [0.5, 0.65, 0.8, 0.95];
  * 퍼머데스의 긴장(내보내야 크는데 내보내면 죽는다)이 사라진다.
  */
 export const TRAINING_IDLE_EXP: readonly number[] = [0, 40, 90, 160];
+
+/**
+ * 시설당 배치 슬롯 수.
+ *
+ * 2인으로 잡은 이유: 로스터가 8인일 때 1군 5 + 배치 2면 1명이 남는다.
+ * 슬롯이 더 크면 "남는 영웅을 전부 꽂는 것"이 무조건 정답이 되어 선택이 사라진다.
+ */
+export const ASSIGN_SLOTS: Record<AssignableFacility, number> = { training: 2, forge: 2 };
+
+/**
+ * 배치 1인당 효과 상승.
+ *
+ * - `training`: 유휴 exp **절대값**(+25/인)
+ * - `forge`: 전환율 **비율**(+5%p/인)
+ *
+ * ⚠️ 단위가 다르다. 시설 레벨 효과에 **곱이 아니라 합**으로 얹는다 —
+ * 곱이면 만렙에서 상승폭이 커져 "만렙 먼저, 배치는 나중"이 유일한 순서가 된다.
+ */
+export const ASSIGN_BONUS: Record<AssignableFacility, number> = { training: 25, forge: 0.05 };
+
+/**
+ * 합성 전환율 상한.
+ *
+ * ⚠️ **1.0을 넘으면 안 된다.** 만렙 0.95 + 슬롯 2×0.05 = 1.05인데,
+ * 제물이 가진 가치보다 많은 exp가 나오면 합성이 **exp 생성기**가 되어
+ * "제물을 돌려 무한 성장"이 성립한다.
+ */
+const FORGE_RATE_CAP = 1;
+
+/** 배치 인원을 슬롯 수로 자른다. 화면·저장 어느 쪽이 넘겨도 여기서 막힌다 */
+function cappedAssigned(kind: AssignableFacility, assigned: number): number {
+  return Math.min(ASSIGN_SLOTS[kind], Math.max(0, Math.floor(assigned)));
+}
+
+/**
+ * 배치를 반영한 유휴 경험치.
+ *
+ * ⚠️ **Lv.0에는 배치해도 0이다.** 미건설 시설이 배치만으로 exp를 내면
+ * "안 지어도 되는 시설"이 되어 강화의 의미가 사라진다.
+ */
+export function idleExpWithAssign(level: number, assigned: number): number {
+  const base = idleExpGain(level);
+  if (base === 0) return 0;
+  return base + ASSIGN_BONUS.training * cappedAssigned('training', assigned);
+}
+
+/** 배치를 반영한 합성 전환율. 상한에서 잘린다 */
+export function forgeRateWithAssign(level: number, assigned: number): number {
+  const base = forgeRate(level);
+  return Math.min(FORGE_RATE_CAP, base + ASSIGN_BONUS.forge * cappedAssigned('forge', assigned));
+}
 
 /**
  * 시설 업그레이드 비용(금). 인덱스 = 올린 뒤의 레벨.

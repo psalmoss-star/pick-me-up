@@ -18,6 +18,7 @@ import { initialGachaState } from '../game/gacha';
 import { displayName } from '../game/identity';
 import { gameData } from '../game/data';
 import { MATERIAL } from '../game/data/materials';
+import { ASSIGN_SLOTS } from '../game/data/facilities';
 import type { CodexEntry, HeroDefId, HeroInstId } from '../game/types';
 
 /** 저장 대상만 담은 최소 슬라이스 */
@@ -35,6 +36,7 @@ const sample = (): RunSlice => {
     gacha: initialGachaState(0),
     codex: {} as Record<HeroDefId, CodexEntry>,
     facilities: { rest: 0, training: 0, forge: 0, armory: 0 },
+    assignments: { training: [], forge: [] },
     gear: [],
     gearSeq: 0,
     battleCount: 0,
@@ -406,5 +408,82 @@ describe('세이브 v2 — maxFloorReached / revisits', () => {
   it('미래 버전(v3)은 여전히 읽지 않는다', () => {
     const v3 = JSON.stringify({ version: 3, savedAt: Date.now(), run: { floorIndex: 0, roster: [] } });
     expect(deserialize(v3)).toBeNull();
+  });
+});
+
+describe('시설 배치 저장', () => {
+  it('배치가 왕복해도 보존된다', () => {
+    const s = sample();
+    const ids = s.roster.map((h) => h.instId);
+    s.assignments = { training: [ids[0]], forge: [ids[1]] };
+
+    const out = deserialize(serialize(s))!;
+
+    expect(out.assignments.training).toEqual([ids[0]]);
+    expect(out.assignments.forge).toEqual([ids[1]]);
+  });
+
+  /*
+    ⚠️ 유령 instId는 슬롯을 **영구 점유**한다. 화면에 이름이 안 뜨니
+    해제할 방법도 없어 그 자리가 영영 잠긴다 — 교착이다.
+    파견이 "정의에 없는 모험은 버린다"로 막은 것과 같은 모양.
+  */
+  it('로스터에 없는 instId는 버려진다', () => {
+    const s = sample();
+    s.assignments = { training: ['h_ghost#99' as HeroInstId], forge: [] };
+
+    const out = deserialize(serialize(s))!;
+
+    expect(out.assignments.training).toEqual([]);
+  });
+
+  it('죽은 영웅은 배치에서 버려진다', () => {
+    const s = sample();
+    s.roster = s.roster.map((h, i) => (i === 0 ? { ...h, isDead: true } : h));
+    s.assignments = { training: [s.roster[0].instId], forge: [] };
+
+    const out = deserialize(serialize(s))!;
+
+    expect(out.assignments.training).toEqual([]);
+  });
+
+  it('슬롯을 넘는 인원은 잘린다 (수동 편집 방지)', () => {
+    const s = sample();
+    const ids = s.roster.map((h) => h.instId);
+    expect(ids.length).toBeGreaterThan(ASSIGN_SLOTS.training);
+    s.assignments = { training: ids, forge: [] };
+
+    const out = deserialize(serialize(s))!;
+
+    expect(out.assignments.training.length).toBe(ASSIGN_SLOTS.training);
+  });
+
+  it('같은 영웅이 두 시설에 있으면 뒤엣것을 버린다', () => {
+    const s = sample();
+    const id = s.roster[0].instId;
+    s.assignments = { training: [id], forge: [id] };
+
+    const out = deserialize(serialize(s))!;
+
+    expect(out.assignments.training).toEqual([id]);
+    expect(out.assignments.forge).toEqual([]);
+  });
+
+  it('배치가 없는 예전 세이브는 빈 배치로 읽힌다', () => {
+    // SAVE_VERSION을 올리지 않은 근거다 — 기본값이 안전하므로 마이그레이션이 필요 없다.
+    const old = JSON.stringify({
+      version: 2,
+      savedAt: Date.now(),
+      run: {
+        floorIndex: 0,
+        maxFloorReached: 0,
+        roster: [{ instId: 'h_ashen#1', defId: 'h_ashen', star: 2, level: 15, isDead: false }],
+        party: [],
+      },
+    });
+
+    const out = deserialize(old)!;
+
+    expect(out.assignments).toEqual({ training: [], forge: [] });
   });
 });

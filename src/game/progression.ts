@@ -2,7 +2,7 @@ import type {
   HeroDef, HeroDefId, HeroInstance, Star, StarScaling, Wallet,
 } from './types';
 import { attributesOfInstance, isAtCap, klassFor } from './stats';
-import { forgeRate } from './data/facilities';
+import { forgeRateWithAssign } from './data/facilities';
 
 /**
  * 성장의 세 갈래
@@ -154,8 +154,8 @@ export function needsPromotion(
  * 공식으로 박혀 있었고, 그 안의 `Math.max(1, level)`이 Lv.0을 Lv.1로 끌어올려
  * **미건설과 Lv.1이 같은 65%**가 되는 함정을 만들었다.
  */
-export function fuseEfficiency(facilityLevel: number): number {
-  return forgeRate(facilityLevel);
+export function fuseEfficiency(facilityLevel: number, assigned = 0): number {
+  return forgeRateWithAssign(facilityLevel, assigned);
 }
 
 /** 제물 영웅이 가진 가치를 경험치로 환산 */
@@ -204,14 +204,16 @@ export function fuse(args: {
   target: HeroInstance;
   sacrifice: HeroInstance;
   facilityLevel: number;
+  /** 합성소에 배치된 인원. 전환율을 올린다 — 없으면 기존 동작과 완전히 같다 */
+  assigned?: number;
   scaling: Record<Star, StarScaling>;
 }): FuseResult | FuseCheck {
-  const { target, sacrifice, facilityLevel, scaling } = args;
+  const { target, sacrifice, facilityLevel, assigned = 0, scaling } = args;
   const check = canFuse(target, sacrifice, scaling);
   if (!check.ok) return check;
 
   const raw = sacrificeValue(sacrifice, scaling);
-  const exp = Math.round(raw * fuseEfficiency(facilityLevel));
+  const exp = Math.round(raw * fuseEfficiency(facilityLevel, assigned));
   const grown = gainExp(target, exp, scaling);
 
   return {

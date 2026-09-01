@@ -24,8 +24,8 @@ import { partyLimitAt, squadsOpen, SQUAD_COUNT } from '../game/data/party';
 import { livingHeroes } from '../game/roster';
 import { revisitMultiplier } from '../game/data/revisit';
 import {
-  armoryAtkMult, idleExpGain, restHealRate, upgradeCost,
-  REST_COST_PER_HP, REST_COST_MIN, type FacilityKind,
+  armoryAtkMult, idleExpWithAssign, restHealRate, upgradeCost, ASSIGN_SLOTS, ASSIGNABLE,
+  REST_COST_PER_HP, REST_COST_MIN, type FacilityKind, type AssignableFacility,
 } from '../game/data/facilities';
 import { GEAR_DEFS, POTION_TUNING } from '../game/data/gear';
 import {
@@ -180,6 +180,17 @@ export interface RunSlice {
   /** 시설 레벨(0=미건설). 대기실 경영 — STEP 6 */
   facilities: Record<FacilityKind, number>;
   /**
+   * 시설 배치 — 잉여 영웅의 세 번째 출구(제물·파견에 이어). STEP 48.
+   *
+   * 파견이 **일회성 이벤트**라면 배치는 **영구 상태**다. 배치자는 exp를 받지 않고
+   * 대신 그 시설의 산출을 올린다 — 보상의 *종류*가 달라 유휴 exp와 경쟁하지 않는다.
+   *
+   * ⚠️ **묶는 기능이므로 푸는 쪽이 무조건이어야 한다.** 사망·제물은 배치를 자동
+   * 해제한다(`finish`·`fuse`). 안 그러면 유령 instId가 슬롯을 영구 점유하는데,
+   * 화면에 이름이 안 뜨니 해제할 방법도 없다 — 교착이다.
+   */
+  assignments: Record<AssignableFacility, HeroInstId[]>;
+  /**
    * 보유 장비. 착용 여부는 각 인스턴스의 equippedBy가 들고 있다.
    *
    * Map이 아니라 배열인 이유는 저장이다 — Map은 JSON으로 직렬화되지 않는다.
@@ -319,6 +330,15 @@ export interface RunActions {
    * — summon()/fuse()와 같은 원칙이며, 실패 시 상태는 그대로다.
    */
   upgradeFacility: (kind: FacilityKind) => FacilityUpgradeResult;
+  /** 영웅을 시설에 배치한다. 슬롯이 차 있거나 이미 묶인 영웅이면 거부된다 */
+  assign: (kind: AssignableFacility, id: HeroInstId) => AssignResult;
+  /**
+   * 배치를 푼다.
+   *
+   * ⚠️ **무조건 성공한다** — `recallDispatch`와 같은 원칙이다.
+   * 해제에 조건을 달면 "묶였는데 풀 방법이 없는" 교착이 생긴다.
+   */
+  unassign: (id: HeroInstId) => void;
   /** 숙소 휴식 — 금을 내고 살아있는 영웅 전원의 HP를 즉시 만피로 되돌린다. */
   rest: () => RestResult;
   /** 상점 구매. 금으로 장비를 사서 창고에 넣는다. */
@@ -370,6 +390,17 @@ export type RunStore = RunSlice & RunActions;
 export type FacilityUpgradeResult =
   | { ok: true; kind: FacilityKind; level: number; spent: number }
   | { ok: false; reason: 'max-level' | 'not-enough-gold' };
+
+/**
+ * 배치 결과.
+ *
+ * `already-assigned`는 다른 시설에 이미 있는 경우다 — 한 영웅이 두 자리를 채우면
+ * 산출이 두 번 세어진다. `away`는 파견 중 — 둘 다 "대기실에 없는" 상태라
+ * 겹치면 유휴 exp 제외가 이중으로 걸린다.
+ */
+export type AssignResult =
+  | { ok: true; kind: AssignableFacility; id: HeroInstId }
+  | { ok: false; reason: 'no-slot' | 'already-assigned' | 'away' | 'dead-hero' };
 
 export type BuyGearResult =
   | { ok: true; gear: GearInstance; spent: number }
@@ -504,6 +535,8 @@ function freshSlice(): RunSlice {
     gacha: initialGachaState(0),
     codex: registerInitialCodex(roster),
     facilities: { rest: 0, training: 0, forge: 0, armory: 0 },
+    // 회차를 넘기지 않는다 — gdd-v3 §7, 계승은 기록뿐이다
+    assignments: { training: [], forge: [] },
     gear: [],
     gearSeq: 0,
     battleCount: 0,
@@ -574,6 +607,22 @@ export function restQuote(roster: HeroInstance[]) {
  * (실기기에서 보고됨). 잠금의 목적은 "이긴 파티를 그대로 다음 층에"이지
  * 진행을 막는 것이 아니다.
  */
+/**
+ * 조건을 만족하지 않는 영웅을 모든 배치에서 뺀다.
+ *
+ * 사망·제물 두 경로가 같은 청소를 해야 하므로 한 곳에 둔다 — 한쪽만 고치면
+ * 다른 쪽에서 유령이 남고, 그 슬롯은 해제할 방법이 없어 영영 잠긴다.
+ */
+export function pruneAssignments(
+  assignments: Record<AssignableFacility, HeroInstId[]>,
+  keep: (id: HeroInstId) => boolean,
+): Record<AssignableFacility, HeroInstId[]> {
+  return {
+    training: assignments.training.filter(keep),
+    forge: assignments.forge.filter(keep),
+  };
+}
+
 export function isSquadLocked(
   s: Pick<RunSlice, 'squads' | 'lockedSquad' | 'roster' | 'maxFloorReached'>, squad: number,
 ): boolean {
@@ -832,7 +881,27 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
       const survivedHp = new Map(result.survivors.map((s) => [s.instId as string, s.currentHp]));
       const healRate = restHealRate(get().facilities.rest);
-      const idleExp = cleared ? idleExpGain(get().facilities.training) : 0;
+      /**
+       * 배치된 영웅 전체 — 유휴 exp에서 빼는 데 쓴다(파견의 `awayNow`와 같은 이유).
+       * 배치자는 exp 대신 시설 산출을 올리므로, 둘 다 받으면 배치가 순이득이 되어
+       * "일단 다 배치하기"가 유일한 최적해가 된다.
+       */
+      const assignedNow = new Set<string>(
+        ASSIGNABLE.flatMap((k) => get().assignments[k] as string[]),
+      );
+
+      /**
+       * 이번 층에 **실제로 일한** 배치 인원.
+       *
+       * ⚠️ 출전한 배치자는 빠진다 — "전투력과 생산의 제로섬"(설계 §5-2).
+       * 배치를 해제하는 것이 아니라 이번 층만 안 센다.
+       */
+      const workingTrainees = get().assignments.training
+        .filter((id) => !fought.has(id) && !casualties.has(id)).length;
+
+      const idleExp = cleared
+        ? idleExpWithAssign(get().facilities.training, workingTrainees)
+        : 0;
 
       /**
        * 모험 정산.
@@ -930,7 +999,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
               const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
               next = { ...next, currentHp: Math.min(max, hp + Math.round(max * healRate)) };
             }
-          } else if (idleExp > 0 && !h.isDead && !awayNow.has(h.instId)) {
+          } else if (
+            idleExp > 0 && !h.isDead && !awayNow.has(h.instId) && !assignedNow.has(h.instId)
+          ) {
             /**
              * 훈련소 — 전투에 나가지 않은 영웅만 받는다.
              * 참전 영웅과 경쟁시키면 "안 내보내는 게 이득"이 되어 퍼머데스의 긴장이 사라진다.
@@ -938,6 +1009,11 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
              * ⚠️ **파견 중인 영웅은 제외한다(`awayNow`).** 유휴 exp와 모험 exp를 둘 다 받으면
              * 파견이 순이득이 되어 같은 함정에 정면으로 걸린다 — 대기실에 두는 것보다
              * 항상 나으므로 "일단 다 내보내기"가 유일한 최적해가 된다.
+             *
+             * ⚠️ **배치된 영웅도 같은 이유로 제외한다(`assignedNow`).** 배치는 exp 대신
+             * 시설 산출을 주는 거래인데, 둘 다 받으면 거래가 아니라 공짜가 된다.
+             * 이 제외 덕분에 "배치 이득 < 출전 성장"이 튜닝이 아니라 **구조로** 성립한다
+             * (배치자의 exp가 0이므로 부등식이 자동으로 참이다).
              */
             next = gainExp(next, idleExp, gameData.starScaling).hero;
           }
@@ -995,6 +1071,13 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         materials: mergeMaterials(mergeMaterials(s.materials, droppedMaterials), advMaterials),
         // 완료된 파견은 명단에서 빠진다 — 남겨두면 영영 나가 있는 유령이 된다
         dispatches: stillAway,
+        /**
+         * 사망자는 배치에서 빠진다.
+         *
+         * ⚠️ 남겨두면 그 슬롯이 **영영 잠긴다** — 죽은 영웅은 화면 목록에 안 뜨니
+         * 플레이어가 해제할 방법이 없다. 파견이 유령 레코드를 버리는 것과 같은 이유다.
+         */
+        assignments: pruneAssignments(s.assignments, (id) => !casualties.has(id)),
         adventureOutcomes: outcomes,
         carriedPotions: 0,
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
@@ -1253,7 +1336,17 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 합성소 레벨. 전환율은 `data/facilities.ts`의 `FORGE_RATE`가 정한다 —
          * 미건설(0)은 0.5, Lv.1부터 0.65로 시설 도입 전 밸런스를 잇는다.
          */
-        target, sacrifice, facilityLevel: facilities.forge, scaling: gameData.starScaling,
+        target,
+        sacrifice,
+        facilityLevel: facilities.forge,
+        /**
+         * 합성소 배치 인원이 전환율을 올린다.
+         *
+         * ⚠️ **제물 본인이 배치돼 있으면 세지 않는다.** 자기를 바쳐 자기 전환율을
+         * 올리는 것은 "일하면서 동시에 사라지는" 모순이다.
+         */
+        assigned: get().assignments.forge.filter((id) => id !== sacrificeId).length,
+        scaling: gameData.starScaling,
       });
       // FuseCheck의 성공형 {ok:true}와 FuseResult가 겹치므로 고유 필드로 좁힌다
       if (!r.ok || !('consumedInstId' in r)) return r;
@@ -1278,6 +1371,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           ? s.gear
           : s.gear.map((g) => (freed.has(g.instId) ? { ...g, equippedBy: null } : g)),
         squads: s.squads.map((m) => m.filter((id) => id !== r.consumedInstId)),
+        // 제물도 배치에서 빠진다 — 사망과 같은 이유다(유령이 슬롯을 영구 점유한다)
+        assignments: pruneAssignments(s.assignments, (id) => id !== r.consumedInstId),
       }));
 
       // 되돌릴 수 없는 소멸이므로 즉시 저장한다.
@@ -1314,6 +1409,42 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       // 재화를 쓴 결과이므로 즉시 저장한다 (summon()/fuse()와 같은 원칙).
       saveRun(get());
       return { ok: true, kind, level: level + 1, spent: cost };
+    },
+
+    assign: (kind, id) => {
+      const s = get();
+
+      // 죽은 영웅은 배치할 수 없다. 로스터에 없는 id도 마찬가지 —
+      // 유령이 들어오면 그 슬롯을 해제할 방법이 없다.
+      const alive = new Set(livingHeroes(s.roster).map((h) => h.instId));
+      if (!alive.has(id)) return { ok: false, reason: 'dead-hero' };
+
+      // 파견과 배치는 둘 다 "대기실에 없는" 상태다. 겹치면 유휴 exp 제외가 두 번 걸린다.
+      if (dispatchedHeroIds(s.dispatches).has(id)) return { ok: false, reason: 'away' };
+
+      // 한 영웅이 두 자리를 채우면 산출이 두 번 세어진다
+      if (ASSIGNABLE.some((k) => s.assignments[k].includes(id))) {
+        return { ok: false, reason: 'already-assigned' };
+      }
+
+      if (s.assignments[kind].length >= ASSIGN_SLOTS[kind]) {
+        return { ok: false, reason: 'no-slot' };
+      }
+
+      set((cur) => ({
+        assignments: { ...cur.assignments, [kind]: [...cur.assignments[kind], id] },
+      }));
+      saveRun(get());
+      return { ok: true, kind, id };
+    },
+
+    /**
+     * ⚠️ **무조건 성공한다.** 조건을 붙이지 말 것 — `recallDispatch`와 같은 원칙이다.
+     * 해제가 다른 조건에 걸리면 "묶였는데 풀 방법이 없는" 교착이 생긴다.
+     */
+    unassign: (id) => {
+      set((s) => ({ assignments: pruneAssignments(s.assignments, (x) => x !== id) }));
+      saveRun(get());
     },
 
     /**
@@ -1551,6 +1682,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          */
         codex: backfillCodex(saved.codex, saved.roster),
         facilities: saved.facilities,
+        assignments: saved.assignments,
         gear: saved.gear,
         gearSeq: saved.gearSeq,
         battleCount: saved.battleCount,

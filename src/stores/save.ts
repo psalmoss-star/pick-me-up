@@ -17,7 +17,9 @@
  * 이 파일 내부만 IndexedDB로 갈아끼우면 된다 — 바깥은 이 모듈만 본다.
  */
 import { FLOORS } from '../game/data';
-import { FACILITY_MAX_LEVEL } from '../game/data/facilities';
+import {
+  FACILITY_MAX_LEVEL, ASSIGN_SLOTS, ASSIGNABLE, type AssignableFacility,
+} from '../game/data/facilities';
 import { GEAR_DEFS, GEAR_TUNING } from '../game/data/gear';
 import { SQUAD_COUNT } from '../game/data/party';
 import { questById, type QuestId } from '../game/data/quests';
@@ -45,7 +47,7 @@ export type SavedRun = Pick<
   'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'squads' | 'lockedSquad'
   | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
-  | 'materials' | 'dispatches'
+  | 'materials' | 'dispatches' | 'assignments'
 >;
 
 interface SaveFile {
@@ -87,6 +89,11 @@ export function serialize(s: RunSlice): string {
        * 남은 전투 수가 그대로 복원된다.
        */
       dispatches: s.dispatches,
+      /**
+       * 시설 배치. 저장하지 않으면 새로고침마다 배치가 풀려
+       * "매 판 다시 꽂는" 잡일이 된다(파견을 저장하는 것과 같은 이유).
+       */
+      assignments: s.assignments,
     },
   };
   return JSON.stringify(file);
@@ -352,6 +359,32 @@ export function deserialize(raw: string): SavedRun | null {
   }
 
   /*
+    시설 배치는 STEP 48에서 추가됐다. 없는 세이브는 빈 배치로 읽는다 —
+    기본값이 안전하므로 SAVE_VERSION을 올리지 않았다.
+
+    ⚠️ **유령 instId는 슬롯을 영구 점유한다.** 죽었거나 로스터에 없는 영웅이
+    남으면 화면 목록에 안 뜨니 해제할 방법이 없다 — 파견의 유령 레코드와 같은 교착이다.
+    같은 영웅이 두 시설에 있는 것도(수동 편집) 막는다. 산출이 두 번 세어진다.
+  */
+  const rawAssign = asObject(r.assignments);
+  const assignments: Record<AssignableFacility, HeroInstId[]> = { training: [], forge: [] };
+  const assignedSeen = new Set<HeroInstId>();
+  const assignable = new Set(
+    fixedRoster.filter((h) => !h.isDead).map((h) => h.instId),
+  );
+  for (const kind of ASSIGNABLE) {
+    const list = Array.isArray(rawAssign?.[kind]) ? (rawAssign[kind] as unknown[]) : [];
+    for (const id of list) {
+      if (typeof id !== 'string') continue;
+      const hid = id as HeroInstId;
+      if (!assignable.has(hid) || assignedSeen.has(hid)) continue;
+      if (assignments[kind].length >= ASSIGN_SLOTS[kind]) break;
+      assignments[kind].push(hid);
+      assignedSeen.add(hid);
+    }
+  }
+
+  /*
     달성 과제는 STEP 8에서 추가됐다. 없는 세이브는 미달성으로 읽는다.
 
     정의에 없는 id는 버린다 — 과제를 빼거나 이름을 바꿨을 때 유령 id가 남으면
@@ -372,6 +405,7 @@ export function deserialize(raw: string): SavedRun | null {
       floorIndex, maxFloorReached, revisits, roster: fixedRoster, squads, lockedSquad,
       deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
       gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials, dispatches,
+      assignments,
     },
     version,
   );
