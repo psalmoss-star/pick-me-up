@@ -26,6 +26,7 @@ import { loadLegacy } from './stores/legacy';
 import { floorAt, gameData } from './game/data';
 import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
 import { idleExpWithAssign, ASSIGNABLE } from './game/data/facilities';
+import { prepForMission } from './game/data/preps';
 import { revisitMultiplier } from './game/data/revisit';
 import { expToNext, gainExp } from './game/progression';
 import { rollFloorLoot } from './game/loot';
@@ -137,6 +138,8 @@ export default function App() {
   const assignedHeroIds = new Set<string>(
     ASSIGNABLE.flatMap((k) => assignments[k] as string[]),
   );
+  const prep = useRunStore((s) => s.prep);
+  const buyPrep = useRunStore((s) => s.buyPrep);
   const rest = useRunStore((s) => s.rest);
   const gear = useRunStore((s) => s.gear);
   const buyGear = useRunStore((s) => s.buyGear);
@@ -651,6 +654,11 @@ export default function App() {
             // 거기로 가야 "선택 → 확인 → 돌아가서 다시 선택"이 자연스럽다.
             onBack={() => setScreen('tower')}
             onStart={start}
+            // 준비 한 수 — 임무 유형마다 하나씩, 층당 1개
+            prep={prepForMission(floor.mission.kind)}
+            prepBought={prep != null}
+            gold={wallet.gold}
+            onBuyPrep={buyPrep}
           />
         )}
         {screen === 'battle' && result && (

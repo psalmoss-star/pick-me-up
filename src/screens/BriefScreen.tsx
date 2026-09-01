@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button } from '../ui/Button';
 import { Scene } from '../ui/art/Scene';
@@ -9,6 +10,8 @@ import { MISSION_LABEL } from '../game/mission';
 import { gameData } from '../game/data';
 import type { FloorSpec } from '../game/data/floors';
 import type { QuestDef } from '../game/data/quests';
+import type { PrepDef } from '../game/data/preps';
+import type { BuyPrepResult } from '../stores/runStore';
 
 export interface BriefScreenProps {
   floor: FloorSpec;
@@ -17,12 +20,56 @@ export interface BriefScreenProps {
   quests?: QuestDef[];
   onBack: () => void;
   onStart: () => void;
+  /**
+   * 이 층의 임무에 대응하는 준비 한 수. STEP 49.
+   *
+   * 개입이 *전투 중* 판단이라면 이건 *전투 전* 판단이다 —
+   * 브리핑이 정보 표시에서 **결정 지점**으로 바뀐다.
+   */
+  prep?: PrepDef;
+  /** 이미 샀는가 — 층당 1개다 */
+  prepBought?: boolean;
+  /** 살 수 있는지 판단용 */
+  gold?: number;
+  onBuyPrep?: () => BuyPrepResult;
 }
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
   floor, partySize, quests = [], onBack, onStart,
+  prep, prepBought = false, gold = 0, onBuyPrep,
 }: BriefScreenProps) {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const buy = () => {
+    if (!onBuyPrep) return;
+    const r = onBuyPrep();
+    if (r.ok) {
+      setNotice(null);
+      return;
+    }
+    setNotice(
+      r.reason === 'not-enough-gold' ? '금이 부족합니다.'
+        : r.reason === 'already-bought' ? '이미 준비를 마쳤습니다.'
+          : '지금은 준비할 수 없습니다.',
+    );
+  };
+
+  /**
+   * 준비를 사 두고 돌아가면 그 금은 사라진다(층을 바꾸면 무효).
+   *
+   * 되돌릴 수 없는 소비 앞에서는 한 단계 더 묻는다 — 합성 제물과 같은 원칙이다.
+   * ⚠️ `window.confirm`을 쓰지 않는다. 이 프로젝트는 확인을 **화면 안의 상태**로
+   * 처리한다(`ForgeScreen`의 제물 확인). 브라우저 모달은 톤이 깨진다.
+   */
+  const [confirmBack, setConfirmBack] = useState(false);
+  const back = () => {
+    if (prepBought && !confirmBack) {
+      setConfirmBack(true);
+      return;
+    }
+    onBack();
+  };
   const bossId = floor.isBoss ? floor.enemyIds[0] : null;
   const boss = bossId ? gameData.enemies[bossId] : null;
 
@@ -85,8 +132,53 @@ export function BriefScreen({
       )}
 
       {/*
+        준비 한 수 — 전투 전 판단. STEP 49.
+
+        과제 **아래**에 둔다. 과제는 "어떻게 싸울지 바꾸는 정보"이고 준비는
+        그 정보를 보고 내리는 **결정**이라, 읽기 → 결정 순서가 화면 흐름과 맞는다.
+      */}
+      {prep && onBuyPrep && (
+        <div style={{ marginTop: 16 }}>
+          <SystemPanel compact>
+            <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.3em', marginBottom: 10 }}>
+              출정 준비
+            </div>
+            <div style={{ fontSize: 15, color: T.gold, letterSpacing: '.08em', marginBottom: 6 }}>
+              {prep.name}
+            </div>
+            <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.8, marginBottom: 12 }}>
+              {prep.desc}
+            </div>
+
+            {prepBought ? (
+              // 산 뒤에는 버튼이 사라진다 — "층당 1회"가 화면에서 자명해야 한다
+              <div style={{ fontSize: 13, color: T.amber, letterSpacing: '.08em' }}>
+                준비를 마쳤다
+              </div>
+            ) : (
+              <>
+                <Button
+                  small
+                  disabled={gold < prep.cost}
+                  onClick={buy}
+                >
+                  준비 · 금 {prep.cost}
+                </Button>
+                {notice && (
+                  <div style={{ fontSize: 11, color: T.dim, marginTop: 10, lineHeight: 1.7 }}>
+                    {notice}
+                  </div>
+                )}
+              </>
+            )}
+          </SystemPanel>
+        </div>
+      )}
+
+      {/*
         과제 문구가 길어지면 진입 버튼이 접힘선 아래로 내려간다 —
         1층 기준으로도 600px 화면에서 65px 밀렸다(실측). 하단에 고정한다.
+        ⚠️ 준비 패널이 늘어난 뒤로 이 고정이 더 중요해졌다.
       */}
       <div
         style={{
@@ -102,9 +194,18 @@ export function BriefScreen({
           zIndex: 10,
         }}
       >
-        <Button onClick={onBack}>돌아가기</Button>
+        <Button onClick={back}>
+          {confirmBack ? '준비를 버리고 돌아가기' : '돌아가기'}
+        </Button>
         <Button tone="warning" onClick={onStart}>진입</Button>
       </div>
+      {confirmBack && (
+        <div style={{
+          fontSize: 11, color: T.amber, textAlign: 'center', lineHeight: 1.8, marginTop: -6,
+        }}>
+          돌아가면 준비한 것이 무효가 되고 금은 돌아오지 않습니다.
+        </div>
+      )}
     </div>
   );
 }
