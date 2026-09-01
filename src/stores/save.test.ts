@@ -45,6 +45,7 @@ const sample = (): RunSlice => {
     dispatches: [],
     adventureOutcomes: [],
     carriedPotions: 0,
+    prep: null,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,

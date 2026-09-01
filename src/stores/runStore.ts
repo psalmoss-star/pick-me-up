@@ -33,6 +33,8 @@ import {
   makeGear,
 } from '../game/gear';
 import { craft as craftPure, spendMaterials, type CraftResult } from '../game/craft';
+import { applyPrep } from '../game/prep';
+import { prepForMission, prepById, type PrepId } from '../game/data/preps';
 import { evaluateQuests, questContext, questRng, type QuestGrant } from '../game/quest';
 import type { QuestId } from '../game/data/quests';
 import { BANNERS, initialGachaState, pull, recordLoss, registerCodex, type PullResult } from '../game/gacha';
@@ -243,6 +245,17 @@ export interface RunSlice {
    */
   carriedPotions: number;
   /**
+   * 이번 층에 산 준비 한 수. 없으면 null. STEP 49.
+   *
+   * 개입·포션과 같은 **전투 전 입력**이다 — 같은 시드 + 같은 준비 = 같은 `BattleEvent[]`.
+   * ⚠️ **`intervene()`이 이 값을 반드시 다시 넘겨야 한다.** 한쪽에서 빠지면
+   * 개입할 때마다 준비 효과가 사라진다(아래 `intervene` 주석 참조).
+   *
+   * ⚠️ **저장하지 않는다.** `seed`·`interventions`·`carriedPotions`와 같은 자리다.
+   * 한 층에만 유효한 값이라 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
+   */
+  prep: PrepId | null;
+  /**
    * 달성한 과제 id 목록.
    *
    * 한 번 달성하면 끝이므로 **반드시 저장된다** — 새로고침으로 초기화되면
@@ -330,6 +343,14 @@ export interface RunActions {
    * — summon()/fuse()와 같은 원칙이며, 실패 시 상태는 그대로다.
    */
   upgradeFacility: (kind: FacilityKind) => FacilityUpgradeResult;
+  /**
+   * 이 층의 준비 한 수를 산다. 층당 1개.
+   *
+   * ⚠️ 금은 여기서 **즉시** 빠지지만 `saveRun`을 부르지 않는다 —
+   * 준비 자체가 저장 대상이 아니라서, 여기서 저장하면 금만 빠진 상태가 굳는다.
+   * 확정은 `finish()`의 저장이 맡는다.
+   */
+  buyPrep: () => BuyPrepResult;
   /** 영웅을 시설에 배치한다. 슬롯이 차 있거나 이미 묶인 영웅이면 거부된다 */
   assign: (kind: AssignableFacility, id: HeroInstId) => AssignResult;
   /**
@@ -398,6 +419,16 @@ export type FacilityUpgradeResult =
  * 산출이 두 번 세어진다. `away`는 파견 중 — 둘 다 "대기실에 없는" 상태라
  * 겹치면 유휴 exp 제외가 이중으로 걸린다.
  */
+/**
+ * 준비 구매 결과.
+ *
+ * `already-bought`는 층당 1개 제한이다 — 여러 개를 쌓으면 상승폭이 누적되어
+ * 상층 완주율에 직결된다.
+ */
+export type BuyPrepResult =
+  | { ok: true; prep: PrepId; spent: number }
+  | { ok: false; reason: 'not-enough-gold' | 'already-bought' | 'in-battle' };
+
 export type AssignResult =
   | { ok: true; kind: AssignableFacility; id: HeroInstId }
   | { ok: false; reason: 'no-slot' | 'already-assigned' | 'away' | 'dead-hero' };
@@ -545,6 +576,7 @@ function freshSlice(): RunSlice {
     dispatches: [],
     adventureOutcomes: [],
     carriedPotions: 0,
+    prep: null,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,
@@ -733,6 +765,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       const carried = Math.min(potions, POTION_TUNING.maxPerBattle);
 
       const seed = seedSource();
+
+      /**
+       * 준비 한 수를 전투 입력에 반영한다.
+       *
+       * ⚠️ **`intervene()`도 정확히 같은 변환을 해야 한다.** 한쪽에서 빠지면
+       * 개입하는 순간 준비 효과가 사라져 "같은 시드 + 같은 입력 = 같은 결과"가 깨진다.
+       */
+      const prepped = applyPrep(floorAt(floorIndex), prepById(get().prep));
+
       set({
         seed,
         carriedPotions: carried,
@@ -744,10 +785,10 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         lockedSquad: null,
         result: runEncounter({
           party: members,
-          floor: floorAt(floorIndex),
+          floor: prepped.floor,
           data: gameData,
           rng: createRng(seed),
-          allyAtkMult: armoryAtkMult(get().facilities.armory),
+          allyAtkMult: armoryAtkMult(get().facilities.armory) * prepped.atkMult,
           inventory: gearIndex(get().gear),
           potions: carried,
         }),
@@ -760,20 +801,26 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
      * 이래야 "같은 시드 + 같은 개입 = 같은 결과"라는 재현성이 유지된다.
      */
     intervene: (next) => {
-      const { snapshot, seed, floorIndex, facilities, carriedPotions, lastSortieSquad } = get();
+      const {
+        snapshot, seed, floorIndex, facilities, carriedPotions, lastSortieSquad, prep,
+      } = get();
       const party = squadMembers(get(), lastSortieSquad);
       const members = snapshot.filter((h) => party.includes(h.instId) && !h.isDead);
       if (members.length === 0) return;
+
+      // start()와 **같은 변환**이어야 한다. 이 줄이 빠지면 개입하는 순간 준비가 증발한다.
+      const prepped = applyPrep(floorAt(floorIndex), prepById(prep));
+
       set({
         interventions: next,
         result: runEncounter({
           party: members,
-          floor: floorAt(floorIndex),
+          floor: prepped.floor,
           data: gameData,
           rng: createRng(seed),
           interventions: next,
           // start()와 같은 입력을 넘겨야 한다. 빠뜨리면 개입만으로 전투가 달라져 재현성이 깨진다.
-          allyAtkMult: armoryAtkMult(facilities.armory),
+          allyAtkMult: armoryAtkMult(facilities.armory) * prepped.atkMult,
           inventory: gearIndex(get().gear),
           potions: carriedPotions,
         }),
@@ -1080,6 +1127,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         assignments: pruneAssignments(s.assignments, (id) => !casualties.has(id)),
         adventureOutcomes: outcomes,
         carriedPotions: 0,
+        /**
+         * 준비는 그 층에서만 유효하다 — **승패와 무관하게** 비운다(사용자 결정).
+         * 지면 금도 효과도 사라지고 재도전은 다시 산다. "이번 판에 거는 판돈"이라
+         * 퍼머데스의 긴장과 결이 맞고, "졌으니 환불" 경로를 안 만들어 구현도 단순하다.
+         */
+        prep: null,
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
         lockedSquad: s.lastSortieSquad ?? 0,
@@ -1224,6 +1277,17 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
     selectFloor: (index) =>
       set((s) => ({
         floorIndex: Math.max(0, Math.min(s.maxFloorReached, Math.floor(index))),
+        /**
+         * ⚠️ **층을 바꾸면 준비가 무효가 된다.**
+         *
+         * 준비는 임무 유형에 묶여 있어서, 수비 층에서 사고 토벌 층으로 옮기면
+         * 살 수 없는 것을 든 상태가 된다. `applyPrep`의 유형 검사가 효과는 막지만
+         * 화면에는 "산 것"으로 남아 거짓말이 된다.
+         *
+         * 환불하지 않는다 — 되돌리지 않는 것이 이 게임의 원칙이다.
+         * 대신 `BriefScreen`이 돌아가기 전에 경고한다.
+         */
+        prep: null,
       })),
 
     startNewRun: () => {
@@ -1409,6 +1473,33 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       // 재화를 쓴 결과이므로 즉시 저장한다 (summon()/fuse()와 같은 원칙).
       saveRun(get());
       return { ok: true, kind, level: level + 1, spent: cost };
+    },
+
+    buyPrep: () => {
+      const s = get();
+
+      // 전투 중에는 못 산다 — 브리핑에서만 유효한 결정이다
+      if (s.result != null) return { ok: false, reason: 'in-battle' };
+      // 층당 1개. 쌓이면 상승폭이 누적되어 상층 완주율에 직결된다
+      if (s.prep != null) return { ok: false, reason: 'already-bought' };
+
+      const def = prepForMission(floorAt(s.floorIndex).mission.kind);
+      if (s.wallet.gold < def.cost) return { ok: false, reason: 'not-enough-gold' };
+
+      set((cur) => ({
+        prep: def.id,
+        wallet: { ...cur.wallet, gold: cur.wallet.gold - def.cost },
+      }));
+
+      /**
+       * ⚠️ **여기서 `saveRun`을 부르지 않는다** — 다른 금 소비 액션과 유일하게 다른 점이다.
+       *
+       * 준비는 저장 대상이 아니다(전투 중 상태). 여기서 저장하면 **금만 빠진 상태가
+       * 디스크에 굳고** 준비는 새로고침에 증발한다. 저장하지 않으면 금 차감도
+       * 메모리에만 남아 새로고침 시 둘이 함께 없던 일이 된다 — 그쪽이 일관적이다.
+       * 확정은 `finish()`의 저장이 맡는다.
+       */
+      return { ok: true, prep: def.id, spent: def.cost };
     },
 
     assign: (kind, id) => {
@@ -1706,6 +1797,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         snapshot: [],
         questGrants: [],
         lastSortieSquad: 0,
+        // 준비도 전투 중 상태다. 안 비우면 새로고침 뒤 유령 준비가 남는다
+        prep: null,
       }),
 
     reset: () => set(freshSlice()),
