@@ -56,6 +56,14 @@ export interface FacilityScreenProps {
   assignments?: Record<AssignableFacility, string[]>;
   /** 배치 가능한(=살아있고 파견·배치 안 된) 영웅. 이름과 함께 받는다 */
   assignable?: { instId: string; name: string; level: number }[];
+  /**
+   * 배치 **중인** 영웅의 이름표.
+   *
+   * ⚠️ `assignable`로 이름을 찾으면 안 된다 — 그 목록은 정의상 배치된 사람을
+   * **제외**하므로 조회가 항상 실패해 화면에 `—`만 뜬다(폰 실측에서 발견).
+   * 후보 목록과 이름표는 서로 배타적인 집합이라 한 배열이 둘 다 할 수 없다.
+   */
+  assignedInfo?: { instId: string; name: string; level: number }[];
   onAssign?: (kind: AssignableFacility, instId: string) => void;
   onUnassign?: (instId: string) => void;
 }
@@ -124,7 +132,7 @@ export function FacilityScreen({
   facilities, wallet, onUpgrade, onBack, initialFocus, onRest, restCost, restInjured,
   trainees = [],
   assignments = { training: [], forge: [] },
-  assignable = [], onAssign, onUnassign,
+  assignable = [], assignedInfo = [], onAssign, onUnassign,
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
   /**
@@ -339,9 +347,20 @@ export function FacilityScreen({
                     배치 {assignedHere.length}/{ASSIGN_SLOTS[kind]} · 성장 대신 산출
                   </div>
 
+                  {/*
+                    Lv.0 훈련소는 배치해도 산출이 0이다(미건설 시설이 배치만으로
+                    exp를 내면 강화가 무의미해진다). 그 이유를 안 적으면
+                    "배치했는데 숫자가 안 움직인다"가 버그로 읽힌다 — 폰 실측 지적.
+                  */}
+                  {kind === 'training' && level === 0 && (
+                    <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, lineHeight: 1.7 }}>
+                      강화 전에는 배치해도 산출이 없다
+                    </div>
+                  )}
+
                   <div style={{ display: 'grid', gap: 6 }}>
                     {assignedHere.map((id) => {
-                      const who = assignable.find((a) => a.instId === id);
+                      const who = assignedInfo.find((a) => a.instId === id);
                       return (
                         <div
                           key={id}
@@ -364,11 +383,23 @@ export function FacilityScreen({
                           배치할 수 있는 영웅이 없다
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        /*
+                          ⚠️ 이름을 버튼 안에 다 넣으면 375px에서 줄이 지저분하게 접힌다
+                          (폰 실측). 훈련 중 목록과 같은 모양 — 이름은 왼쪽 줄에,
+                          버튼은 '배치' 두 글자로 고정한다.
+                        */
+                        <div style={{ display: 'grid', gap: 6 }}>
                           {assignable.map((a) => (
-                            <Button key={a.instId} small onClick={() => onAssign(kind, a.instId)}>
-                              {a.name} 배치
-                            </Button>
+                            <div
+                              key={a.instId}
+                              style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', gap: 8, fontSize: 12,
+                              }}
+                            >
+                              <span style={{ color: T.dim }}>{a.name} Lv.{a.level}</span>
+                              <Button small onClick={() => onAssign(kind, a.instId)}>배치</Button>
+                            </div>
                           ))}
                         </div>
                       )}

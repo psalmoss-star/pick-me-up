@@ -531,6 +531,17 @@ export default function App() {
                 name: displayName(h, gameData.heroes),
                 level: h.level,
               }))}
+            /*
+              배치 중인 영웅의 이름표 — `assignable`과 **배타적인 집합**이라
+              따로 넘긴다. 후보 목록으로 이름을 찾으면 조회가 항상 실패한다.
+            */
+            assignedInfo={roster
+              .filter((h) => assignedHeroIds.has(h.instId))
+              .map((h) => ({
+                instId: h.instId,
+                name: displayName(h, gameData.heroes),
+                level: h.level,
+              }))}
             onAssign={(kind, id) => assign(kind, id as HeroInstId)}
             onUnassign={(id) => unassign(id as HeroInstId)}
           />

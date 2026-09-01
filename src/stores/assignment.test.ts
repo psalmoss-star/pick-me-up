@@ -238,6 +238,63 @@ describe('규칙 4 — 사망·제물은 배치를 자동 해제한다', () => {
   });
 });
 
+/*
+  폰 실측(2026-09-01)에서 배치된 영웅 이름이 `—`로 떴다.
+
+  화면이 후보 목록(`assignable`)으로 배치자의 이름을 찾고 있었는데, 그 목록은
+  **정의상 배치된 사람을 제외**하므로 조회가 100% 실패한다. 두 목록은 서로
+  배타적인 집합이라 한 배열이 둘 다 할 수 없다 — `assignedInfo`를 따로 둔 이유다.
+
+  화면을 직접 렌더하지 않고 App이 넘기는 두 목록의 **관계**를 잠근다.
+*/
+describe('배치 목록과 후보 목록은 배타적이다', () => {
+  /** App.tsx가 `assignable`/`assignedInfo`를 만드는 것과 같은 규칙 */
+  const lists = (s: ReturnType<typeof store>) => {
+    const assigned = new Set<string>([
+      ...s.getState().assignments.training,
+      ...s.getState().assignments.forge,
+    ]);
+    const party = s.getState().squads[0];
+    return {
+      assigned,
+      assignable: s.getState().roster.filter(
+        (h) => !h.isDead && !party.includes(h.instId) && !assigned.has(h.instId),
+      ),
+      assignedInfo: s.getState().roster.filter((h) => assigned.has(h.instId)),
+    };
+  };
+
+  it('배치된 영웅은 후보 목록에 없고, 이름표 목록에는 있다', () => {
+    const s = started();
+    const id = idleHero(s);
+    s.getState().assign('training', id);
+
+    const { assignable, assignedInfo } = lists(s);
+
+    // 후보에 남아 있으면 이미 배치된 사람을 또 배치하라고 권하는 셈이다
+    expect(assignable.some((h) => h.instId === id)).toBe(false);
+    // 이름표에 없으면 화면에 `—`가 뜬다 — 폰에서 실제로 그랬다
+    expect(assignedInfo.some((h) => h.instId === id)).toBe(true);
+  });
+
+  it('배치된 모든 영웅의 이름을 이름표 목록에서 찾을 수 있다', () => {
+    const s = started();
+    const fought = new Set(
+      s.getState().result!.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId),
+    );
+    const idle = s.getState().roster.filter((h) => !fought.has(h.instId) && !h.isDead);
+    s.getState().assign('training', idle[0].instId);
+    s.getState().assign('forge', idle[1].instId);
+
+    const { assigned, assignedInfo } = lists(s);
+    expect(assigned.size).toBe(2);
+
+    for (const id of assigned) {
+      expect(assignedInfo.some((h) => h.instId === id)).toBe(true);
+    }
+  });
+});
+
 describe('배치는 회차를 넘지 않는다', () => {
   it('새 런을 시작하면 배치가 비워진다', () => {
     // gdd-v3 §7 — 계승은 기록뿐이다. 시설·배치를 물려주면 sim 기준선이 회차마다 갈린다.
