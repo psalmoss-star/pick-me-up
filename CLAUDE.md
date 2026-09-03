@@ -36,9 +36,16 @@
 - **등급 차이는 색이 아니라 구조로 표현한다.** `STAR_TIERS`의 `corners`/`lattice`/`rays`/`halo`를
   실제로 렌더에 반영해야 한다. 색만 바꾸면 ★3과 ★5가 구분되지 않는다 (이미 겪은 버그).
 - ★1~3은 무광·정적, ★4~6은 발광·장식·움직임. 이 분기를 흐리지 말 것.
+- **★5와 ★6은 `STAR_TIERS`의 구조 값이 전부 같다**(corners·lattice·rays·halo 동일, 색만 다름).
+  그래서 **거처(`quarters`)가 그 둘을 가르는 유일한 표시**다 — 여섯이 서로 달라야 한다.
+  거처는 `quartersFor`/`nextQuartersFor`로만 읽는다(★6의 다음은 `null`이며 반드시 갈라 쓴다).
 - 마을에 자리를 더할 때 **좌표는 `VILLAGE_LOTS` 한 곳에만** 적는다.
   라벨 겹침은 눈이 아니라 `iso.test.ts`가 판정한다 — 깊이(x+y)로 재면 안 된다
   (훈련소와 숙소는 깊이가 같은데도 안 겹친다. 겹침은 투영 좌표에서만 보인다).
+  **자리를 더하면 `iso.test.ts`의 `NEWEST`를 새 자리로 옮길 것.** 그 테스트는 새 자리를 뺀
+  나머지로 baseline을 잡으므로, 안 옮기면 **엉뚱한 자리 이름으로 실패**한다.
+  섬 중앙은 빡빡하다 — (2,2)는 여유 0.734로 임계(0.85) 미달이다. 눈으로 고르지 말고
+  clearance 공식으로 재고 넣을 것(STEP 50에서 후보 넷이 그렇게 탈락했다).
 
 ### 게임 규칙
 - 퍼머데스는 협상 대상이 아니다. 사망한 영웅은 어떤 경로로도 되돌리지 않는다.
@@ -75,7 +82,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 901개 통과)
+npm test           # Vitest 1회 실행 (현재 908개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -199,7 +206,7 @@ src/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처
 │  └─ save.ts         # 저장/불러오기(localStorage). finish() 직후 자동 저장
 ├─ ui/                # 비주얼 언어
-│  ├─ tokens.ts       # 색·등급 구조. 여기가 단일 출처
+│  ├─ tokens.ts       # 색·등급 구조 + 등급별 거처(quarters). 여기가 단일 출처
 │  ├─ SystemPanel.tsx # 시그니처 컴포넌트
 │  ├─ HeroCard.tsx    # 타로카드형
 │  ├─ OrnateCorner.tsx
