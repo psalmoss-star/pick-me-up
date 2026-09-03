@@ -162,6 +162,90 @@ function Facility({
   );
 }
 
+/**
+ * 거주 구역의 층수 — 등급 6단계를 구조 3단계로 접는다.
+ *
+ * **건물과 라벨 높이가 같은 곳에서 나와야 한다.** 두 곳에 따로 적으면
+ * 등급이 오를 때 라벨만 안 따라 올라가는 식으로 조용히 어긋난다
+ * (건물 배열과 핀 배열을 갈랐다가 라벨이 엉뚱한 건물에 붙은 전례가 있다).
+ */
+function quartersFloors(topStar: number): number {
+  return topStar >= 5 ? 3 : topStar >= 3 ? 2 : 1;
+}
+
+/**
+ * 거주 구역 — 영웅들이 사는 곳. **로스터 최고 등급이 구조를 정한다.**
+ *
+ * ── 왜 등급이 구조를 정하는가 ─────────────────────────
+ * 원작에서 가져온 축이 "층이 곧 계급"이고(제안서 §2-1), 승급이 곧 이사다.
+ * 그 계급이 마을에서 눈에 보이려면 **등급이 건물의 모양을 바꿔야** 한다 —
+ * 색만 바꾸면 ★2와 ★5가 구분되지 않는다(카드에서 이미 겪은 함정).
+ *
+ * ── 왜 Facility로 안 그리는가 ─────────────────────────
+ * `Gate`가 남긴 판단과 같다. 시설 4종은 전부 `Facility` 실루엣이라 레벨로만
+ * 갈리므로, 같은 모양을 하나 더 두면 "다섯 번째 시설"로 읽힌다.
+ * 거주 구역은 **한 채가 아니라 여러 채**로 그려서 한눈에 갈라놓는다
+ * (사는 곳이므로 여러 채인 편이 뜻에도 맞다).
+ *
+ * 재질도 등급을 따라 올라간다 — 목재는 tokens에 정의만 돼 있고 이 파일에서
+ * 한 번도 안 쓰이던 3면 팔레트다(시설이 전부 석재라서).
+ */
+function Quarters({ x, y, topStar }: { x: number; y: number; topStar: number }) {
+  /*
+    ★1~2 목재 단층 막사 / ★3~4 석조 2층 숙사 / ★5~6 3층 저택.
+    등급 6단계를 3단계 구조로 접는 이유는, 부감도에서 한 칸짜리 건물이
+    구분 가능한 높이 단계가 그 정도이기 때문이다(시설도 3층이 상한이다).
+  */
+  const floors = quartersFloors(topStar);
+  const grade = floors - 1;
+  const fh = 0.62;
+  const mat = grade === 0
+    ? { top: ISO.woodTop, right: ISO.woodR, left: ISO.woodL }
+    : { top: ISO.stoneTop, right: ISO.stoneR, left: ISO.stoneL };
+  /* 저택만 왕가 지붕 — 지금까지 탑 첨탑에만 쓰이던 색이라 '가장 높은 자리'로 읽힌다 */
+  const roof = grade === 2
+    ? { warm: ISO.roofRoyal, dark: ISO.roofRoyalD }
+    : { warm: ISO.roofCool, dark: ISO.roofCoolD };
+
+  /* 본채 + 곁채. 곁채는 등급이 오를수록 커지되 본채를 넘지 않는다 */
+  const annexH = fh * (grade === 0 ? 1 : 1.5);
+
+  return (
+    <g>
+      {/* 곁채 — 본채보다 뒤(작은 x+y)에 둬야 앞에서 안 가린다 */}
+      <Box
+        x={x - 0.05} y={y + 0.95} w={0.72} d={0.62} h={annexH}
+        top={mat.top} right={mat.right} left={mat.left}
+      />
+      <Roof
+        x={x - 0.05} y={y + 0.95} w={0.72} d={0.62} h={annexH} rh={0.3}
+        warm={roof.warm} dark={roof.dark}
+      />
+
+      {/* 본채 */}
+      {Array.from({ length: floors }).map((_, i) => (
+        <Box
+          key={i}
+          x={x} y={y} w={1.15} d={0.9} h={fh} z0={i * fh}
+          top={mat.top} right={mat.right} left={mat.left}
+        />
+      ))}
+      <Roof
+        x={x} y={y} w={1.15} d={0.9} h={floors * fh} rh={0.46}
+        warm={roof.warm} dark={roof.dark}
+      />
+      {/*
+        창은 거주 인원이 아니라 층수를 따른다 — 인원을 창으로 세면
+        영웅이 늘 때마다 건물이 반짝여서 등급 신호와 경쟁한다.
+      */}
+      <Windows
+        x={x + 1.15} y={y} d={0.9} z={floors * fh - fh * 0.45}
+        n={floors} color={ISO.glow}
+      />
+    </g>
+  );
+}
+
 /** 소환진 — 건물이 아니다. 바닥의 빛나는 원. */
 function SummonCircle({ x, y }: { x: number; y: number }) {
   const c = iso(x, y, 0.05);
@@ -332,6 +416,19 @@ export const VILLAGE_LOTS: Record<VillageSpot, { x: number; y: number }> = {
   shop: { x: 1.0, y: 6.2 },
   adventure: { x: 3.4, y: 6.0 },
   grave: { x: 5.4, y: 6.6 },
+  /*
+    거주 구역 — 좌표는 눈이 아니라 `iso.test.ts`의 clearance 공식을 그대로 재현해
+    격자 전체를 훑어 고른 값이다. 섬 중앙은 생각보다 빡빡해서 (2,2)는 0.734,
+    (6.4,6.4)는 0.500으로 떨어진다 — 임계는 0.85다.
+
+      이 자리의 최소 여유 : 1.188 (vs 훈련소)
+      추가 후 전체 baseline : 0.875 (armory x grave — 변화 없음)
+      길 밴드(x 3.7~4.5 / y 3.3~4.1) 밖, 섬 범위(-0.4~8.4) 안
+
+    ⚠️ **옮기려면 네 줄을 다시 재고 옮길 것.** 자리를 잘못 잡으면 새 자리가
+    `prior` 쌍 계산에 끼어들어 **모험 관문과 무관해 보이는 테스트가 깨진다.**
+  */
+  quarters: { x: 5.4, y: 0.2 },
 };
 
 export interface IsoVillageProps {
@@ -343,6 +440,16 @@ export interface IsoVillageProps {
   floorLabel?: string;
   /** 지금 모험에 나가 있는 인원 수 — 관문 핀의 부제이자 등불의 점등 조건 */
   awayCount?: number;
+  /**
+   * 살아있는 영웅 수 — 거주 구역 핀의 부제.
+   *
+   * ⚠️ **로스터를 통째로 넘기지 말 것.** 이 컴포넌트는 게임 타입을 하나도 모르고
+   * 숫자·시설 레벨만 받는다. 로스터를 넘기면 작화 도구가 도메인에 묶인다.
+   * 파생은 호출부(BaseScreen)가 이미 하고 있다.
+   */
+  livingCount?: number;
+  /** 로스터 최고 등급 — 거주 구역 건물의 **구조**를 정한다(색이 아니라) */
+  topStar?: number;
 }
 
 /**
@@ -365,6 +472,7 @@ interface Lot {
 
 export function IsoVillage({
   facilities, onSelect, deathCount = 0, towerLocked = false, floorLabel, awayCount = 0,
+  livingCount = 0, topStar = 1,
 }: IsoVillageProps) {
   const fac = (k: FacilityKind) => facilities[k] ?? 0;
   /** 시설 높이 = 층수 × 층높이 + 지붕. Facility의 상수와 맞물려 있다 */
@@ -436,6 +544,11 @@ export function IsoVillage({
       spot: 'adventure', label: '모험 관문', sub: awayCount > 0 ? `${awayCount}명 원정` : undefined,
       ...at('adventure'), lz: 1.6,
       render: () => <Gate {...at('adventure')} away={awayCount > 0} />,
+    },
+    {
+      spot: 'quarters', label: '거주 구역', sub: livingCount > 0 ? `${livingCount}명` : undefined,
+      ...at('quarters'), lz: quartersFloors(topStar) * 0.62 + 0.5,
+      render: () => <Quarters {...at('quarters')} topStar={topStar} />,
     },
     {
       spot: 'grave', label: '무덤', sub: deathCount > 0 ? `${deathCount}명` : undefined,

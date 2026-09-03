@@ -195,6 +195,8 @@ export default function App() {
       case 'summon': setScreen('summon'); break;
       case 'shop': setScreen('shop'); break;
       case 'adventure': setScreen('adventure'); break;
+      // 거주 구역 = 영웅들이 사는 곳. 마을에서 로스터로 가는 길이다.
+      case 'quarters': setScreen('heroes'); break;
       case 'grave': setGraveFrom('base'); setLegacy(loadLegacy()); setScreen('grave'); break;
       // 마을의 '대장간' 건물은 무기창고(armory) 자리이고 실제 동작은 강화다.
       case 'armory': setScreen('smith'); break;

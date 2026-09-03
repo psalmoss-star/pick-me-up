@@ -170,9 +170,19 @@ describe('마을 배치 — 라벨 겹침', () => {
     }
   });
 
-  it('모험 관문이 기존 자리 중 가장 빡빡한 쌍보다 여유롭다', () => {
-    // 기존 8개끼리의 최소 여유 = 실기기에서 문제없던 기준선
-    const prior = spots.filter((s) => s !== 'adventure');
+  /**
+   * **가장 최근에 더한 자리.** 예전에는 `'adventure'`가 이 테스트에 박혀 있었는데,
+   * 그러면 다음 사람이 자리를 더할 때 함정이 된다 — 새 자리가 아래 `prior` 쌍
+   * 계산에 끼어들어 `baseline`을 바꾸므로, **자리를 잘못 잡으면 모험 관문과
+   * 아무 상관 없어 보이는 이 테스트가 깨진다.**
+   *
+   * 자리를 더하면 이 값을 새 자리로 옮길 것. 그게 이 테스트가 재는 대상이다.
+   */
+  const NEWEST: keyof typeof VILLAGE_LOTS = 'quarters';
+
+  it(`가장 최근에 더한 자리(${NEWEST})가 기존 자리 중 가장 빡빡한 쌍보다 여유롭다`, () => {
+    // 새 자리를 뺀 나머지끼리의 최소 여유 = 실기기에서 문제없던 기준선
+    const prior = spots.filter((s) => s !== NEWEST);
     let baseline = Infinity;
     for (let i = 0; i < prior.length; i++) {
       for (let j = i + 1; j < prior.length; j++) {
@@ -181,7 +191,7 @@ describe('마을 배치 — 라벨 겹침', () => {
     }
     let added = Infinity;
     for (const s of prior) {
-      added = Math.min(added, clearance(VILLAGE_LOTS.adventure, VILLAGE_LOTS[s]));
+      added = Math.min(added, clearance(VILLAGE_LOTS[NEWEST], VILLAGE_LOTS[s]));
     }
     expect(added).toBeGreaterThan(baseline);
   });

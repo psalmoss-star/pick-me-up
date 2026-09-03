@@ -5,7 +5,7 @@ import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
-import { T } from '../ui/tokens';
+import { T, quartersFor } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
@@ -105,8 +105,15 @@ export function ForgeScreen({
       setNotice(promoteError(r));
       return;
     }
+    /*
+      이사 문구는 손실 문구를 **가리지 않고 옆에 붙는다.**
+      승급은 레벨을 1로 되돌려 직후에 약해지는 것이 설계이므로 그 대가를 지우면 안 되고,
+      동시에 얻는 것이 하나도 안 보이면 플레이어가 받는 것은 손실 통지뿐이다
+      (MVP와 사망자를 같은 화면에 두는 규칙과 같은 이유).
+    */
     setNotice(
       `${displayName(target, gameData.heroes)} ★${r.fromStar} → ★${r.toStar}. ` +
+      `${quartersFor(r.fromStar)}에서 ${quartersFor(r.toStar)}(으)로 옮겨갑니다. ` +
       '레벨이 1로 돌아갔습니다 — 지금은 이전보다 약합니다.',
     );
     reset();
@@ -153,7 +160,7 @@ export function ForgeScreen({
       {/* 선택된 대상 */}
       <SectionLabel>{mode === 'fuse' ? '강화할 영웅' : '승급할 영웅'}</SectionLabel>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 8 }}>
-        <Slot hero={target} label="대상" onClear={() => setTargetId(null)} />
+        <Slot hero={target} label="대상" showQuarters={mode === 'promote'} onClear={() => setTargetId(null)} />
         {mode === 'fuse' && (
           <>
             <div style={{ alignSelf: 'center', color: T.blood, fontSize: 20 }}>✖</div>
@@ -282,8 +289,13 @@ export function ForgeScreen({
 }
 
 function Slot({
-  hero, label, tone, onClear,
-}: { hero: HeroInstance | null; label: string; tone?: 'death'; onClear: () => void }) {
+  hero, label, tone, showQuarters = false, onClear,
+}: {
+  hero: HeroInstance | null; label: string; tone?: 'death';
+  /** 승급 모드에서만 켠다 — 이사할 대상이 지금 어디 사는지 보여준다 */
+  showQuarters?: boolean;
+  onClear: () => void;
+}) {
   const c = tone === 'death' ? T.blood : T.frame;
   if (!hero) {
     return (
@@ -310,6 +322,9 @@ function Slot({
         onClick={onClear}
       />
       <div style={{ fontSize: 10, color: c, letterSpacing: '.2em', marginTop: 2 }}>{label}</div>
+      {showQuarters && (
+        <div style={{ fontSize: 10, color: T.dim, marginTop: 1 }}>{quartersFor(hero.star)}</div>
+      )}
     </div>
   );
 }

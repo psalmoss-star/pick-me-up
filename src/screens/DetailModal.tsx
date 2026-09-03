@@ -3,7 +3,7 @@ import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroPortrait } from '../ui/art/HeroPortrait';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { heroArtOf } from '../ui/artMap';
-import { ELEMENT_KR, T } from '../ui/tokens';
+import { ELEMENT_KR, T, quartersFor, nextQuartersFor } from '../ui/tokens';
 import { computeAttributes, computeHeroStats, isAtCap, klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
@@ -38,6 +38,8 @@ export function DetailModal({
   const attrs = computeAttributes(def, hero.star, hero.level, gameData.starScaling);
   const baseStats = computeHeroStats(def, hero.star, hero.level, gameData.starScaling);
   const capped = isAtCap(attrs);
+  /** 승급하면 옮겨갈 거처. ★6이면 null — 아래 경고 문구가 갈라 쓴다 */
+  const nextQuarters = nextQuartersFor(hero.star);
 
   /**
    * 표시 스탯에 장비를 태운다. 안 그러면 상세창 숫자와 실제 전투가 어긋난다.
@@ -107,7 +109,7 @@ export function DetailModal({
             {displayName(hero, gameData.heroes)}({'★'.repeat(hero.star)}) <span style={{ fontSize: 15 }}>Lv.{hero.level}</span>
           </div>
           <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>
-            {displayTitle(hero, gameData.heroes)} · 클래스 : {klassFor(hero.star)} · 속성 : {ELEMENT_KR[def.element]}
+            {displayTitle(hero, gameData.heroes)} · 클래스 : {klassFor(hero.star)} · 거처 : {quartersFor(hero.star)} · 속성 : {ELEMENT_KR[def.element]}
           </div>
           <div style={{ fontSize: 14, lineHeight: 2.1 }}>
             {row('힘', attrs.str)}{row('지능', attrs.int)}
@@ -232,7 +234,15 @@ export function DetailModal({
 
           {capped && (
             <div style={{ fontSize: 12, color: T.gold, marginTop: 16 }}>
-              모든 능력치가 상한에 도달했습니다. 승급이 필요합니다.
+              {/*
+                승급은 레벨을 1로 되돌려 **직후에 약해진다**(의도된 대가).
+                그래서 승급을 권하는 이 자리에서 얻는 쪽도 같이 보여준다 —
+                손실만 통지하면 플레이어가 받는 것이 손실뿐이다.
+                ★6은 옮겨갈 곳이 없으므로 반드시 갈라야 한다(안 가르면 undefined가 샌다).
+              */}
+              {nextQuarters
+                ? `모든 능력치가 상한에 도달했습니다. 승급하면 ${nextQuarters}(으)로 옮겨갑니다.`
+                : '모든 능력치가 상한에 도달했습니다. 승급이 필요합니다.'}
             </div>
           )}
         </SystemPanel>

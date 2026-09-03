@@ -115,6 +115,17 @@ export interface StarTier {
   halo: boolean;
   emblem: 'plain' | 'star' | 'ornate';
   label: string;
+  /**
+   * 거처 — 이 등급의 영웅이 마을에서 사는 곳.
+   *
+   * `stats.ts`의 계급(`KLASS_BY_STAR`: 초보자→…→영웅)과 **1:1로 짝이다.**
+   * 계급이 사는 곳이라는 뜻이 성립해야 하므로 한쪽만 늘리지 말 것.
+   *
+   * ⚠️ **★5와 ★6은 위 구조 값이 전부 같다**(corners 4 / lattice / rays / halo).
+   * 색만 다르므로 카드 구조로는 둘이 안 갈린다 — 거처 이름이 그 둘을 가르는
+   * 유일한 구조적 차이다. 여섯이 서로 달라야 하며 `quarters.test.ts`가 잠근다.
+   */
+  quarters: string;
 }
 
 /**
@@ -123,13 +134,33 @@ export interface StarTier {
  * 색만 바꾸면 작은 크기에서 ★3과 ★5가 구분되지 않는다 (실제로 겪은 문제).
  */
 export const STAR_TIERS: Record<number, StarTier> = {
-  1: { ring: '#4E4B45', fill: '#1A1916', glow: 0, corners: 0, lattice: false, rays: false, halo: false, emblem: 'plain', label: '무광 회동' },
-  2: { ring: '#8A5E36', fill: '#231810', glow: 0, corners: 1, lattice: false, rays: false, halo: false, emblem: 'plain', label: '청동' },
-  3: { ring: '#6F8598', fill: '#141A20', glow: 5, corners: 2, lattice: false, rays: false, halo: false, emblem: 'star', label: '강철은' },
-  4: { ring: '#D4AF37', ringHi: '#F6E08A', fill: '#241C0B', glow: 20, corners: 3, lattice: true, rays: false, halo: false, emblem: 'star', label: '금' },
-  5: { ring: '#FFF3C9', ringHi: '#FFFFFF', fill: '#1E1830', glow: 38, corners: 4, lattice: true, rays: true, halo: true, emblem: 'ornate', label: '백금' },
-  6: { ring: '#F0C34A', ringHi: '#FFF6D0', fill: '#070505', glow: 54, corners: 4, lattice: true, rays: true, halo: true, emblem: 'ornate', label: '흑금' },
+  1: { ring: '#4E4B45', fill: '#1A1916', glow: 0, corners: 0, lattice: false, rays: false, halo: false, emblem: 'plain', label: '무광 회동', quarters: '훈련생 막사' },
+  2: { ring: '#8A5E36', fill: '#231810', glow: 0, corners: 1, lattice: false, rays: false, halo: false, emblem: 'plain', label: '청동', quarters: '병사 숙소' },
+  3: { ring: '#6F8598', fill: '#141A20', glow: 5, corners: 2, lattice: false, rays: false, halo: false, emblem: 'star', label: '강철은', quarters: '정예 숙사' },
+  4: { ring: '#D4AF37', ringHi: '#F6E08A', fill: '#241C0B', glow: 20, corners: 3, lattice: true, rays: false, halo: false, emblem: 'star', label: '금', quarters: '기사관' },
+  5: { ring: '#FFF3C9', ringHi: '#FFFFFF', fill: '#1E1830', glow: 38, corners: 4, lattice: true, rays: true, halo: true, emblem: 'ornate', label: '백금', quarters: '단장 관저' },
+  6: { ring: '#F0C34A', ringHi: '#FFF6D0', fill: '#070505', glow: 54, corners: 4, lattice: true, rays: true, halo: true, emblem: 'ornate', label: '흑금', quarters: '영웅 저택' },
 };
+
+/**
+ * 거처 읽기 — `STAR_TIERS[star].quarters`를 직접 읽지 말 것.
+ *
+ * `STAR_TIERS`는 `Record<number, …>`라 존재하지 않는 등급도 타입이 통과한다
+ * (다른 소비자도 전부 `?? STAR_TIERS[1]`로 막고 있다). 여기 한 곳에서 막는다.
+ */
+export function quartersFor(star: number): string {
+  return (STAR_TIERS[star] ?? STAR_TIERS[1]).quarters;
+}
+
+/**
+ * 승급하면 옮겨갈 거처. **최고 등급이면 `null`** — 더 갈 곳이 없다.
+ *
+ * 호출부가 `null`을 반드시 갈라야 한다. 안 가르면 ★6 화면에
+ * `undefined`가 그대로 새어 나온다.
+ */
+export function nextQuartersFor(star: number): string | null {
+  return STAR_TIERS[star + 1]?.quarters ?? null;
+}
 
 export const ELEMENT_TINT: Record<string, string> = {
   fire: '#C1442D', water: '#2D7FA8', wind: '#3E9E73', earth: '#8A6A3C', thunder: '#8B6FC4',

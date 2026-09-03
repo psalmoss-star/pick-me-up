@@ -49,6 +49,11 @@ export function BaseScreen({
   towerCleared = false, deathCount, awayCount = 0,
 }: BaseScreenProps) {
   const alive = livingHeroes(roster);
+  /*
+    로스터 최고 등급 — 거주 구역 건물의 구조를 정한다.
+    빈 로스터(전멸)에서도 마을은 서 있어야 하므로 하한 1을 둔다.
+  */
+  const topStar = alive.reduce((m, h) => Math.max(m, h.star), 1);
   const floorText = towerCleared ? '등반 종료' : `${floor.id}층 · ${floor.name}`;
 
   return (
@@ -80,6 +85,13 @@ export function BaseScreen({
             "고장난 버튼"으로 읽힌다 — 표시와 동작이 갈리면 표시가 거짓말이 된다.
           */
           towerLocked={party.length === 0}
+          /*
+            거주 구역 — 파생된 숫자 둘만 넘긴다(로스터 통째로 넘기지 않는다).
+            `alive`는 위에서 이미 계산돼 있고, 최고 등급도 같은 목록에서 나온다.
+            죽은 영웅은 이미 이 마을에 살지 않으므로 둘 다 살아있는 쪽만 본다.
+          */
+          livingCount={alive.length}
+          topStar={topStar}
         />
         <BaseHud
           wallet={wallet}
