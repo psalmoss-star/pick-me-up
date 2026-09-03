@@ -4,7 +4,7 @@ import { Button, HpBar, TOUCH_MIN } from '../ui/Button';
 import { HeroPortrait } from '../ui/art/HeroPortrait';
 import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
-import { T, ELEMENT_KR, ELEMENT_TINT, STAR_TIERS } from '../ui/tokens';
+import { T, ELEMENT_KR, ELEMENT_TINT, STAR_TIERS, quartersFor } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { statsOfInstance, attributesOfInstance, klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
@@ -159,8 +159,14 @@ export function StatusScreen({
               <span style={{ color: ELEMENT_TINT[def.element] }}>{ELEMENT_KR[def.element]}</span>
               {squadOf !== -1 && ` · ${squadOf + 1}군`}
             </div>
+            {/*
+              거처 — 계급이 사는 곳(`quartersFor`). 승급이 곧 이사라는 것을
+              여기서 보여준다. **위 계급 줄에 붙이지 않는다** — 그 줄은 이미
+              계급·승급·속성·군까지 넷을 이고 있어 §5-34에서 잘린 자리다.
+              역할 줄이 둘뿐이라 여기에 얹는 것이 안전하다(실측으로 확인).
+            */}
             <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
-              {ROLE_KR[def.role]} · {LINE_KR[lineOf(def)]}
+              {ROLE_KR[def.role]} · {LINE_KR[lineOf(def)]} · {quartersFor(hero.star)}
             </div>
           </div>
         </div>

@@ -201,3 +201,70 @@ describe('마을 배치 — 라벨 겹침', () => {
     expect(keys.size).toBe(spots.length);
   });
 });
+
+/**
+ * 앞뒤 순서 — **위 clearance가 못 잡는 것을 잡는다.**
+ *
+ * 2026-09-03에 거주 구역을 (5.4, 0.2)에 뒀을 때 위 `clearance`는 1.188로
+ * 여유롭게 통과했는데, 브라우저 375×667 실측에서 **훈련소 핀과 32.8% 겹쳤다**
+ * (가로 35.9px · 세로 26.3px). 기존 최악 쌍이 7.8%인데 그 네 배였다.
+ *
+ * 원인은 상자 크기다. 위 clearance는 라벨을 **76×24**로 어림잡는데
+ * 실제 핀은 **79.3×44**다 — 높이가 83% 크다. 44px은 손가락 터치 영역이라
+ * 줄일 수 없고, 그래서 세로로 붙은 자리를 `Math.abs(ay-by)/24`가
+ * 안 겹친다고 잘못 판정한다.
+ *
+ * ⚠️ **이 스위트도 겹침을 직접 재지는 못한다.** 핀의 세로 위치는 `lz`가
+ * 정하는데 `lz`는 시설 레벨과 `topStar`에 따라 **런타임에 변한다**
+ * (`facTop`, `quartersFloors`). 좌표만 보는 테스트로는 값이 안 나온다.
+ * 실제로 이 마을은 대부분의 쌍이 가로가 아니라 **`lz` 덕에** 갈려 있다.
+ *
+ * 그래서 여기서는 좌표만으로 참인 것 —— **앞뒤 순서**만 잠근다.
+ * 거주 구역이 섬에서 가장 뒤에 있는 한 앞쪽 무리와 세로로 갈린다.
+ * 겹침의 최종 판정은 **브라우저 실측**이다(HANDOFF §STEP 50).
+ */
+describe('마을 배치 — 거주 구역의 앞뒤 순서', () => {
+  const spots = Object.keys(VILLAGE_LOTS) as (keyof typeof VILLAGE_LOTS)[];
+
+  /**
+   * 거주 구역은 섬에서 **가장 뒤(x+y가 최소)**에 있다.
+   *
+   * 이게 이 자리의 핵심 성질이다. 뒤로 갈수록 `iso`의 y가 작아지므로
+   * 핀이 위로 가고, 앞쪽에 몰린 나머지 아홉 자리와 세로로 갈린다.
+   * 실측 사각형으로 격자 1674칸을 훑었을 때 **겹침 0인 칸이 섬 안에
+   * 이 하나뿐**이었던 이유이기도 하다 — 44px 핀 기준으로 마을은 이미 꽉 찼다.
+   *
+   * 앞으로 옮기면(= x+y가 커지면) 앞쪽 무리에 끼어들어 겹친다.
+   */
+  it('거주 구역이 섬에서 가장 뒤에 있다 — 앞으로 옮기면 겹친다', () => {
+    const q = VILLAGE_LOTS.quarters;
+    for (const s of spots) {
+      if (s === 'quarters') continue;
+      const o = VILLAGE_LOTS[s];
+      expect(q.x + q.y, `quarters(${q.x + q.y}) vs ${s}(${o.x + o.y})`).toBeLessThan(o.x + o.y);
+    }
+  });
+
+  /**
+   * 거주 구역 바로 앞 이웃(= x+y가 가장 가까운 자리)은 탑이다.
+   *
+   * 세로로 붙어 있는 쌍이 위험한 쌍이므로, 그 상대가 누구인지 고정해 둔다.
+   * 탑은 `lz`가 5.6으로 마을에서 가장 높아 라벨이 훌쩍 위에 뜬다 —
+   * 그래서 이 쌍은 실측에서 7.7px 떨어졌다(HANDOFF §STEP 50).
+   *
+   * ⚠️ 이 값이 바뀌면 **거주 구역의 세로 이웃이 바뀐 것**이다.
+   * 새 이웃의 `lz`가 탑만큼 높지 않으면 겹친다 — 브라우저로 다시 재야 한다.
+   */
+  it('거주 구역의 바로 앞 이웃은 탑이다 — 바뀌면 다시 실측해야 한다', () => {
+    const q = VILLAGE_LOTS.quarters;
+    const nearest = spots
+      .filter((s) => s !== 'quarters')
+      .sort(
+        (a, b) =>
+          (VILLAGE_LOTS[a].x + VILLAGE_LOTS[a].y) - (VILLAGE_LOTS[b].x + VILLAGE_LOTS[b].y),
+      )[0];
+    expect(nearest).toBe('tower');
+    // 그 이웃과도 뒤/앞 관계가 유지되는지
+    expect(q.x + q.y).toBeLessThan(VILLAGE_LOTS[nearest].x + VILLAGE_LOTS[nearest].y);
+  });
+});
