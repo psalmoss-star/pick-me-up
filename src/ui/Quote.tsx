@@ -18,11 +18,9 @@ export interface QuoteProps {
   temper?: string;
   /** 유언처럼 무거운 말은 핏빛으로 */
   tone?: 'normal' | 'death';
-  /** AI가 쓴 문장이면 작은 표식을 단다 — 플레이어의 키로 만든 문장이다 */
-  byAi?: boolean;
 }
 
-export function Quote({ text, speaker, temper, tone = 'normal', byAi = false }: QuoteProps) {
+export function Quote({ text, speaker, temper, tone = 'normal' }: QuoteProps) {
   return (
     <div style={{ textAlign: 'center', padding: '4px 0' }}>
       <div
@@ -36,11 +34,10 @@ export function Quote({ text, speaker, temper, tone = 'normal', byAi = false }: 
       >
         “{text}”
       </div>
-      {(speaker || temper || byAi) && (
+      {(speaker || temper) && (
         <div style={{ fontSize: 10, color: T.dim, letterSpacing: '.14em', marginTop: 4 }}>
           {speaker && <span style={{ color: tone === 'death' ? T.blood : T.dim }}>— {speaker}</span>}
           {temper && <span>{speaker ? ' · ' : ''}{temper}</span>}
-          {byAi && <span style={{ color: T.rare }}>{speaker || temper ? ' · ' : ''}◇</span>}
         </div>
       )}
     </div>

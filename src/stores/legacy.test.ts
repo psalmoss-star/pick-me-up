@@ -15,6 +15,7 @@ import { clearRun, saveRun, deserialize, serialize } from './save';
 import { displayName, displayTitle } from '../game/identity';
 import { gameData } from '../game/data';
 import { FLOORS } from '../game/data/floors';
+import { templateLastWords } from '../game/voice';
 
 /** vitest 환경이 node라 localStorage가 없다 — save.test.ts와 같은 흉내 저장소 */
 class MemStorage {
@@ -340,5 +341,32 @@ describe('최종 리뷰 회귀 — 회차 복원·도감 병합·시작 가드·
     expect(store.getState().towerCleared).toBe(true);
     // heroes.length === 0 가드가 없다면 여기서 빈 summit row가 append된다.
     expect(loadLegacy().summit).toEqual([]);
+  });
+});
+
+describe('유언 (gdd-v3 §4.10)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', new MemStorage());
+  });
+
+  it('전투 사망자는 결과 화면과 같은 템플릿 유언을 무덤에 남긴다', () => {
+    const store = createRunStore(() => 42);
+    store.setState({ roster: store.getState().roster.map((h) => ({ ...h, currentHp: 1 })) });
+    store.getState().start();
+    const dead = (store.getState().result?.casualties ?? [])
+      .map((id) => store.getState().roster.find((h) => h.instId === id)!);
+    expect(dead.length).toBeGreaterThan(0);
+    store.getState().finish();
+
+    for (const h of dead) {
+      const rec = loadLegacy().fallen.find((f) => f.name === displayName(h, gameData.heroes))!;
+      expect(rec.lastWords).toBe(templateLastWords(h, 1));
+    }
+  });
+
+  it('유언은 왕복하고, 유언 이전 기록에는 키가 생기지 않는다', () => {
+    const l = { ...sample(), fallen: [{ ...sample().fallen[0], lastWords: '먼저 가서… 기다리겠습니다.' }] };
+    expect(deserializeLegacy(serializeLegacy(l)).fallen[0].lastWords).toBe('먼저 가서… 기다리겠습니다.');
+    expect('lastWords' in deserializeLegacy(serializeLegacy(sample())).fallen[0]).toBe(false);
   });
 });

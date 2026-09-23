@@ -57,6 +57,13 @@
   이 마을은 대부분의 쌍이 가로가 아니라 `lz`(라벨 높이)로 갈리는데, `lz`는
   시설 레벨·`topStar`에 따라 런타임에 변해서 좌표 테스트로는 끝까지 못 잡는다.
 
+### ⛔ 외부 API (사용자 결정, 2026-09-23 — 협상 대상 아님)
+- **게임은 어떤 외부 API도 부르지 않는다.** AI·LLM·HTTP API 전부. 키 입력 칸도 만들지 않는다.
+  AI 유언을 넣었다가 같은 날 걷어냈다(HANDOFF §STEP 56). 다시 제안하지 말 것.
+- `src/noExternalApi.test.ts`가 `fetch`·XHR·WebSocket·API 주소·SDK 의존성을 검사하고,
+  `index.html`의 CSP `connect-src 'self'`가 브라우저에서 막는다.
+  **이 테스트나 CSP를 고쳐서 통과시키지 말 것** — 네트워크가 필요하면 사용자에게 먼저 묻는다.
+
 ### 게임 규칙
 - 퍼머데스는 협상 대상이 아니다. 사망한 영웅은 어떤 경로로도 되돌리지 않는다.
 - **같은 이름의 영웅이 둘 존재하면 안 된다.** 개체는 대체 불가능하고, 그게 화면에 보여야 한다.
@@ -85,10 +92,8 @@
   생성 층은 캐시되므로, 제자리 변형은 다음 전투와 다른 화면까지 영구히 오염시킨다.
 - **기질·대사는 표시 전용이다(gdd-v3 §4.10).** 전투·보상·과제 어디에도 넣지 않는다 —
   넣는 순간 기질이 취향이 아니라 스펙이 된다. 기질은 seed에서 파생하고 승급해도 안 바뀐다.
-- **★1~3은 마스터·탑을 모른다.** `data/voice.ts`의 `low` 줄과 AI 유언 둘 다 코드가 검사한다
-  (`voice.test.ts`, `ai/prompt.ts`의 `parseLastWords`). 원작의 자각 단계다.
-- **AI는 문장만 쓴다.** 사망 판정이 끝난 뒤에만 부르고, 답이 무엇이든 게임 상태는 안 바뀐다.
-  AI 코드는 `src/ai/`에만 둔다(`game/`은 브라우저 API 금지). 키가 없으면 템플릿 유언이 남는다.
+- **★1~3은 마스터·탑을 모른다.** `data/voice.ts`의 `low` 줄에 그 말이 들어가면
+  `voice.test.ts`가 실패한다. 원작의 자각 단계다.
 - 대사에서 이름 뒤 조사는 **`{ally:이/가}`처럼 두 꼴을 적는다.** `{ally}가`는 「세인가」를 찍는다.
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
@@ -99,7 +104,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 957개 통과)
+npm test           # Vitest 1회 실행 (현재 938개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -226,13 +231,8 @@ src/
 ├─ stores/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처
 │  ├─ save.ts         # 저장/불러오기(localStorage). finish() 직후 자동 저장
-│  ├─ legacy.ts       # 무덤(회차를 넘는 기록). 유언(lastWords)은 여기 문장으로 저장
-│  └─ lastWords.ts    # AI 유언 도착 창구 — finish 전이면 보관, 후면 무덤을 고쳐 적는다
-├─ ai/                # AI 유언(선택 기능, 브라우저 전용). 플레이어 자신의 API 키
-│  ├─ prompt.ts       # 프롬프트 조립 + 응답 검사(순수). 규칙 위반 응답은 버린다
-│  ├─ client.ts       # Messages API 호출. 실패는 전부 null(던지지 않는다)
-│  ├─ config.ts       # 키 저장(별도 localStorage 키 — 세이브·무덤과 섞지 않는다)
-│  └─ useLastWords.ts # 결과 화면 훅. 한 사람당 한 번만 요청한다
+│  └─ legacy.ts       # 무덤(회차를 넘는 기록). 유언(lastWords)은 여기 문장으로 저장
+├─ noExternalApi.test.ts # 외부 API 금지 검사 — 고쳐서 통과시키지 말 것
 ├─ ui/                # 비주얼 언어
 │  ├─ tokens.ts       # 색·등급 구조 + 등급별 거처(quarters). 여기가 단일 출처
 │  ├─ SystemPanel.tsx # 시그니처 컴포넌트

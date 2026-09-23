@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { CodexPanel } from './CodexPanel';
-import { AiSettingsPanel } from './AiSettingsPanel';
 import { Quote } from '../ui/Quote';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
@@ -127,10 +126,7 @@ export function GraveScreen({
               */}
               {f.lastWords && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.panelHi}` }}>
-                  <Quote text={f.lastWords} tone="death" byAi={f.lastWordsBy === 'ai'} />
-                  {f.epitaph && (
-                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>{f.epitaph}</div>
-                  )}
+                  <Quote text={f.lastWords} tone="death" />
                 </div>
               )}
             </SystemPanel>
@@ -172,9 +168,6 @@ export function GraveScreen({
         </div>
       </SystemPanel>
 
-      <div style={{ marginTop: 20 }}>
-        <AiSettingsPanel />
-      </div>
       </>
       )}
 

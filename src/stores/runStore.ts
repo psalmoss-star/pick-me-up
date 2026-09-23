@@ -55,7 +55,6 @@ import type {
 } from '../game/types';
 import type { FallenRecord, Legacy } from '../game/legacyTypes';
 import { templateLastWords } from '../game/voice';
-import { takePendingWords } from './lastWords';
 import { loadLegacy, saveLegacy, sealedNames } from './legacy';
 
 /**
@@ -1204,18 +1203,11 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           .map((h): FallenRecord => {
             const name = displayName(h, gameData.heroes);
             /**
-             * 유언 — gdd-v3 §4.10. AI 유언이 결과 화면에서 이미 도착했으면 그것을,
-             * 아니면 템플릿을 적는다. 늦게 도착한 AI 유언은 `offerAiWords`가 고쳐 적는다.
+             * 유언 — gdd-v3 §4.10. 결과 화면과 **같은 함수·같은 입력**이라 둘이 갈리지 않는다.
              * seed 없는 옛 개체는 말하지 않으므로 필드 자체가 없다.
+             * ⚠️ 외부 API로 유언을 만들지 않는다(사용자 결정, 2026-09-23 · CLAUDE.md).
              */
-            const ai = takePendingWords(name);
-            const template = templateLastWords(h, floorSpec.id);
-            const words: Pick<FallenRecord, 'lastWords' | 'lastWordsBy' | 'epitaph'> = ai
-              ? { lastWords: ai.lastWords, lastWordsBy: 'ai',
-                  ...(ai.epitaph ? { epitaph: ai.epitaph } : {}) }
-              : template
-                ? { lastWords: template, lastWordsBy: 'template' }
-                : {};
+            const lastWords = templateLastWords(h, floorSpec.id);
             return {
               name,
               title: displayTitle(h, gameData.heroes),
@@ -1224,7 +1216,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
               floorId: floorSpec.id,
               revealProgress: h.revealProgress ?? 0,
               runNo: legacy.runNo,
-              ...words,
+              ...(lastWords ? { lastWords } : {}),
             };
           });
 

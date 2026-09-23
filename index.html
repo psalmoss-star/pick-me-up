@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!--
+      외부 API 금지 (사용자 결정, 2026-09-23 · CLAUDE.md "외부 API").
+      connect-src 'self' — 게임 코드는 자기 서버 말고는 어디에도 fetch·XHR·WebSocket을 열 수 없다.
+      누가 API 호출을 다시 넣어도 브라우저가 막는다. 폰트 CSS(link)는 connect-src가 아니라 영향 없다.
+      src/noExternalApi.test.ts가 이 줄이 있는지 검사한다.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self'" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet" />
