@@ -63,7 +63,7 @@ export function deserializeLegacy(raw: string): Legacy {
     if (version > LEGACY_VERSION) return emptyLegacy();
 
     const fallen: FallenRecord[] = Array.isArray(parsed.fallen)
-      ? parsed.fallen.filter(isObj).map((f) => ({
+      ? parsed.fallen.filter(isObj).map((f): FallenRecord => ({
           name: str(f.name),
           title: str(f.title),
           star: num(f.star, 1) as FallenRecord['star'],
@@ -71,6 +71,13 @@ export function deserializeLegacy(raw: string): Legacy {
           floorId: num(f.floorId, 1),
           revealProgress: Math.max(0, Math.min(1, num(f.revealProgress, 0))),
           runNo: num(f.runNo, 1),
+          // 유언은 선택 필드 — 없으면 키 자체를 안 만든다(옛 기록과 모양이 같아야 한다)
+          ...(typeof f.lastWords === 'string' && f.lastWords !== ''
+            ? { lastWords: f.lastWords } : {}),
+          ...(f.lastWordsBy === 'ai' || f.lastWordsBy === 'template'
+            ? { lastWordsBy: f.lastWordsBy } : {}),
+          ...(typeof f.epitaph === 'string' && f.epitaph !== ''
+            ? { epitaph: f.epitaph } : {}),
         })).filter((f) => f.name !== '')
       : [];
 
@@ -138,4 +145,26 @@ export function saveLegacy(l: Legacy): void {
 /** 봉인된 이름 집합. generateIdentity의 입력이 된다. */
 export function sealedNames(l: Legacy): Set<string> {
   return new Set(l.fallen.map((f) => f.name));
+}
+
+/**
+ * 무덤의 한 사람에게 유언을 적는다(순수). 이름으로 찾는다 —
+ * 봉인된 이름은 유일하므로(§4.8) 이름이 곧 그 사람이다.
+ * 없으면 같은 객체를 그대로 돌려준다(호출부가 "못 찾음"을 판단한다).
+ */
+export function withLastWords(
+  l: Legacy,
+  name: string,
+  words: { lastWords: string; lastWordsBy: 'ai' | 'template'; epitaph?: string },
+): Legacy {
+  const i = l.fallen.findIndex((f) => f.name === name);
+  if (i < 0) return l;
+  const fallen = l.fallen.slice();
+  fallen[i] = {
+    ...fallen[i],
+    lastWords: words.lastWords,
+    lastWordsBy: words.lastWordsBy,
+    ...(words.epitaph ? { epitaph: words.epitaph } : {}),
+  };
+  return { ...l, fallen };
 }

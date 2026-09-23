@@ -6,7 +6,11 @@ import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
 import { MISSION_LABEL } from '../game/mission';
 import { klassFor } from '../game/stats';
-import { displayName } from '../game/identity';
+import { displayName, displayTitle } from '../game/identity';
+import { lineFor, pickSpeaker, templateLastWords } from '../game/voice';
+import { buildContext } from '../ai/prompt';
+import { useLastWords, type DeathEntry } from '../ai/useLastWords';
+import { Quote } from '../ui/Quote';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
 import { gameData } from '../game/data';
@@ -81,6 +85,44 @@ export function ResultScreen({
 
   const mvp = result.mvp ? find(result.mvp) : undefined;
   const dead = result.casualties.map(find).filter((h): h is HeroInstance => !!h);
+  /** 살아남은 출전자 — 후퇴한 사람도 포함한다(죽지 않았으니까) */
+  const survivors = result.roster
+    .filter((u) => u.side === 'ally' && !result.casualties.includes(u.sourceId as never))
+    .map((u) => find(u.sourceId))
+    .filter((h): h is HeroInstance => !!h);
+  const nameOf = (h: HeroInstance) => displayName(h, gameData.heroes);
+
+  /*
+    유언 — gdd-v3 §4.10. 템플릿은 `finish()`가 무덤에 적는 것과 **같은 함수·같은 입력**이다.
+    AI 키가 있으면 AI 유언을 요청하고, 오면 바꿔 끼운다(무덤도 같이 고쳐진다).
+    AI에는 이미 확정된 사실만 넘긴다 — 사망 판정은 이 화면이 뜨기 전에 끝났다.
+  */
+  const deathEntries: DeathEntry[] = dead.map((h) => ({
+    name: nameOf(h),
+    template: templateLastWords(h, floor.id),
+    ctx: buildContext({
+      hero: h,
+      def: gameData.heroes[h.defId],
+      name: nameOf(h),
+      title: displayTitle(h, gameData.heroes),
+      floorId: floor.id,
+      mission: floor.mission.kind,
+      fallenWith: dead.filter((d) => d !== h).map(nameOf),
+      survivors: survivors.map(nameOf),
+      won: result.outcome === 'victory',
+    }),
+  }));
+  const words = useLastWords(deathEntries);
+
+  /*
+    남겨진 자의 말. 먼저 간 사람 중 첫 번째에 대해, 살아남은 사람 하나가 말한다.
+    둘 이상이 한꺼번에 말하면 손실 목록이 수다가 된다 — 한 마디면 충분하다.
+  */
+  const firstLost = dead[0];
+  const mourner = firstLost ? pickSpeaker(survivors, nameOf(firstLost)) : null;
+  const mourning = firstLost && mourner
+    ? lineFor(mourner, 'allyDeath', nameOf(firstLost), { ally: nameOf(firstLost) })
+    : null;
   // 재도전 배수를 반영한다 — 안 하면 표시와 실제 지급이 어긋난다(위 prop 주석 참조)
   const base = floorRewards(floor, result.turnsElapsed);
   const rewards = {
@@ -269,9 +311,42 @@ export function ResultScreen({
                       발굴 {Math.round(r.progress * 100)}% · {r.label}
                     </div>
                   )}
+                  {/*
+                    유언. AI를 기다리는 동안에는 템플릿을 먼저 보이지 않는다 —
+                    읽던 유언이 눈앞에서 바뀌면 그건 유언이 아니라 로딩이다.
+                    AI가 실패하면(12초 타임아웃 포함) 템플릿이 나온다.
+                  */}
+                  {(() => {
+                    const w = words[nameOf(h)];
+                    if (!w) return null;
+                    if (w.waiting) {
+                      return (
+                        <div style={{ fontSize: 13, color: T.dim, margin: '4px 0 10px', letterSpacing: '.3em' }}>
+                          ……
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ margin: '2px 0 10px' }}>
+                        <Quote text={w.text} tone="death" byAi={w.byAi} />
+                        {w.epitaph && (
+                          <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>{w.epitaph}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
+            {mourner && mourning && (
+              <div style={{ marginTop: 10, paddingTop: 12, borderTop: `1px solid ${T.panelHi}` }}>
+                <Quote
+                  text={mourning.text}
+                  speaker={nameOf(mourner)}
+                  temper={mourning.temper.label}
+                />
+              </div>
+            )}
           </>
         )}
       </SystemPanel>

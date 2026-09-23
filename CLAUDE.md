@@ -83,6 +83,13 @@
   거쳐야 한다 — 한쪽에서 빠지면 개입하는 순간 준비가 조용히 증발한다.
 - **`applyPrep`은 층을 복제한다. 제자리에서 고치지 말 것.** `FLOORS`는 모듈 전역이고
   생성 층은 캐시되므로, 제자리 변형은 다음 전투와 다른 화면까지 영구히 오염시킨다.
+- **기질·대사는 표시 전용이다(gdd-v3 §4.10).** 전투·보상·과제 어디에도 넣지 않는다 —
+  넣는 순간 기질이 취향이 아니라 스펙이 된다. 기질은 seed에서 파생하고 승급해도 안 바뀐다.
+- **★1~3은 마스터·탑을 모른다.** `data/voice.ts`의 `low` 줄과 AI 유언 둘 다 코드가 검사한다
+  (`voice.test.ts`, `ai/prompt.ts`의 `parseLastWords`). 원작의 자각 단계다.
+- **AI는 문장만 쓴다.** 사망 판정이 끝난 뒤에만 부르고, 답이 무엇이든 게임 상태는 안 바뀐다.
+  AI 코드는 `src/ai/`에만 둔다(`game/`은 브라우저 API 금지). 키가 없으면 템플릿 유언이 남는다.
+- 대사에서 이름 뒤 조사는 **`{ally:이/가}`처럼 두 꼴을 적는다.** `{ally}가`는 「세인가」를 찍는다.
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
 
@@ -92,7 +99,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 910개 통과)
+npm test           # Vitest 1회 실행 (현재 957개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -183,6 +190,8 @@ src/
 │  ├─ craft.ts     # 제작 — 재료→유물. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
+│  ├─ temperament.ts # 기질 — seed에서 파생. 승급해도 안 바뀐다. 표시 전용
+│  ├─ voice.ts       # 대사 선택(seed+순간+맥락) · 조사 처리 · 템플릿 유언
 │  ├─ rosterSort.ts  # 목록 정렬 — 화면마다 따로 쓰지 말 것. favorite은 정렬 키가 아니다
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
@@ -211,10 +220,19 @@ src/
 │     ├─ adventures.ts # 모험 3종. exp는 **정액**이어야 한다(1층 참전 exp가 상한)
 │     ├─ names.ts     # 개체 이름 어휘 (이름 65 × 수식어 49 + 이명 26)
 │     ├─ origins.ts   # 생전 서사 어휘 — 등급별 지위 12 × 최후 38. **순서를 바꾸면 재배치된다**
+│     ├─ temperaments.ts # 기질 8종. **순서를 바꾸면 기존 개체의 성격이 바뀐다**
+│     ├─ voice.ts     # 대사 표 — 5순간 × 8기질 × 자각 2단계(low=★1~3 / high=★4~6)
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처
-│  └─ save.ts         # 저장/불러오기(localStorage). finish() 직후 자동 저장
+│  ├─ save.ts         # 저장/불러오기(localStorage). finish() 직후 자동 저장
+│  ├─ legacy.ts       # 무덤(회차를 넘는 기록). 유언(lastWords)은 여기 문장으로 저장
+│  └─ lastWords.ts    # AI 유언 도착 창구 — finish 전이면 보관, 후면 무덤을 고쳐 적는다
+├─ ai/                # AI 유언(선택 기능, 브라우저 전용). 플레이어 자신의 API 키
+│  ├─ prompt.ts       # 프롬프트 조립 + 응답 검사(순수). 규칙 위반 응답은 버린다
+│  ├─ client.ts       # Messages API 호출. 실패는 전부 null(던지지 않는다)
+│  ├─ config.ts       # 키 저장(별도 localStorage 키 — 세이브·무덤과 섞지 않는다)
+│  └─ useLastWords.ts # 결과 화면 훅. 한 사람당 한 번만 요청한다
 ├─ ui/                # 비주얼 언어
 │  ├─ tokens.ts       # 색·등급 구조 + 등급별 거처(quarters). 여기가 단일 출처
 │  ├─ SystemPanel.tsx # 시그니처 컴포넌트

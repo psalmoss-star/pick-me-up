@@ -48,6 +48,8 @@ export const STREAM = {
   VARIANT: 31,  // 초상 변형 — 개체별 아트 슬롯. 겉모습만, 전투 수치 영향 없음
   ADVENTURE: 37, // 모험 파견 판정 — 성공 여부·각성석 추첨
   ORIGIN: 41,   // 생전 서사 — 지위·최후. 표시 전용, 전투 수치 영향 없음
+  TEMPER: 43,   // 기질 — 성격. 표시 전용, 전투 수치 영향 없음 (gdd-v3 §4.10)
+  VOICE: 47,    // 대사 선택 — 같은 순간엔 같은 말. 표시 전용
 } as const;
 
 export type StreamId = (typeof STREAM)[keyof typeof STREAM];

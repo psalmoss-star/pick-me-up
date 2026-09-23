@@ -17,6 +17,7 @@ import { heroBonus, applyBonus } from '../game/gear';
 import { ROLE_KR, LINE_KR } from '../game/data/formation';
 import { lineOf } from '../game/formation';
 import { gameData } from '../game/data';
+import { temperOf } from '../game/temperament';
 import type {
   Attribute, GearInstance, HeroInstId, HeroInstance, Wallet,
 } from '../game/types';
@@ -95,6 +96,8 @@ export function StatusScreen({
   const squadOf = squads.findIndex((m) => m.includes(hero.instId));
   /** 개체의 생전 서사. seed가 없는 옛 세이브는 null이라 패널이 안 뜬다 */
   const origin = originOf(hero);
+  /** 기질 — 말투를 정한다. 전투 수치에는 닿지 않는다(gdd-v3 §4.10) */
+  const temper = temperOf(hero);
 
   return (
     <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
@@ -248,7 +251,7 @@ export function StatusScreen({
         })}
       </SystemPanel>
 
-      {(def.lore || origin) && (
+      {(def.lore || origin || temper) && (
         <>
       <SectionLabel>기록</SectionLabel>
           <SystemPanel compact>
@@ -272,6 +275,22 @@ export function StatusScreen({
                 }}
               >
                 {originText(origin)}
+              </div>
+            )}
+            {temper && (
+              <div
+                style={{
+                  fontSize: 11,
+                  lineHeight: 1.9,
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTop: `1px solid ${T.panelHi}`,
+                  color: T.dim,
+                }}
+              >
+                <span style={{ color: T.text, letterSpacing: '.2em' }}>기질 · {temper.label}</span>
+                <br />
+                {temper.desc}
               </div>
             )}
           </SystemPanel>

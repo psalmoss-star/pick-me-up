@@ -11,6 +11,8 @@ import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { livingHeroes, isPreciousSacrifice } from '../game/roster';
+import { lineFor } from '../game/voice';
+import { Quote } from '../ui/Quote';
 import { gameData } from '../game/data';
 import { canPromote, sacrificeValue, fuseEfficiency, expToNext } from '../game/progression';
 import type { FuseCheck, FuseResult, PromoteCheck, PromoteResult } from '../game/progression';
@@ -184,6 +186,25 @@ export function ForgeScreen({
             </span>
             <br />
             <span style={{ color: T.blood }}>제물은 영구히 사라집니다.</span>
+            {/*
+              제물의 말 — gdd-v3 §4.10. 확인 창은 "소중한" 제물에만 뜨므로 여기(예상 결과)에 둔다.
+              누구를 바치든 **바치기 전에** 그 사람이 한 마디 한다. 제물은 무덤에 오르지
+              않으니(흡수이지 죽음이 아니다) 이것이 그 사람이 남기는 유일한 말이다.
+              맥락이 대상 instId라서, 같은 제물이라도 누구에게 바쳐지느냐에 따라 말이 갈린다.
+            */}
+            {(() => {
+              const l = lineFor(sacrifice, 'sacrifice', target.instId);
+              return l && (
+                <div style={{ marginTop: 12 }}>
+                  <Quote
+                    text={l.text}
+                    speaker={displayName(sacrifice, gameData.heroes)}
+                    temper={l.temper.label}
+                    tone="death"
+                  />
+                </div>
+              );
+            })()}
           </div>
         );
       })()}

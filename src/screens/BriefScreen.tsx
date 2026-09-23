@@ -12,6 +12,10 @@ import type { FloorSpec } from '../game/data/floors';
 import type { QuestDef } from '../game/data/quests';
 import type { PrepDef } from '../game/data/preps';
 import type { BuyPrepResult } from '../stores/runStore';
+import type { HeroInstance } from '../game/types';
+import { displayName } from '../game/identity';
+import { lineFor, pickSpeaker } from '../game/voice';
+import { Quote } from '../ui/Quote';
 
 export interface BriefScreenProps {
   floor: FloorSpec;
@@ -32,13 +36,20 @@ export interface BriefScreenProps {
   /** 살 수 있는지 판단용 */
   gold?: number;
   onBuyPrep?: () => BuyPrepResult;
+  /**
+   * 출전할 영웅들 — 이 중 한 명이 문 앞에서 한 마디 한다(gdd-v3 §4.10).
+   * 누가 말할지는 층 번호로 정한다. 같은 층에 다시 오면 같은 사람이 같은 말을 한다.
+   */
+  speakers?: HeroInstance[];
 }
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
   floor, partySize, quests = [], onBack, onStart,
-  prep, prepBought = false, gold = 0, onBuyPrep,
+  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [],
 }: BriefScreenProps) {
+  const speaker = pickSpeaker(speakers, floor.id);
+  const sortieLine = speaker ? lineFor(speaker, 'sortie', floor.id) : null;
   const [notice, setNotice] = useState<string | null>(null);
 
   const buy = () => {
@@ -171,6 +182,22 @@ export function BriefScreen({
                 )}
               </>
             )}
+          </SystemPanel>
+        </div>
+      )}
+
+      {/*
+        출정 전 한 마디. 진입 버튼 **바로 위**에 둔다 — 문을 열기 직전의 말이라서다.
+        말이 "들어간다"를 누르는 손을 한 번 멈추게 하면 그걸로 제 몫을 한 것이다.
+      */}
+      {speaker && sortieLine && (
+        <div style={{ marginTop: 16 }}>
+          <SystemPanel compact>
+            <Quote
+              text={sortieLine.text}
+              speaker={displayName(speaker, gameData.heroes)}
+              temper={sortieLine.temper.label}
+            />
           </SystemPanel>
         </div>
       )}

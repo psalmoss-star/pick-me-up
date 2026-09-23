@@ -9,6 +9,8 @@ import { STAR_TIERS, T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
+import { lineFor } from '../game/voice';
+import { Quote } from '../ui/Quote';
 import { gameData } from '../game/data';
 import { BANNERS, FREE_COOLDOWN_MS } from '../game/gacha';
 import type { PullResult, PullSuccess } from '../game/gacha';
@@ -199,6 +201,19 @@ export function SummonScreen({
               {pulled.wasPity && <span style={{ color: T.gold }}>천장 확정 · </span>}
               {pulled.isNewInCodex ? '도감에 새로 기록되었습니다' : '이미 도감에 있는 영웅입니다'}
             </div>
+            {/*
+              첫 마디. 불려 온 사람이 무엇을 말하느냐가 "누굴 뽑았나"의 절반이다.
+              ★1~3은 자기가 불려 왔다는 걸 모르고, ★4~6은 탑과 마스터를 안다(gdd-v3 §4.10).
+              맥락이 instId라 이 개체는 소환 때 한 말을 다시 열어도 똑같이 한다.
+            */}
+            {(() => {
+              const l = lineFor(pulled.hero, 'summon', pulled.hero.instId);
+              return l && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+                  <Quote text={l.text} temper={l.temper.label} />
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 11, color: T.dim, marginTop: 10 }}>
               잠재력은 아직 알 수 없습니다 — 전투에 내보내야 드러납니다.
             </div>

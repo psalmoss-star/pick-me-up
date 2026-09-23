@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { CodexPanel } from './CodexPanel';
+import { AiSettingsPanel } from './AiSettingsPanel';
+import { Quote } from '../ui/Quote';
 import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
 import { T } from '../ui/tokens';
@@ -119,6 +121,18 @@ export function GraveScreen({
                   </div>
                 </div>
               </div>
+              {/*
+                유언은 카드 옆이 아니라 **아래 한 줄 전체**에 둔다. 카드 옆 칸은 96px 카드를
+                빼면 폭이 좁아서 긴 유언이 여섯 줄로 쪼개진다. 유언 이전의 기록은 말이 없다.
+              */}
+              {f.lastWords && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.panelHi}` }}>
+                  <Quote text={f.lastWords} tone="death" byAi={f.lastWordsBy === 'ai'} />
+                  {f.epitaph && (
+                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>{f.epitaph}</div>
+                  )}
+                </div>
+              )}
             </SystemPanel>
           ))}
         </div>
@@ -157,6 +171,10 @@ export function GraveScreen({
           </div>
         </div>
       </SystemPanel>
+
+      <div style={{ marginTop: 20 }}>
+        <AiSettingsPanel />
+      </div>
       </>
       )}
 

@@ -651,6 +651,11 @@ export default function App() {
           <BriefScreen
             floor={floor}
             partySize={party.length}
+            speakers={party
+              .map((id) => roster.find((h) => h.instId === id))
+              // start()와 같은 규칙 — 파견 나간 사람은 문 앞에 없다
+              .filter((h): h is NonNullable<typeof h> =>
+                !!h && !h.isDead && !dispatchedHeroIds(dispatches).has(h.instId))}
             quests={pendingQuests(floor.id, claimedQuests)}
             // 이제 브리핑 앞에 층 선택(tower)이 낀다 — 돌아가기는 대기실이 아니라
             // 거기로 가야 "선택 → 확인 → 돌아가서 다시 선택"이 자연스럽다.
