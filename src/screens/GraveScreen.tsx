@@ -77,7 +77,13 @@ export function GraveScreen({
         ))}
       </div>
 
-      {tab === 'codex' && <CodexPanel codex={legacy.codex} />}
+      {tab === 'codex' && (
+        <CodexPanel
+          codex={legacy.codex}
+          legendsMet={legacy.legendsMet}
+          sealed={new Set(legacy.fallen.map((f) => f.name))}
+        />
+      )}
 
       {tab === 'grave' && (
       <>

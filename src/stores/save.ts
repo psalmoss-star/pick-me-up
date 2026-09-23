@@ -16,6 +16,7 @@
  * 동기 API라 스토어와 화면에 async가 번지지 않는다. 데이터가 커지면
  * 이 파일 내부만 IndexedDB로 갈아끼우면 된다 — 바깥은 이 모듈만 본다.
  */
+import { isLegendId } from '../game/legend';
 import { FLOORS } from '../game/data';
 import {
   FACILITY_MAX_LEVEL, ASSIGN_SLOTS, ASSIGNABLE, type AssignableFacility,
@@ -286,7 +287,17 @@ export function deserialize(raw: string): SavedRun | null {
     typeof v === 'string' && v.length > 0 ? v : undefined;
 
   const fixedRoster = roster.map((h) => {
-    const named = { ...h, name: cleanText(h.name), title: cleanText(h.title) };
+    /*
+      전설 id(gdd-v3 §4.11)는 아는 것만 남긴다. 모르는 값을 두면 legendOf가 null이라
+      무해하지만, 전설 목록에서 뺀 id가 세이브에 영원히 떠돈다.
+    */
+    const { legendId, ...rest } = h;
+    const named = {
+      ...rest,
+      name: cleanText(h.name),
+      title: cleanText(h.title),
+      ...(isLegendId(legendId) ? { legendId } : {}),
+    };
     if (!h.gear) return named;
 
     const kept: Partial<Record<GearSlot, GearInstId>> = {};

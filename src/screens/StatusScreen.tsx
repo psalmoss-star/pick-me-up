@@ -18,6 +18,7 @@ import { ROLE_KR, LINE_KR } from '../game/data/formation';
 import { lineOf } from '../game/formation';
 import { gameData } from '../game/data';
 import { temperOf } from '../game/temperament';
+import { legendOf } from '../game/legend';
 import type {
   Attribute, GearInstance, HeroInstId, HeroInstance, Wallet,
 } from '../game/types';
@@ -98,6 +99,8 @@ export function StatusScreen({
   const origin = originOf(hero);
   /** 기질 — 말투를 정한다. 전투 수치에는 닿지 않는다(gdd-v3 §4.10) */
   const temper = temperOf(hero);
+  /** 전설(§4.11) — 죽으면 모든 회차에서 봉인된다는 사실을 가장 많이 열리는 화면에 둔다 */
+  const legend = legendOf(hero);
 
   return (
     <div style={{ padding: `14px 12px ${tabSafePadding()}` }}>
@@ -275,6 +278,13 @@ export function StatusScreen({
                 }}
               >
                 {originText(origin)}
+              </div>
+            )}
+            {legend && (
+              <div style={{ fontSize: 11, lineHeight: 1.9, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+                <span style={{ color: T.gold, letterSpacing: '.3em' }}>◆ 전설</span>
+                <br />
+                <span style={{ color: T.blood }}>이 사람이 죽으면 어느 회차에서도 다시 오지 않는다.</span>
               </div>
             )}
             {temper && (

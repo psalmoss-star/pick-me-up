@@ -33,6 +33,7 @@
 import type { HeroInstance, Star } from './types';
 import { STREAM, rngPick, substream } from './rng';
 import { ENDINGS, STATIONS } from './data/origins';
+import { legendOf } from './legend';
 
 export interface Origin {
   /** 생전의 지위. 등급이 정한다 */
@@ -64,6 +65,9 @@ export function deriveOrigin(seed: number | undefined, star: Star): Origin | nul
 
 /** 개체에서 바로 읽는 편의 함수. 화면은 이쪽을 쓴다. */
 export function originOf(inst: HeroInstance): Origin | null {
+  // 전설(§4.11)은 생전이 정해져 있다 — 등급이 바뀌어도 그 사람의 과거는 하나다
+  const legend = legendOf(inst);
+  if (legend) return { station: legend.station, ending: legend.ending };
   return deriveOrigin(inst.seed, inst.star);
 }
 

@@ -223,6 +223,14 @@ export interface HeroInstance {
    * 선택적인 이유는 이 필드 이전 세이브 때문 — 없으면 즐겨찾기 아님으로 읽는다.
    */
   favorite?: boolean;
+  /**
+   * 고유 전설 영웅이면 그 id(`data/legends.ts`의 LegendId). gdd-v3 §4.11.
+   *
+   * 저장한다 — 전설 여부는 seed에서 파생할 수 없다(로스터·봉인 상태에 따라 갈리므로).
+   * 이 필드가 있으면 기질·생전·대사·초상이 전설 정의를 따른다. 전투 수치는 `defId`의 것.
+   * 모르는 id는 불러올 때 버린다(save.ts). 선택적인 이유: 일반 개체와 옛 세이브.
+   */
+  legendId?: string;
   /** 던전 진행 중 유지되는 현재 HP (층 사이 자동회복 없음) */
   currentHp: number;
   /** 퍼머데스. true면 파티 편성 불가, 복구 불가. */

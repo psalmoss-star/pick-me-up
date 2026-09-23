@@ -64,4 +64,10 @@ export interface Legacy {
    * 수집 요소가 성립하지 않는다.
    */
   codex: Record<HeroDefId, CodexEntry>;
+  /**
+   * 한 번이라도 만난 전설의 id(gdd-v3 §4.11). 도감의 전설 칸이 "만남/미발견"을 가른다.
+   * 봉인 여부는 따로 저장하지 않는다 — `fallen`에 그 이름이 있으면 봉인이다(한 곳에서만 판정).
+   * 도감과 같은 이유로 회차를 넘어 남는다(전력에 영향 없음).
+   */
+  legendsMet: string[];
 }

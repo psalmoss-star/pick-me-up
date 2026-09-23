@@ -95,6 +95,9 @@
 - **★1~3은 마스터·탑을 모른다.** `data/voice.ts`의 `low` 줄에 그 말이 들어가면
   `voice.test.ts`가 실패한다. 원작의 자각 단계다.
 - 대사에서 이름 뒤 조사는 **`{ally:이/가}`처럼 두 꼴을 적는다.** `{ally}가`는 「세인가」를 찍는다.
+- **전설(gdd-v3 §4.11)은 소환 주 난수를 밀지 않는다.** 판정은 `STREAM.LEGEND`로, 주 난수를 다 쓴 뒤에 한다.
+  전투 수치는 빌린 유형의 ★5와 같다. 전설이 죽으면 이름이 봉인되어 **모든 회차에서** 다시 안 나온다.
+  `data/legends.ts`의 id는 세이브에 남으므로 바꾸거나 지우지 말 것(추가만).
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
 
@@ -104,7 +107,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 938개 통과)
+npm test           # Vitest 1회 실행 (현재 962개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -197,6 +200,7 @@ src/
 │  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
 │  ├─ temperament.ts # 기질 — seed에서 파생. 승급해도 안 바뀐다. 표시 전용
 │  ├─ voice.ts       # 대사 선택(seed+순간+맥락) · 조사 처리 · 템플릿 유언
+│  ├─ legend.ts      # 고유 전설 판정 — 전용 스트림. 전설이면 기질·생전·대사·초상이 고정
 │  ├─ rosterSort.ts  # 목록 정렬 — 화면마다 따로 쓰지 말 것. favorite은 정렬 키가 아니다
 │  ├─ potential.ts    # 잠재치(개체차) — 등급과 약하게 상관된 숨은 계수
 │  ├─ portraitVariant.ts # 개체별 초상 슬롯. 아트를 모른다 — 후보 수를 인자로 받는다
@@ -227,6 +231,7 @@ src/
 │     ├─ origins.ts   # 생전 서사 어휘 — 등급별 지위 12 × 최후 38. **순서를 바꾸면 재배치된다**
 │     ├─ temperaments.ts # 기질 8종. **순서를 바꾸면 기존 개체의 성격이 바뀐다**
 │     ├─ voice.ts     # 대사 표 — 5순간 × 8기질 × 자각 2단계(low=★1~3 / high=★4~6)
+│     ├─ legends.ts   # 고유 전설 6명 + ★5 중 전설 몫. **id는 세이브에 남는다 — 추가만**
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처

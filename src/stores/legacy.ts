@@ -11,6 +11,7 @@
  */
 import type { CodexEntry, HeroDefId } from '../game/types';
 import type { FallenRecord, Legacy, RunRecord, SummitRecord } from '../game/legacyTypes';
+import { isLegendId } from '../game/legend';
 
 export const LEGACY_KEY = 'tower-of-picks:legacy';
 export const LEGACY_VERSION = 1;
@@ -23,6 +24,7 @@ export function emptyLegacy(): Legacy {
     fallen: [],
     summit: [],
     codex: {} as Record<HeroDefId, CodexEntry>,
+    legendsMet: [],
   };
 }
 
@@ -35,6 +37,7 @@ export function serializeLegacy(l: Legacy): string {
     fallen: l.fallen,
     summit: l.summit,
     codex: l.codex,
+    legendsMet: l.legendsMet,
   });
 }
 
@@ -111,6 +114,10 @@ export function deserializeLegacy(raw: string): Legacy {
       codex: isObj(parsed.codex)
         ? (parsed.codex as Record<HeroDefId, CodexEntry>)
         : ({} as Record<HeroDefId, CodexEntry>),
+      // 이 필드 이전의 무덤에는 없다 — 빈 목록. 모르는 id는 버린다
+      legendsMet: Array.isArray(parsed.legendsMet)
+        ? [...new Set(parsed.legendsMet.filter(isLegendId))]
+        : [],
     };
   } catch {
     return emptyLegacy();
@@ -143,3 +150,8 @@ export function sealedNames(l: Legacy): Set<string> {
   return new Set(l.fallen.map((f) => f.name));
 }
 
+
+/** 전설을 만났다고 적는다(순수). 이미 있으면 같은 객체 */
+export function withLegendMet(l: Legacy, legendId: string): Legacy {
+  return l.legendsMet.includes(legendId) ? l : { ...l, legendsMet: [...l.legendsMet, legendId] };
+}

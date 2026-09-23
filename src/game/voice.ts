@@ -13,7 +13,8 @@
  */
 import type { HeroInstance, Star } from './types';
 import { STREAM, rngPick, substream } from './rng';
-import { deriveTemper } from './temperament';
+import { temperOf } from './temperament';
+import { legendOf } from './legend';
 import { VOICE_LINES, type Awareness, type VoiceMoment } from './data/voice';
 import type { TemperDef } from './data/temperaments';
 
@@ -76,14 +77,18 @@ export interface Line {
  * 화면은 null이면 대사 줄을 아예 그리지 않는다(빈 따옴표를 그리지 않는다).
  */
 export function lineFor(
-  hero: { seed?: number; star: Star },
+  hero: { seed?: number; star: Star; legendId?: string },
   moment: VoiceMoment,
   salt: string | number,
   vars: VoiceVars = {},
 ): Line | null {
-  const temper = deriveTemper(hero.seed);
+  const temper = temperOf(hero);
   if (!temper || hero.seed === undefined) return null;
-  const pool = VOICE_LINES[moment][temper.id][awarenessOf(hero.star)];
+  // 전설(§4.11)은 자기 말을 한다. 기질 표가 아니라 그 사람의 대사에서 고른다
+  const legend = legendOf(hero);
+  const pool = legend
+    ? legend.lines[moment]
+    : VOICE_LINES[moment][temper.id][awarenessOf(hero.star)];
   const rng = substream((hero.seed ^ hashSalt(`${moment}:${salt}`)) >>> 0, STREAM.VOICE);
   return { text: fillVoice(rngPick(rng, pool), vars), temper };
 }

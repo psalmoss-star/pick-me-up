@@ -26,12 +26,18 @@ import { SystemPanel } from '../ui/SystemPanel';
 import { T, STAR_TIERS } from '../ui/tokens';
 import { gameData } from '../game/data';
 import type { CodexEntry, HeroDefId } from '../game/types';
+import { LEGENDS } from '../game/data/legends';
+import { SectionLabel } from './SectionLabel';
 
 export interface CodexPanelProps {
   codex: Record<HeroDefId, CodexEntry>;
+  /** 한 번이라도 만난 전설(gdd-v3 §4.11). 없으면 전설 칸이 전부 ???다 */
+  legendsMet?: readonly string[];
+  /** 봉인된 이름 — 무덤의 사망자. 전설이 여기 있으면 "봉인" */
+  sealed?: ReadonlySet<string>;
 }
 
-export function CodexPanel({ codex }: CodexPanelProps) {
+export function CodexPanel({ codex, legendsMet = [], sealed = new Set() }: CodexPanelProps) {
   /*
     표시 순서는 **데이터 정의 순서**를 그대로 쓴다.
     획득순으로 정렬하면 도감이 플레이마다 다른 모양이 되어 "빈 칸이 어디였는지"를
@@ -98,6 +104,44 @@ export function CodexPanel({ codex }: CodexPanelProps) {
                     잃음 {e.timesLost}
                   </span>
                 </div>
+              </div>
+            </SystemPanel>
+          );
+        })}
+      </div>
+
+      {/*
+        전설(gdd-v3 §4.11). 유형 도감과 따로 둔다 — 저건 "종류"의 수집이고 이건 "사람"의 수집이다.
+        세 상태: 미발견(이름을 가린다) · 만남 · 봉인(죽어서 다시 오지 않는다).
+        봉인을 만남보다 먼저 판정한다 — 만났다가 잃은 사람이 봉인이다.
+      */}
+      <div style={{ marginTop: 22 }}>
+        <SectionLabel>전설</SectionLabel>
+      </div>
+      <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.2em', margin: '4px 0 12px' }}>
+        만남 {LEGENDS.filter((l) => legendsMet.includes(l.id)).length} / {LEGENDS.length}
+        {LEGENDS.some((l) => sealed.has(l.name)) && (
+          <span style={{ color: T.blood }}> · 봉인 {LEGENDS.filter((l) => sealed.has(l.name)).length}</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {LEGENDS.map((l) => {
+          const lost = sealed.has(l.name);
+          const met = lost || legendsMet.includes(l.id);
+          return (
+            <SystemPanel key={l.id} compact tone={lost ? 'death' : met ? 'rare' : 'normal'}>
+              <div style={{ lineHeight: 1.8, padding: '2px 0' }}>
+                <div style={{ fontSize: 14, letterSpacing: '.12em', color: lost ? T.blood : met ? T.text : T.dim }}>
+                  {met ? l.name : '？？？'}
+                </div>
+                <div style={{ fontSize: 11, color: T.dim }}>
+                  {met ? l.title : '★5 소환에서만 응답한다'}
+                </div>
+                {lost && (
+                  <div style={{ fontSize: 11, color: T.blood, marginTop: 2 }}>
+                    봉인 — 어느 회차에서도 다시 오지 않는다
+                  </div>
+                )}
               </div>
             </SystemPanel>
           );

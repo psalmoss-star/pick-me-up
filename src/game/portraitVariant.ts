@@ -23,6 +23,7 @@
  *    그건 위 규칙과 충돌한다. 잠재치·이름은 한 비트도 안 변하므로 게임성 영향은 없다.
  *    **그래서 변형 추가는 릴리스 단위로 한 번에 하고, 찔끔찔끔 늘리지 않는다.**
  */
+import { legendOf } from './legend';
 import { substream, rngInt, STREAM } from './rng';
 import type { HeroInstance } from './types';
 
@@ -51,5 +52,8 @@ export function deriveVariant(seed: number, count: number): number {
  * 구세이브의 영웅은 지금까지 보던 초상을 그대로 유지한다.
  */
 export function variantOf(inst: HeroInstance, count: number): number {
+  // 전설(§4.11)은 얼굴이 정해져 있다 — 회차마다 바뀌면 같은 사람으로 안 읽힌다
+  const legend = legendOf(inst);
+  if (legend) return count <= 1 ? 0 : legend.variant % count;
   return inst.seed === undefined ? 0 : deriveVariant(inst.seed, count);
 }

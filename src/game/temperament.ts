@@ -11,7 +11,8 @@
  */
 import type { HeroInstance } from './types';
 import { STREAM, rngPick, substream } from './rng';
-import { TEMPERS, type TemperDef } from './data/temperaments';
+import { TEMPERS, TEMPER_BY_ID, type TemperDef } from './data/temperaments';
+import { legendOf } from './legend';
 
 /** seed가 없는 옛 세이브 개체는 null — 기질 패널을 그리지 않는다 */
 export function deriveTemper(seed: number | undefined): TemperDef | null {
@@ -19,6 +20,8 @@ export function deriveTemper(seed: number | undefined): TemperDef | null {
   return rngPick(substream(seed, STREAM.TEMPER), TEMPERS);
 }
 
-export function temperOf(inst: HeroInstance): TemperDef | null {
-  return deriveTemper(inst.seed);
+/** 전설(§4.11)은 기질이 정해져 있다. 나머지는 seed에서 파생한다 */
+export function temperOf(inst: Pick<HeroInstance, 'seed' | 'legendId'>): TemperDef | null {
+  const legend = legendOf(inst);
+  return legend ? TEMPER_BY_ID[legend.temper] : deriveTemper(inst.seed);
 }

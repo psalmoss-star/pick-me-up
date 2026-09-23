@@ -10,6 +10,7 @@ import { SectionLabel } from './SectionLabel';
 import { klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
 import { lineFor } from '../game/voice';
+import { legendOf } from '../game/legend';
 import { Quote } from '../ui/Quote';
 import { gameData } from '../game/data';
 import { BANNERS, FREE_COOLDOWN_MS } from '../game/gacha';
@@ -189,6 +190,15 @@ export function SummonScreen({
       {phase === 'reveal' && pulled && (
         <div style={{ marginBottom: 14 }}>
           <SystemPanel tone={pulled.star >= RARE_FROM ? 'rare' : 'normal'} compact>
+            {/*
+              전설(gdd-v3 §4.11). 이름 **위에** 둔다 — "누가 왔나"보다 "전설이 왔다"가 먼저 읽혀야
+              ★5 중에서도 이 순간이 다르다는 게 보인다.
+            */}
+            {legendOf(pulled.hero) && (
+              <div style={{ fontSize: 11, color: T.gold, letterSpacing: '.5em', marginBottom: 8 }}>
+                ◆ 전 설 ◆
+              </div>
+            )}
             <div style={{ fontSize: 16, marginBottom: 6 }}>
               {displayName(pulled.hero, gameData.heroes)}
               <span style={{ color: STAR_TIERS[pulled.star]?.ring, marginLeft: 8 }}>
@@ -217,6 +227,11 @@ export function SummonScreen({
             <div style={{ fontSize: 11, color: T.dim, marginTop: 10 }}>
               잠재력은 아직 알 수 없습니다 — 전투에 내보내야 드러납니다.
             </div>
+            {legendOf(pulled.hero) && (
+              <div style={{ fontSize: 11, color: T.blood, marginTop: 6, lineHeight: 1.8 }}>
+                이 사람이 죽으면 어느 회차에서도 다시 오지 않습니다.
+              </div>
+            )}
           </SystemPanel>
           <div style={{ marginTop: 14 }}>
             <Button tone={pulled.star >= RARE_FROM ? 'rare' : 'normal'} onClick={close}>확인</Button>

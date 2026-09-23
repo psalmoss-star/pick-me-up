@@ -55,7 +55,8 @@ import type {
 } from '../game/types';
 import type { FallenRecord, Legacy } from '../game/legacyTypes';
 import { templateLastWords } from '../game/voice';
-import { loadLegacy, saveLegacy, sealedNames } from './legacy';
+import { LEGENDS, LEGEND_SHARE_OF_STAR5 } from '../game/data/legends';
+import { loadLegacy, saveLegacy, sealedNames , withLegendMet } from './legacy';
 
 /**
  * 배열 인벤토리를 조회용 Map으로.
@@ -1369,6 +1370,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         sealed: sealedNames(loadLegacy()),
         /** 시작 레벨(summonLevel)의 출처. 없으면 Lv.1이라 등반이 시작되지 않는다 */
         scaling: gameData.starScaling,
+        /** 고유 전설 영웅 — ★5의 일부가 전설이다(gdd-v3 §4.11) */
+        legends: { table: LEGENDS, share: LEGEND_SHARE_OF_STAR5 },
       });
 
       // 실패는 상태를 건드리지 않는다. 재화 부족/쿨다운은 정상 흐름이다.
@@ -1392,7 +1395,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
        */
       const lg = loadLegacy();
       // 병합 규칙은 mergeCodex 하나가 갖는다 — 덮어쓰면 timesLost가 0으로 돌아간다
-      saveLegacy({ ...lg, codex: mergeCodex(lg.codex, get().codex) });
+      const merged = { ...lg, codex: mergeCodex(lg.codex, get().codex) };
+      // 전설을 만났으면 무덤에 적는다 — 도감의 전설 칸은 회차를 넘어 남는다(§4.11)
+      saveLegacy(result.hero.legendId ? withLegendMet(merged, result.hero.legendId) : merged);
 
       // 소환은 되돌릴 수 없다 — 뽑는 즉시 저장한다.
       saveRun(get());

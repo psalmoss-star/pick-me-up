@@ -5,6 +5,8 @@ import type {
 import { klassFor } from './stats';
 import { rollHeroSeed } from './potential';
 import { generateIdentity, takenNames } from './identity';
+import { availableLegends, rollLegend } from './legend';
+import type { LegendDef } from './data/legends';
 
 /**
  * 소환(가챠)
@@ -170,10 +172,16 @@ export function pull(args: {
    * 실제 소환 경로(runStore.summon)는 반드시 넘긴다.
    */
   scaling?: Record<Star, StarScaling>;
+  /**
+   * 고유 전설 영웅(gdd-v3 §4.11). ★5 이상에서 `share`의 몫으로 전설이 나온다.
+   * `pool`·`scaling`과 같이 주입으로 받는다. 생략하면 전설 없이 — 테스트·시뮬레이터용이며
+   * 실제 소환 경로(runStore.summon)는 반드시 넘긴다.
+   */
+  legends?: { table: readonly LegendDef[]; share: number };
 }): PullResult {
   const {
     banner, wallet, gacha, pool, codex, rng, now, currentFloor, makeId, roster = [], sealed,
-    scaling,
+    scaling, legends,
   } = args;
 
   // 쿨다운
@@ -193,8 +201,8 @@ export function pull(args: {
   const pityHit = !!banner.pity && nextCount >= banner.pity.count;
   const star = pityHit ? banner.pity!.guaranteedStar : rollStar(banner, rng);
 
-  const defId = pickArchetype(pool, rng);
-  if (!defId) return { ok: false, reason: 'empty-pool', star };
+  const rolledDefId = pickArchetype(pool, rng);
+  if (!rolledDefId) return { ok: false, reason: 'empty-pool', star };
 
   /*
     ⚠️ 난수 소비 순서를 바꾸지 말 것: rollStar → pickArchetype → rollHeroSeed → generateIdentity.
@@ -205,6 +213,16 @@ export function pull(args: {
   */
   const seed = rollHeroSeed(rng);
   const identity = generateIdentity({ rng, taken: takenNames(roster, pool, sealed) });
+
+  /*
+    전설 판정 — 주 난수를 **다 쓴 뒤에**, 개체 시드의 전용 스트림으로 굴린다(legend.ts).
+    그래서 위의 유형·이름 추첨은 전설이든 아니든 똑같이 소비되고, 전설이면 결과만 덮어쓴다.
+    유형도 덮어쓴다 — 전설은 정해진 유형을 빌린다.
+  */
+  const legend = legends && star >= 5
+    ? rollLegend(seed, availableLegends(legends.table, roster, sealed), legends.share)
+    : null;
+  const defId = legend ? legend.defId : rolledDefId;
 
   const hero: HeroInstance = {
     instId: makeId() as HeroInstId,
@@ -221,8 +239,9 @@ export function pull(args: {
     level: scaling?.[star].summonLevel ?? 1,
     exp: 0,
     // 같은 종류를 다시 뽑아도 다른 인물이어야 한다 (identity.ts 참조).
-    name: identity.name,
-    title: identity.title,
+    name: legend ? legend.name : identity.name,
+    title: legend ? legend.title : identity.title,
+    ...(legend ? { legendId: legend.id } : {}),
     // 개체차의 근원. 뽑는 순간 확정되고 이후 불변이다 (potential.ts 참조).
     seed,
     revealProgress: 0,
