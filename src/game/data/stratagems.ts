@@ -78,7 +78,7 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '정군산 — 황충이 기다렸다가 하후연을 베다 (연의 71회)',
     when: '아군이 몰릴 때, 숨겨 둔 병력으로 가장 강한 적을 친다',
     condition: { kind: 'allyHpBelow', ratio: 0.5 },
-    baseChance: 0.6,
+    baseChance: 0.5,
     success: [{ kind: 'strongestTo', ratio: 0.3 }],
     failure: [{ kind: 'executorLoses', ratio: 0.3 }],
     unlockFloor: 0,
@@ -89,7 +89,7 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '유수구 — 감녕이 기병 백으로 조조의 진을 치다 (연의 68회)',
     when: '적이 더 많을 때, 밤을 틈타 적진을 흔든다',
     condition: { kind: 'outnumbered' },
-    baseChance: 0.55,
+    baseChance: 0.5,
     success: [
       { kind: 'enemiesDamage', ratio: 0.1 },
       { kind: 'enemiesStatus', status: 'stun', turns: 1 },
@@ -103,7 +103,7 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '박망파 — 제갈량이 하후돈을 골짜기로 끌어들여 불을 놓다 (연의 39회)',
     when: '많은 적에게 밀릴 때, 좁은 곳으로 끌어들여 태운다',
     condition: { kind: 'swarmLosing', minEnemies: 3 },
-    baseChance: 0.55,
+    baseChance: 0.48,
     success: [
       { kind: 'enemiesDamage', ratio: 0.2 },
       { kind: 'enemiesStatus', status: 'burn', turns: 2 },
@@ -117,13 +117,17 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '번성 — 관우가 강물을 터 우금의 칠군을 수몰시키다 (연의 74회)',
     when: '싸움이 길어질 때, 물길을 터 적의 발을 묶는다',
     condition: { kind: 'longBattle', turn: 6 },
-    baseChance: 0.6,
+    baseChance: 0.5,
     success: [
       { kind: 'enemiesDamage', ratio: 0.15 },
       { kind: 'enemiesStatus', status: 'spdDown', turns: 3 },
       { kind: 'enemiesStatus', status: 'defDown', turns: 3 },
     ],
-    failure: [{ kind: 'alliesStatus', status: 'spdDown', turns: 2 }],
+    // 간파되면 터진 물길이 아군 진영으로 역류한다 — 거의 항상 발동하는 카드라 대가가 가벼우면 공짜가 된다
+    failure: [
+      { kind: 'executorLoses', ratio: 0.25 },
+      { kind: 'alliesStatus', status: 'spdDown', turns: 3 },
+    ],
     unlockFloor: 10,
   },
   {
@@ -132,7 +136,7 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '서성 — 제갈량이 성문을 열고 거문고를 타 사마의를 물리다 (연의 95회)',
     when: '무너지기 직전, 빈 성을 보여 적을 망설이게 한다',
     condition: { kind: 'desperate', ratio: 0.3 },
-    baseChance: 0.5,
+    baseChance: 0.45,
     success: [{ kind: 'enemiesStatus', status: 'stun', turns: 2 }],
     failure: [{ kind: 'enemiesStatus', status: 'atkUp', turns: 2 }],
     unlockFloor: 15,
@@ -143,7 +147,7 @@ export const STRATAGEMS: StratagemDef[] = [
     source: '적벽 — 황개의 고육계와 방통의 연환계로 조조의 대군을 태우다 (연의 46~49회)',
     when: '큰 싸움이 무르익으면, 적을 묶어 한꺼번에 태운다',
     condition: { kind: 'bigBattle', minEnemies: 4, turn: 5 },
-    baseChance: 0.45,
+    baseChance: 0.55,
     success: [
       { kind: 'enemiesDamage', ratio: 0.3 },
       { kind: 'enemiesStatus', status: 'burn', turns: 3 },
@@ -171,9 +175,9 @@ export const STRATAGEM_SLOTS = 2;
  */
 export const STRATAGEM_TUNING = {
   /** (수행자 지능 / 파티 평균 − 1) × 이 값을 더한다 */
-  intWeight: 0.25,
+  intWeight: 0.15,
   /** 적 중에 보스가 있으면 간파가 쉬워진다 */
-  bossInsight: 0.12,
+  bossInsight: 0.1,
   /** 내성 1당 감소 */
   resistStep: 0.1,
   /** 내성 상한 */
