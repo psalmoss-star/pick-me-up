@@ -29,3 +29,16 @@ export const FALLBACK_THRESHOLD = {
  * 후퇴 신호(1명 이탈, 전투당 1회)를 쓸 수 있다.
  */
 export const CRISIS_HP_RATIO = 0.3;
+
+/**
+ * 위기 단계 — 보고자의 성향에 따라 **어느 단계에서** 위기를 알리는가가 갈린다(기획서 3단계).
+ * 정직은 `hp30`(= `CRISIS_HP_RATIO`), 허세는 늦게(`hp15`), 겁많음은 이르게(`hp50`).
+ * 엔진은 세 단계를 모두 결과 필드로 기록할 뿐이고, 무엇을 쓸지는 보고(`report.ts`)가 정한다.
+ */
+export const CRISIS_LEVELS = {
+  hp50: 0.5,
+  hp30: CRISIS_HP_RATIO,
+  hp15: 0.15,
+} as const;
+
+export type CrisisLevel = keyof typeof CRISIS_LEVELS;

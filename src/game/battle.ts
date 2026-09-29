@@ -26,7 +26,7 @@ import {
 import {
   attackCandidates, fallbackRatio, protecteeUids, DEFAULT_ORDERS, type Orders,
 } from './orders';
-import { COVER_CHANCE, CRISIS_HP_RATIO } from './data/orders';
+import { COVER_CHANCE, CRISIS_LEVELS, type CrisisLevel } from './data/orders';
 import {
   STRATAGEM_BY_ID, type StratagemEffect, type StratagemId,
 } from './data/stratagems';
@@ -146,7 +146,13 @@ export interface BattleOutcome {
   /** 퇴각 방침·후퇴 신호로 이탈한 영웅. `survivors`의 부분집합 */
   withdrawn: HeroInstId[];
   turnsElapsed: number;
+  /** 정직한 보고 기준의 위기(`crises.hp30`과 같다) */
   crisis: Crisis | null;
+  /**
+   * 위기 단계별 첫 순간(`CRISIS_LEVELS`). 보고자 성향이 어느 단계를 쓸지 정한다(`report.ts`).
+   * `crisis`와 같은 이유로 이벤트가 아니라 결과 필드다.
+   */
+  crises: Partial<Record<CrisisLevel, Crisis>>;
 }
 
 // ------------------------------------------------------------
@@ -544,12 +550,15 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   let outcome: BattleOutcome['outcome'] = 'timeout';
   // 파티 공용 재고. 전투 전 입력이므로 도중에 늘지 않는다.
   let potionsLeft = Math.max(0, Math.floor(input.potions ?? 0));
-  let crisis: Crisis | null = null;
-  /** 위기 기록 — 행동 하나가 끝날 때마다 본다. 전투당 한 번뿐이다 */
+  const crises: Partial<Record<CrisisLevel, Crisis>> = {};
+  /** 위기 기록 — 행동 하나가 끝날 때마다 본다. 단계마다 전투당 한 번뿐이다 */
   const noteCrisis = () => {
-    if (crisis) return;
-    const hurt = heroUnits.find((u) => inField(u) && u.currentHp / u.stats.hp <= CRISIS_HP_RATIO);
-    if (hurt) crisis = { turn, at: events.length, uid: hurt.uid };
+    for (const level of Object.keys(CRISIS_LEVELS) as CrisisLevel[]) {
+      if (crises[level]) continue;
+      const ratio = CRISIS_LEVELS[level];
+      const hurt = heroUnits.find((u) => inField(u) && u.currentHp / u.stats.hp <= ratio);
+      if (hurt) crises[level] = { turn, at: events.length, uid: hurt.uid };
+    }
   };
   /*
     책략 — 카드를 들고 왔을 때만 준비한다. 지능은 셋업 때 한 번 계산해 둔다
@@ -763,7 +772,8 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     withdrawn: allyUnits
       .filter((u) => u.isAlive && withdrawnUids.has(u.uid))
       .map((u) => u.sourceId as HeroInstId),
-    crisis,
+    crisis: crises.hp30 ?? null,
+    crises,
   };
 }
 
