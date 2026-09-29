@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  partyPowerOf, reportStyleOf, reportedTerrain, resolveScout, scoutReport, trueEnemyPower,
+  crisisFor, partyPowerOf, reportLine, reportStyleOf, reportedTerrain, resolveScout, scoutReport, trueEnemyPower,
 } from './report';
 import { REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle } from './data/reports';
 import { TEMPERS } from './data/temperaments';
@@ -168,5 +168,36 @@ describe('위기 단계 기록 (엔진)', () => {
       }
     }
     expect(seen15).toBeGreaterThan(0);
+  });
+});
+
+describe('보고 문장', () => {
+  it('조사를 받침에 맞춰 고르고, 자리표시가 남지 않는다', () => {
+    for (const style of ['honest', 'bluff', 'coward', 'silent'] as const) {
+      for (const [scout, hurt] of [['세인', '카이'], ['카이', '세인']]) {
+        for (const moment of ['brief', 'crisis'] as const) {
+          const t = reportLine(style, moment, { scout, hurt });
+          expect(t).not.toMatch(/[{}]/);
+          expect(t).not.toMatch(/세인가|카이이|세인는|카이은/);
+        }
+      }
+    }
+    expect(reportLine('bluff', 'crisis', { scout: '세인', hurt: '카일' })).toContain('세인이');
+    expect(reportLine('bluff', 'crisis', { scout: '세인', hurt: '카이' })).toContain('카이가');
+    expect(reportLine('coward', 'crisis', { scout: '카이', hurt: '세인' })).toContain('카이가');
+  });
+});
+
+describe('위기 창 고르기', () => {
+  const result = { crisis: { at: 30 }, crises: { hp50: { at: 10 }, hp30: { at: 30 }, hp15: { at: 50 } } };
+  it('정직 30% · 허세 15% · 겁많음 50% · 침묵 없음 · 보고 없음은 정직과 같다', () => {
+    expect(crisisFor(result, { crisisLevel: 'hp30' })).toEqual({ at: 30 });
+    expect(crisisFor(result, { crisisLevel: 'hp15' })).toEqual({ at: 50 });
+    expect(crisisFor(result, { crisisLevel: 'hp50' })).toEqual({ at: 10 });
+    expect(crisisFor(result, { crisisLevel: null })).toBeNull();
+    expect(crisisFor(result, null)).toEqual({ at: 30 });
+  });
+  it('그 단계까지 안 떨어졌으면 창이 없다 — 허세는 위기를 끝내 말하지 않을 수 있다', () => {
+    expect(crisisFor({ crisis: null, crises: { hp50: { at: 3 } } }, { crisisLevel: 'hp15' })).toBeNull();
   });
 });

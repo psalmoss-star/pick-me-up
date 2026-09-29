@@ -15,12 +15,13 @@ import type { FloorSpec } from './data/floors';
 import { enemyStatMultFor } from './data/floorgen';
 import type { CrisisLevel } from './data/orders';
 import {
-  REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle,
+  REPORT_LINES, REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle,
 } from './data/reports';
 import type { FloorMap } from './floormap';
 import { combatPower, heroPower } from './power';
 import { STREAM, rngChance, rngInt, substream } from './rng';
 import { temperOf } from './temperament';
+import { hasBatchim } from './voice';
 import type { HeroInstance, HeroInstId, RNG } from './types';
 
 export interface ScoutReport {
@@ -129,4 +130,30 @@ export function reportedTerrain(map: FloorMap, report: ScoutReport, routeIndex: 
  */
 export function resolveScout<H extends Pick<HeroInstance, 'instId'>>(members: H[], chosen: HeroInstId | null): H | null {
   return members.find((h) => h.instId === chosen) ?? members[0] ?? null;
+}
+
+/**
+ * 보고 문장을 채운다 — `{scout:이/가}`·`{hurt:이/가}`·`{scout}`·`{hurt}`.
+ * 조사는 `voice.ts`의 `hasBatchim` 하나로 고른다(「세인가」를 찍지 않는다).
+ */
+export function reportLine(
+  style: ReportStyle, moment: 'brief' | 'crisis', names: { scout: string; hurt?: string },
+): string {
+  const vars: Record<string, string> = { scout: names.scout, hurt: names.hurt ?? '그' };
+  return REPORT_LINES[style][moment]
+    .replace(/\{(scout|hurt):([^/}]+)\/([^}]+)\}/g, (_, k: string, withB: string, noB: string) =>
+      vars[k] + (hasBatchim(vars[k]) ? withB : noB))
+    .replace(/\{(scout|hurt)\}/g, (_, k: string) => vars[k]);
+}
+
+/**
+ * 이번 전투의 위기 창 — 보고자의 성향이 정한 단계의 첫 순간. 침묵이면 없다.
+ * 보고가 없으면(옛 경로·테스트) 정직과 같다(`result.crisis`).
+ */
+export function crisisFor<C>(
+  result: { crisis: C | null; crises: Partial<Record<CrisisLevel, C>> },
+  report: Pick<ScoutReport, 'crisisLevel'> | null | undefined,
+): C | null {
+  if (!report) return result.crisis;
+  return report.crisisLevel ? result.crises[report.crisisLevel] ?? null : null;
 }

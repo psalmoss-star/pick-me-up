@@ -46,6 +46,31 @@ export const REPORT_STYLE_BY_TEMPER: Record<TemperId, ReportStyle> = {
 };
 
 /**
+ * 보고 문장. 조사는 `{scout:이/가}`·`{hurt:이/가}`처럼 두 꼴을 적는다(CLAUDE.md 대사 규칙).
+ * - `brief`: 브리핑에서 정찰자가 하는 한 마디. 성향을 **이름으로 말하지 않는다** —
+ *   마스터가 말투와 결과를 보고 알아내야 "보고를 의심했는가"가 성립한다.
+ * - `crisis`: 위기 창 첫 줄. `hurt` = 위기에 빠진 영웅.
+ */
+export const REPORT_LINES: Record<ReportStyle, { brief: string; crisis: string }> = {
+  honest: {
+    brief: '{scout:이/가} 본 대로 적어 올렸다.',
+    crisis: '{scout:이/가} 알린다 — {hurt}의 숨이 가빠졌다.',
+  },
+  bluff: {
+    brief: '{scout:이/가} 코웃음 쳤다. "별것 없습니다."',
+    crisis: '{scout:이/가} 그제야 입을 열었다 — {hurt:이/가} 쓰러지기 직전이다.',
+  },
+  coward: {
+    brief: '{scout:이/가} 목소리를 떨며 보고했다. "많습니다, 너무 많습니다."',
+    crisis: '{scout:이/가} 소리친다 — {hurt:이/가} 위험하다!',
+  },
+  silent: {
+    brief: '{scout:은/는} 돌아와서 아무 말도 하지 않았다.',
+    crisis: '',
+  },
+};
+
+/**
  * 왜곡 폭. 허세는 줄이고 겁많음은 부풀린다.
  * - `countShift`: 적 수를 1~max만큼 틀린다(허세는 빼고 겁많음은 더한다. 허세여도 1기 밑으로는 안 간다).
  * - `powerMult`: 적 전력에 곱하는 범위 [min, max).

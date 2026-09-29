@@ -14,6 +14,7 @@ import { AdventureScreen } from './screens/AdventureScreen';
 import { dispatchedHeroIds } from './game/adventure';
 import { unlockedStratagems } from './game/stratagem';
 import { floorMapOf } from './game/floormap';
+import { partyPowerOf, resolveScout, scoutReport } from './game/report';
 import { TowerScreen } from './screens/TowerScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
@@ -126,6 +127,9 @@ export default function App() {
   const setFallback = useRunStore((s) => s.setFallback);
   const route = useRunStore((s) => s.route);
   const setRoute = useRunStore((s) => s.setRoute);
+  const scout = useRunStore((s) => s.scout);
+  const setScout = useRunStore((s) => s.setScout);
+  const battleReport = useRunStore((s) => s.report);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
   const grantTestFunds = useRunStore((s) => s.grantTestFunds);
@@ -656,15 +660,28 @@ export default function App() {
             onBack={() => setScreen('base')}
           />
         )}
-        {screen === 'brief' && (
+        {screen === 'brief' && (() => {
+          // start()와 같은 규칙 — 파견 나간 사람은 문 앞에 없다
+          const sortie = party
+            .map((id) => roster.find((h) => h.instId === id))
+            .filter((h): h is NonNullable<typeof h> =>
+              !!h && !h.isDead && !dispatchedHeroIds(dispatches).has(h.instId));
+          const floorMap = floorMapOf(floor);
+          // 정찰 보고 — start()와 같은 정찰자 규칙·같은 함수. 어긋나면 브리핑과 전투가 다른 사람의 말이 된다
+          const scoutHero = resolveScout(sortie, scout);
+          const report = scoutHero ? scoutReport(scoutHero, floor, floorMap, gameData) : null;
+          return (
           <BriefScreen
             floor={floor}
             partySize={party.length}
-            speakers={party
-              .map((id) => roster.find((h) => h.instId === id))
-              // start()와 같은 규칙 — 파견 나간 사람은 문 앞에 없다
-              .filter((h): h is NonNullable<typeof h> =>
-                !!h && !h.isDead && !dispatchedHeroIds(dispatches).has(h.instId))}
+            speakers={sortie}
+            scoutPanel={{
+              members: sortie,
+              scoutId: scoutHero?.instId ?? null,
+              onSelect: setScout,
+              report,
+              partyPower: partyPowerOf(sortie, gameData),
+            }}
             quests={pendingQuests(floor.id, claimedQuests)}
             // 이제 브리핑 앞에 층 선택(tower)이 낀다 — 돌아가기는 대기실이 아니라
             // 거기로 가야 "선택 → 확인 → 돌아가서 다시 선택"이 자연스럽다.
@@ -676,10 +693,12 @@ export default function App() {
             gold={wallet.gold}
             onBuyPrep={buyPrep}
             routePanel={{
-              map: floorMapOf(floor),
+              map: floorMap,
               route,
               onSelectRoute: setRoute,
               loadout: stratagemLoadout,
+              report,
+              scoutName: scoutHero ? displayName(scoutHero, gameData.heroes) : undefined,
             }}
             stratagem={{
               loadout: stratagemLoadout,
@@ -690,7 +709,8 @@ export default function App() {
               onSetFallback: setFallback,
             }}
           />
-        )}
+          );
+        })()}
         {screen === 'battle' && result && (
           <BattleScreen
             result={result}
@@ -700,6 +720,7 @@ export default function App() {
             interventions={interventions}
             onIntervene={intervene}
             route={route}
+            report={battleReport}
           />
         )}
         {screen === 'result' && result && (
@@ -707,6 +728,8 @@ export default function App() {
             result={result}
             roster={snapshot}
             floor={floor}
+            report={battleReport}
+            route={route}
             /*
               엔딩 판정도 과제 미리보기와 같은 사정이다 — 결과 화면은 finish()보다
               먼저 뜨므로 스토어의 towerCleared는 아직 false다(§5-17).

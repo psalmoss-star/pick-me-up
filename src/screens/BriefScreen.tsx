@@ -18,6 +18,7 @@ import { lineFor, pickSpeaker } from '../game/voice';
 import { Quote } from '../ui/Quote';
 import { StratagemPanel, type StratagemPanelProps } from './brief/StratagemPanel';
 import { RoutePanel, type RoutePanelProps } from './map/RoutePanel';
+import { ScoutPanel, type ScoutPanelProps } from './brief/ScoutPanel';
 
 export interface BriefScreenProps {
   floor: FloorSpec;
@@ -47,12 +48,17 @@ export interface BriefScreenProps {
   stratagem?: StratagemPanelProps;
   /** 지도 — 경로 선택(기획서 2단계). 없으면 패널을 그리지 않는다 */
   routePanel?: RoutePanelProps;
+  /**
+   * 정찰 보고(기획서 3단계). 있으면 적 수를 **참이 아니라 보고로** 보여 준다 —
+   * 임무 패널의 "적 N기"를 빼고 이 패널이 대신 말한다. 없으면 예전처럼 참을 적는다.
+   */
+  scoutPanel?: ScoutPanelProps;
 }
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
   floor, partySize, quests = [], onBack, onStart,
-  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem, routePanel,
+  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem, routePanel, scoutPanel,
 }: BriefScreenProps) {
   const speaker = pickSpeaker(speakers, floor.id);
   const sortieLine = speaker ? lineFor(speaker, 'sortie', floor.id) : null;
@@ -120,7 +126,7 @@ export function BriefScreen({
           </div>
         ))}
         <div style={{ fontSize: 12, color: T.dim, marginTop: 16, lineHeight: 1.9 }}>
-          출전 {partySize}명 · 적 {floor.enemyIds.length}기
+          출전 {partySize}명{scoutPanel ? '' : ` · 적 ${floor.enemyIds.length}기`}
           <br />
           전투 중 사망한 영웅은 되살릴 수 없습니다.
         </div>
@@ -130,6 +136,15 @@ export function BriefScreen({
         지도 — 임무 바로 아래. "어디서 부딪히는가"는 임무 다음으로 먼저 읽을 정보이고,
         아래의 작전(책략)을 고를 때 이 접점 지형을 보고 고르게 된다.
       */}
+      {/*
+        정찰 보고 — 지도 **위**. 지도의 ✕가 이 사람의 보고이므로, 누가 봤는지를 먼저 읽게 한다.
+      */}
+      {scoutPanel && (
+        <div style={{ marginTop: 16 }}>
+          <ScoutPanel {...scoutPanel} />
+        </div>
+      )}
+
       {routePanel && (
         <div style={{ marginTop: 16 }}>
           <RoutePanel {...routePanel} />

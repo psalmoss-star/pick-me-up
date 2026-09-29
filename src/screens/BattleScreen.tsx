@@ -13,6 +13,7 @@ import { canWithdraw, retreatedAt, type Intervention } from '../game/interventio
 import type { EncounterResult, RosterUnit } from '../game/encounter';
 import { STRATAGEM_BY_ID, type StratagemId } from '../game/data/stratagems';
 import { floorMapOf } from '../game/floormap';
+import { crisisFor, reportLine, type ScoutReport } from '../game/report';
 import { FloorMapView } from './map/FloorMapView';
 import type { FloorSpec } from '../game/data/floors';
 import type { StatusKind } from '../game/types';
@@ -42,6 +43,11 @@ export interface BattleScreenProps {
   interventions?: Intervention[];
   /** 브리핑에서 고른 경로 — 상단 지도 띠에 그린다 */
   route?: number;
+  /**
+   * 정찰 보고(기획서 3단계) — 위기 창을 **언제** 띄울지 정한다. 정직 30% · 허세 15% · 겁많음 50%,
+   * 침묵이면 창이 없다. 없으면(옛 경로) 정직과 같다.
+   */
+  report?: ScoutReport | null;
 }
 
 /**
@@ -52,7 +58,7 @@ export interface BattleScreenProps {
  * 같은 시드로 다시 계산해 이어붙인다(발효는 다음 턴이라 지금까지 본 장면은 그대로다).
  */
 export function BattleScreen({
-  result, floor, floorIndex: _floorIndex, onEnd, onIntervene, interventions = [], route = 0,
+  result, floor, floorIndex: _floorIndex, onEnd, onIntervene, interventions = [], route = 0, report,
 }: BattleScreenProps) {
   const floorMap = useMemo(() => floorMapOf(floor), [floor]);
   const [step, setStep] = useState(0);
@@ -75,12 +81,15 @@ export function BattleScreen({
   const pending = beats[beatIdx] && beats[beatIdx].at <= step ? beats[beatIdx] : null;
 
   /**
-   * 위기 — 아군 누군가 처음으로 30% 아래로 떨어진 순간(`result.crisis`).
+   * 위기 — 정찰자가 **알리는** 순간. 정직은 누군가 30% 아래로 떨어진 때, 허세는 15%(늦게),
+   * 겁많음은 50%(이르게), 침묵은 알리지 않는다(`crisisFor`). 기획서 3단계.
    * 비트가 먼저 뜨고(같은 순간이면 책략·사망 알림부터), 그다음 이 창이 뜬다.
    */
+  const crisis = crisisFor(result, report);
   const signalLeft = !!onIntervene && canWithdraw(interventions);
   const crisisOpen = !pending && !crisisHandled && signalLeft
-    && !!result.crisis && step >= result.crisis.at;
+    && !!crisis && step >= crisis.at;
+  const scoutUnit = report ? result.roster.find((u) => u.sourceId === report.scoutId) : undefined;
 
   /** step 시점의 HP — 이벤트 로그가 단일 출처 */
   const hp = useMemo(() => {
@@ -203,8 +212,8 @@ export function BattleScreen({
    * 이번 턴은 이미 재생 중이라 되돌리면 화면이 튄다(개입의 원래 원칙).
    */
   const sendSignal = (instId: string) => {
-    if (!onIntervene || !result.crisis) return;
-    onIntervene([...interventions, { turn: result.crisis.turn + 1, kind: 'withdraw', targetId: instId }]);
+    if (!onIntervene || !crisis) return;
+    onIntervene([...interventions, { turn: crisis.turn + 1, kind: 'withdraw', targetId: instId }]);
     setCrisisHandled(true);
   };
 
@@ -360,6 +369,7 @@ export function BattleScreen({
         <InterventionBar
           used={!canWithdraw(interventions)}
           passed={crisisHandled}
+          silent={report?.style === 'silent'}
           hidden={done || !onIntervene}
         />
       </div>
@@ -382,13 +392,15 @@ export function BattleScreen({
         위기 — 후퇴 신호 창. 비트 창과 같은 틀(확인 창)을 쓴다.
         빼낼 영웅을 여기서 바로 고른다 — 전장의 작은 초상을 누르게 하면 375px에서 빗나간다.
       */}
-      {crisisOpen && result.crisis && (
+      {crisisOpen && crisis && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', zIndex: 60, overflowY: 'auto' }}>
           <div style={{ maxWidth: 420, width: '100%', margin: 'auto' }}>
             <SystemPanel tone="warning">
               <div style={{ fontSize: 12, letterSpacing: '.3em', color: T.dim, marginBottom: 14 }}>위기</div>
               <div style={{ fontSize: 15, lineHeight: 2 }}>
-                {nameOf(result.crisis.uid)}의 숨이 가빠졌다.
+                {report && scoutUnit
+                  ? reportLine(report.style, 'crisis', { scout: scoutUnit.name, hurt: nameOf(crisis.uid) })
+                  : `${nameOf(crisis.uid)}의 숨이 가빠졌다.`}
               </div>
               <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, marginTop: 8 }}>
                 후퇴 신호로 한 명을 전장에서 빼낼 수 있다. 빠진 자는 살아남지만 다시 싸우지 않는다.

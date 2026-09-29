@@ -7,8 +7,11 @@ import { T } from '../ui/tokens';
 import { MISSION_LABEL } from '../game/mission';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
-import { lineFor, pickSpeaker, templateLastWords } from '../game/voice';
+import { hasBatchim, lineFor, pickSpeaker, templateLastWords } from '../game/voice';
 import { chronicleOf } from '../game/chronicle';
+import { floorMapOf, contactTerrain, clampRoute } from '../game/floormap';
+import { reportedTerrain, type ScoutReport } from '../game/report';
+import { TERRAIN } from '../game/data/terrain';
 import { Quote } from '../ui/Quote';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
@@ -68,6 +71,12 @@ export interface ResultScreenProps {
   levelUps?: LevelUp[];
   /** 이번 돌파로 얻은 제작 재료. 빈 주머니면 아무것도 그리지 않는다 */
   materials?: MaterialBag;
+  /**
+   * 이번 전투의 정찰 보고와 고른 경로 — "보고와 실제"를 나란히 적는다(기획서 3단계).
+   * 틀린 보고가 **틀렸다고 드러나야** 다음 층에서 그 사람의 말을 의심할 수 있다.
+   */
+  report?: ScoutReport | null;
+  route?: number;
   onFinish: () => void;
 }
 
@@ -77,7 +86,7 @@ export interface ResultScreenProps {
  */
 export function ResultScreen({
   result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
-  rewardMult = 1, levelUps = [], materials = {}, onFinish,
+  rewardMult = 1, levelUps = [], materials = {}, report = null, route = 0, onFinish,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
   const find = (id: string) => roster.find((h) => h.instId === id);
@@ -119,6 +128,17 @@ export function ResultScreen({
   const scenes = chronicleOf(result.events, result.roster);
   /** 군령·후퇴 신호로 물러나 살아남은 자 */
   const withdrawn = result.withdrawn.map(find).filter((h): h is HeroInstance => !!h);
+
+  /** 정찰 보고 대조 — 적 수와 고른 길의 접점 지형 */
+  const scoutHero = report ? find(report.scoutId) : undefined;
+  const map = floorMapOf(floor);
+  const routeIdx = clampRoute(map, route);
+  const realTag = contactTerrain(map, routeIdx);
+  const saidTag = report ? reportedTerrain(map, report, routeIdx) : null;
+  const tagName = (t: typeof realTag) => (t ? TERRAIN[t].name : '?');
+  /** 「숲이라」·「강가라」 — 조사는 받침으로 고른다 */
+  const said = (t: typeof realTag) => (t ? tagName(t) + (hasBatchim(tagName(t)) ? '이라' : '라') : '모른다고');
+  const was = (t: typeof realTag) => tagName(t) + (hasBatchim(tagName(t)) ? '이었다' : '였다');
 
   /** 엔딩은 최상층을 '이겼을 때'만. 최상층에서 져도 뜨면 안 된다. */
   const ending = towerCleared && win;
@@ -214,6 +234,34 @@ export function ResultScreen({
             {withdrawn.length > 0 && (
               <div style={{ fontSize: 12, color: T.rare, lineHeight: 1.9 }}>
                 물러나 살아남은 자 — {withdrawn.map(nameOf).join(', ')}
+              </div>
+            )}
+          </SystemPanel>
+        </div>
+      )}
+
+      {/*
+        정찰 보고 대조 — 전투 기록 아래, 획득 위. 성향 이름은 여기서도 말하지 않는다 —
+        "누가 틀렸나"만 보여 주고, 그 사람을 믿을지는 마스터가 정한다.
+      */}
+      {report && scoutHero && (
+        <div style={{ marginBottom: 16 }}>
+          <SystemPanel compact>
+            <div style={{ fontSize: 13, color: T.dim, letterSpacing: '.2em', marginBottom: 10 }}>
+              정찰 보고 — {nameOf(scoutHero)}
+            </div>
+            {report.enemyCount === null ? (
+              <div style={{ fontSize: 13, color: T.dim, lineHeight: 1.9 }}>
+                아무것도 말하지 않았다. 적은 {floor.enemyIds.length}기, 접점은 {was(realTag)}.
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+                <div style={{ color: report.enemyCount === floor.enemyIds.length ? T.text : T.amber }}>
+                  적 {report.enemyCount}기라 했다 → 실제 {floor.enemyIds.length}기
+                </div>
+                <div style={{ color: saidTag === realTag ? T.text : T.amber }}>
+                  접점 {said(saidTag)} 했다 → 실제 {tagName(realTag)}
+                </div>
               </div>
             )}
           </SystemPanel>

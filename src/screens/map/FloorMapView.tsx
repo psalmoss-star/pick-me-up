@@ -14,6 +14,11 @@ export interface FloorMapViewProps {
   compact?: boolean;
   /** 영웅 점의 위치. 없으면 그리지 않는다 */
   heroAt?: HeroMarkAt;
+  /**
+   * 정찰 보고의 접점(경로 순서, null = 모름). 있으면 ✕를 **보고대로** 그린다(기획서 3단계).
+   * 없으면 실제 접점을 그린다 — 전투 화면의 띠는 이미 부딪힌 뒤라 참을 보여 준다.
+   */
+  contacts?: Array<string | null>;
 }
 
 const W = 340;
@@ -25,7 +30,7 @@ const W = 340;
  * 접점(✕)은 적과 부딪히는 곳이고, 그 지형이 책략 성공률을 바꾼다.
  * 색은 `tokens.ts`의 것만 쓴다.
  */
-export function FloorMapView({ map, route, onSelectRoute, compact, heroAt }: FloorMapViewProps) {
+export function FloorMapView({ map, route, onSelectRoute, compact, heroAt, contacts: reported }: FloorMapViewProps) {
   // 경로가 셋이면 가운데 줄 글자가 아래 줄 글자와 닿는다(375px 실측) — 세로를 늘린다
   const H = compact ? 46 : map.routes.length >= 3 ? 184 : 140;
   const padX = compact ? 14 : 22;
@@ -37,7 +42,9 @@ export function FloorMapView({ map, route, onSelectRoute, compact, heroAt }: Flo
   const byId = new Map(map.nodes.map((n) => [n.id, n]));
   const chosen = map.routes[route] ?? map.routes[0];
   const onChosen = new Set(chosen.nodeIds);
-  const contacts = new Set(map.routes.map((r) => r.contactId));
+  const contacts = new Set(
+    reported ? reported.filter((id): id is string => !!id) : map.routes.map((r) => r.contactId),
+  );
 
   const heroNode = heroAt === 'entry' ? byId.get('entry')
     : heroAt === 'exit' ? byId.get('exit')
