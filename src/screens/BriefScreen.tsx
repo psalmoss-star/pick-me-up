@@ -17,6 +17,7 @@ import { displayName } from '../game/identity';
 import { lineFor, pickSpeaker } from '../game/voice';
 import { Quote } from '../ui/Quote';
 import { StratagemPanel, type StratagemPanelProps } from './brief/StratagemPanel';
+import { RoutePanel, type RoutePanelProps } from './map/RoutePanel';
 
 export interface BriefScreenProps {
   floor: FloorSpec;
@@ -44,12 +45,14 @@ export interface BriefScreenProps {
   speakers?: HeroInstance[];
   /** 작전 — 책략 2장 + 군령. 없으면 패널을 그리지 않는다 */
   stratagem?: StratagemPanelProps;
+  /** 지도 — 경로 선택(기획서 2단계). 없으면 패널을 그리지 않는다 */
+  routePanel?: RoutePanelProps;
 }
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
   floor, partySize, quests = [], onBack, onStart,
-  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem,
+  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem, routePanel,
 }: BriefScreenProps) {
   const speaker = pickSpeaker(speakers, floor.id);
   const sortieLine = speaker ? lineFor(speaker, 'sortie', floor.id) : null;
@@ -122,6 +125,16 @@ export function BriefScreen({
           전투 중 사망한 영웅은 되살릴 수 없습니다.
         </div>
       </SystemPanel>
+
+      {/*
+        지도 — 임무 바로 아래. "어디서 부딪히는가"는 임무 다음으로 먼저 읽을 정보이고,
+        아래의 작전(책략)을 고를 때 이 접점 지형을 보고 고르게 된다.
+      */}
+      {routePanel && (
+        <div style={{ marginTop: 16 }}>
+          <RoutePanel {...routePanel} />
+        </div>
+      )}
 
       {/*
         과제는 진입 전에 보여야 의미가 있다 — 어떻게 싸울지를 바꾸는 정보이기 때문이다.

@@ -13,6 +13,7 @@ import { GraveScreen } from './screens/GraveScreen';
 import { AdventureScreen } from './screens/AdventureScreen';
 import { dispatchedHeroIds } from './game/adventure';
 import { unlockedStratagems } from './game/stratagem';
+import { floorMapOf } from './game/floormap';
 import { TowerScreen } from './screens/TowerScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
@@ -123,6 +124,8 @@ export default function App() {
   const fallback = useRunStore((s) => s.fallback);
   const setStratagemSlot = useRunStore((s) => s.setStratagemSlot);
   const setFallback = useRunStore((s) => s.setFallback);
+  const route = useRunStore((s) => s.route);
+  const setRoute = useRunStore((s) => s.setRoute);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
   const grantTestFunds = useRunStore((s) => s.grantTestFunds);
@@ -672,6 +675,12 @@ export default function App() {
             prepBought={prep != null}
             gold={wallet.gold}
             onBuyPrep={buyPrep}
+            routePanel={{
+              map: floorMapOf(floor),
+              route,
+              onSelectRoute: setRoute,
+              loadout: stratagemLoadout,
+            }}
             stratagem={{
               loadout: stratagemLoadout,
               unlocked: unlockedStratagems(maxFloorReached),
@@ -690,6 +699,7 @@ export default function App() {
             onEnd={() => setScreen('result')}
             interventions={interventions}
             onIntervene={intervene}
+            route={route}
           />
         )}
         {screen === 'result' && result && (

@@ -12,6 +12,8 @@ import { gameData } from '../game/data';
 import { canWithdraw, retreatedAt, type Intervention } from '../game/intervention';
 import type { EncounterResult, RosterUnit } from '../game/encounter';
 import { STRATAGEM_BY_ID, type StratagemId } from '../game/data/stratagems';
+import { floorMapOf } from '../game/floormap';
+import { FloorMapView } from './map/FloorMapView';
 import type { FloorSpec } from '../game/data/floors';
 import type { StatusKind } from '../game/types';
 
@@ -38,6 +40,8 @@ export interface BattleScreenProps {
   /** 개입으로 전투를 다시 계산해야 할 때 */
   onIntervene?: (interventions: Intervention[]) => void;
   interventions?: Intervention[];
+  /** 브리핑에서 고른 경로 — 상단 지도 띠에 그린다 */
+  route?: number;
 }
 
 /**
@@ -48,8 +52,9 @@ export interface BattleScreenProps {
  * 같은 시드로 다시 계산해 이어붙인다(발효는 다음 턴이라 지금까지 본 장면은 그대로다).
  */
 export function BattleScreen({
-  result, floor, floorIndex: _floorIndex, onEnd, onIntervene, interventions = [],
+  result, floor, floorIndex: _floorIndex, onEnd, onIntervene, interventions = [], route = 0,
 }: BattleScreenProps) {
+  const floorMap = useMemo(() => floorMapOf(floor), [floor]);
   const [step, setStep] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [beatIdx, setBeatIdx] = useState(0);
@@ -253,6 +258,19 @@ export function BattleScreen({
         </div>
       )}
 
+      {/*
+        지도 띠 — 영웅 점이 입구에서 접점(✕)으로 가서 싸우고, 이기면 계단으로 간다.
+        전투는 접점 한 곳에서 한 판이다(사용자 결정). 세로 예산이 빠듯해 46px 띠로 둔다.
+      */}
+      <div style={{ border: `1px solid ${T.panelHi}`, background: '#08070C', marginBottom: 8 }}>
+        <FloorMapView
+          map={floorMap}
+          route={route}
+          compact
+          heroAt={step === 0 ? 'entry' : done && result.outcome === 'victory' ? 'exit' : 'contact'}
+        />
+      </div>
+
       {/* 전장 */}
       <div style={{ position: 'relative', border: `1px solid ${T.panelHi}`, overflow: 'hidden', padding: '14px 8px 12px', marginBottom: 10 }}>
         <Scene kind={floor.scene} />
@@ -339,7 +357,11 @@ export function BattleScreen({
 
       {/* 개입 */}
       <div style={{ marginBottom: 10 }}>
-        <InterventionBar used={!canWithdraw(interventions)} hidden={done || !onIntervene} />
+        <InterventionBar
+          used={!canWithdraw(interventions)}
+          passed={crisisHandled}
+          hidden={done || !onIntervene}
+        />
       </div>
 
       {/* 컨트롤 */}
