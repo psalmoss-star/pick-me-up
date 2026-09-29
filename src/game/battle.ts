@@ -31,6 +31,8 @@ import {
   STRATAGEM_BY_ID, type StratagemEffect, type StratagemId,
 } from './data/stratagems';
 import { conditionMet, pickExecutor, successChance, type FieldView } from './stratagem';
+import { terrainModifier } from './floormap';
+import type { TerrainTag } from './data/terrain';
 import { attributesOfInstance, statsOfInstance } from './stats';
 import { rngChance } from './rng';
 
@@ -113,6 +115,11 @@ export interface BattleInput {
     ids: StratagemId[];
     /** 책략별 적의 내성 (0~3) */
     resist?: Partial<Record<StratagemId, number>>;
+    /**
+     * 접점 지형(층 맵에서 고른 경로). 성공률에만 ±를 준다(`terrainModifier`).
+     * 생략하면 보정 없음 — 맵 이전과 같다.
+     */
+    terrain?: TerrainTag | null;
     rng: RNG;
   };
 }
@@ -667,6 +674,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
           partyAvgInt: avg,
           bossPresent: view.bossPresent,
           resist: strat.resist?.[id] ?? 0,
+          terrain: terrainModifier(strat.terrain, id),
         });
         const ok = rngChance(strat.rng, chance);
         events.push({ turn, type: 'stratagem', actorUid: exec.uid, stratagemId: id, success: ok });

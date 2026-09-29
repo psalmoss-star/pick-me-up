@@ -69,6 +69,8 @@ export function successChance(args: {
   partyAvgInt: number;
   bossPresent: boolean;
   resist: number;
+  /** 접점 지형 보정(`terrainModifier`). 생략하면 0 — 맵 이전과 같다 */
+  terrain?: number;
 }): number {
   const t = STRATAGEM_TUNING;
   const rel = args.partyAvgInt > 0 ? args.executorInt / args.partyAvgInt - 1 : 0;
@@ -76,7 +78,8 @@ export function successChance(args: {
   const p = args.base
     + t.intWeight * rel
     - (args.bossPresent ? t.bossInsight : 0)
-    - t.resistStep * resist;
+    - t.resistStep * resist
+    + (args.terrain ?? 0);
   return Math.min(t.maxChance, Math.max(t.minChance, p));
 }
 
