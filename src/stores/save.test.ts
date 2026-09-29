@@ -49,6 +49,7 @@ const sample = (): RunSlice => {
     stratagemLoadout: ['ambush', 'nightRaid'],
     stratagemResist: {},
     fallback: 'none',
+    route: 0,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,

@@ -175,3 +175,46 @@ describe('무덤', () => {
     expect(back.fallen[0].deeds).toEqual([{ floor: 7, stratagemId: 'lureFire', success: true }]);
   });
 });
+
+describe('층 맵 경로', () => {
+  it('경로를 고르면 그 접점 지형이 전투에 들어간다 — 같은 시드, 다른 경로, 다른 판정', async () => {
+    const { floorMapOf, contactTerrain, terrainModifier } = await import('../game/floormap');
+    const { floorAt } = await import('../game/data');
+    // 두 경로의 매복 보정이 실제로 다른 층을 고른다 — 둘 다 중립이면 판정이 같은 게 정상이다
+    let floorIndex = -1;
+    for (let i = 5; i < 20 && floorIndex < 0; i++) {
+      const m = floorMapOf(floorAt(i));
+      if (terrainModifier(contactTerrain(m, 0), 'ambush') !== terrainModifier(contactTerrain(m, 1), 'ambush')) floorIndex = i;
+    }
+    expect(floorIndex).toBeGreaterThanOrEqual(0);
+    let differed = false;
+    for (let seed = 1; seed <= 60 && !differed; seed++) {
+      const runs = [0, 1].map((route) => {
+        const s = store(seed);
+        s.setState({ maxFloorReached: 20, floorIndex, stratagemLoadout: ['ambush'] });
+        expect(s.getState().setRoute(route)).toBe(true);
+        s.getState().start();
+        return s.getState().result!.events.filter((e) => e.type === 'stratagem').map((e) => e.success);
+      });
+      differed = JSON.stringify(runs[0]) !== JSON.stringify(runs[1]);
+    }
+    expect(differed).toBe(true);
+  });
+  it('맵 밖 경로·전투 중은 거부, 층을 바꾸거나 전투가 끝나면 0으로 돌아간다', () => {
+    const s = store();
+    expect(s.getState().setRoute(9)).toBe(false);
+    s.getState().setRoute(1);
+    s.getState().selectFloor(0);
+    expect(s.getState().route).toBe(0);
+    s.getState().setRoute(1);
+    s.getState().start();
+    expect(s.getState().setRoute(0)).toBe(false);
+    s.getState().finish();
+    expect(s.getState().route).toBe(0);
+  });
+  it('경로는 저장하지 않는다', () => {
+    const s = store();
+    s.getState().setRoute(1);
+    expect(JSON.parse(serialize(s.getState())).run.route).toBeUndefined();
+  });
+});

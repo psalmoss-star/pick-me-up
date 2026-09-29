@@ -18,6 +18,7 @@ import {
 } from '../game/stratagem';
 import { STRATAGEM_SLOTS, type StratagemId } from '../game/data/stratagems';
 import { appendDeeds, chronicleOf, deedsOf } from '../game/chronicle';
+import { clampRoute, contactTerrain, floorMapOf } from '../game/floormap';
 import { runEncounter, type EncounterResult } from '../game/encounter';
 import type { Intervention } from '../game/intervention';
 import { klassFor, statsOfInstance } from '../game/stats';
@@ -281,6 +282,13 @@ export interface RunSlice {
    */
   fallback: FallbackOrder;
   /**
+   * 층 맵에서 고른 경로(0부터). 접점 지형이 책략 성공률을 바꾼다. 기획서 2단계.
+   *
+   * ⚠️ **저장하지 않는다 — 준비(`prep`)와 같은 자리다.** 맵은 층마다 다르므로 이 값은
+   * 그 층에서만 뜻이 있다. 비우는 지점도 준비와 같다: `finish()` · `selectFloor()` · `hydrate()`.
+   */
+  route: number;
+  /**
    * 달성한 과제 id 목록.
    *
    * 한 번 달성하면 끝이므로 **반드시 저장된다** — 새로고침으로 초기화되면
@@ -383,6 +391,8 @@ export interface RunActions {
   setStratagemSlot: (slot: number, id: StratagemId | null) => boolean;
   /** 군령(퇴각 방침)을 정한다. 전투 중에는 거부 */
   setFallback: (order: FallbackOrder) => boolean;
+  /** 이 층의 경로를 고른다. 맵 밖 번호·전투 중은 거부 */
+  setRoute: (index: number) => boolean;
   /** 영웅을 시설에 배치한다. 슬롯이 차 있거나 이미 묶인 영웅이면 거부된다 */
   assign: (kind: AssignableFacility, id: HeroInstId) => AssignResult;
   /**
@@ -593,14 +603,17 @@ function backfillCodex(
  * 잠긴 카드는 여기서도 거른다(세이브·스토어 검증과 이중 방어).
  */
 function battleInputs(
-  s: Pick<RunSlice, 'stratagemLoadout' | 'stratagemResist' | 'fallback' | 'maxFloorReached'>,
+  s: Pick<RunSlice, 'stratagemLoadout' | 'stratagemResist' | 'fallback' | 'maxFloorReached' | 'floorIndex' | 'route'>,
   seed: number,
-): { orders: Orders; stratagems: { ids: StratagemId[]; resist: Partial<Record<StratagemId, number>>; rng: ReturnType<typeof createRng> } } {
+) {
+  const map = floorMapOf(floorAt(s.floorIndex));
   return {
-    orders: { ...DEFAULT_ORDERS, fallback: s.fallback },
+    orders: { ...DEFAULT_ORDERS, fallback: s.fallback } as Orders,
     stratagems: {
       ids: s.stratagemLoadout.filter((id) => isStratagemUnlocked(id, s.maxFloorReached)),
       resist: s.stratagemResist,
+      // 고른 경로의 접점 지형 — 책략 성공률에만 닿는다
+      terrain: contactTerrain(map, clampRoute(map, s.route)),
       rng: substream(seed, STREAM.STRATAGEM),
     },
   };
@@ -635,6 +648,7 @@ function freshSlice(): RunSlice {
     stratagemLoadout: defaultLoadout(),
     stratagemResist: {},
     fallback: DEFAULT_ORDERS.fallback,
+    route: 0,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,
@@ -1206,6 +1220,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 퍼머데스의 긴장과 결이 맞고, "졌으니 환불" 경로를 안 만들어 구현도 단순하다.
          */
         prep: null,
+        // 경로도 그 층에서만 유효하다 — 다음 층은 맵이 다르다
+        route: 0,
         stratagemResist: nextResist(s.stratagemResist, usedStratagems),
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
@@ -1377,6 +1393,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 대신 `BriefScreen`이 돌아가기 전에 경고한다.
          */
         prep: null,
+        // 층이 바뀌면 맵이 바뀐다 — 옛 경로 번호가 새 맵의 엉뚱한 길을 가리키면 안 된다
+        route: 0,
       })),
 
     startNewRun: () => {
@@ -1610,6 +1628,16 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       next[slot] = id;
       set({ stratagemLoadout: next.filter((x): x is StratagemId => x !== null) });
       saveRun(get());
+      return true;
+    },
+
+    setRoute: (index) => {
+      const s = get();
+      if (s.result != null) return false;
+      const map = floorMapOf(floorAt(s.floorIndex));
+      if (clampRoute(map, index) !== index) return false;
+      // 저장하지 않는다(준비와 같다) — saveRun을 부르지 않는다
+      set({ route: index });
       return true;
     },
 
@@ -1920,6 +1948,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         lastSortieSquad: 0,
         // 준비도 전투 중 상태다. 안 비우면 새로고침 뒤 유령 준비가 남는다
         prep: null,
+        route: 0,
       }),
 
     reset: () => set(freshSlice()),
