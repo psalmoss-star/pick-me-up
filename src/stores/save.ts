@@ -17,6 +17,9 @@
  * 이 파일 내부만 IndexedDB로 갈아끼우면 된다 — 바깥은 이 모듈만 본다.
  */
 import { isLegendId } from '../game/legend';
+import { sanitizeDeeds } from '../game/chronicle';
+import { sanitizeLoadout, sanitizeResist } from '../game/stratagem';
+import { sanitizeOrders } from '../game/orders';
 import { FLOORS } from '../game/data';
 import {
   FACILITY_MAX_LEVEL, ASSIGN_SLOTS, ASSIGNABLE, type AssignableFacility,
@@ -49,6 +52,7 @@ export type SavedRun = Pick<
   | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
   | 'materials' | 'dispatches' | 'assignments'
+  | 'stratagemLoadout' | 'stratagemResist' | 'fallback'
 >;
 
 interface SaveFile {
@@ -95,6 +99,13 @@ export function serialize(s: RunSlice): string {
        * "매 판 다시 꽂는" 잡일이 된다(파견을 저장하는 것과 같은 이유).
        */
       assignments: s.assignments,
+      /**
+       * 책략 장착·적의 내성·군령. 장착과 군령은 **매 전투 다시 고르는 잡일**이 되면 안 되고,
+       * 내성은 저장하지 않으면 새로고침으로 적의 기억이 지워진다.
+       */
+      stratagemLoadout: s.stratagemLoadout,
+      stratagemResist: s.stratagemResist,
+      fallback: s.fallback,
     },
   };
   return JSON.stringify(file);
@@ -291,12 +302,15 @@ export function deserialize(raw: string): SavedRun | null {
       전설 id(gdd-v3 §4.11)는 아는 것만 남긴다. 모르는 값을 두면 legendOf가 null이라
       무해하지만, 전설 목록에서 뺀 id가 세이브에 영원히 떠돈다.
     */
-    const { legendId, ...rest } = h;
+    const { legendId, deeds: rawDeeds, ...rest } = h;
+    // 연대기는 모르는 책략·이상한 값을 버린다. 비면 키를 안 만든다(옛 개체와 모양이 같게)
+    const deeds = sanitizeDeeds(rawDeeds);
     const named = {
       ...rest,
       name: cleanText(h.name),
       title: cleanText(h.title),
       ...(isLegendId(legendId) ? { legendId } : {}),
+      ...(deeds ? { deeds } : {}),
     };
     if (!h.gear) return named;
 
@@ -417,6 +431,14 @@ export function deserialize(raw: string): SavedRun | null {
       deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
       gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials, dispatches,
       assignments,
+      /*
+        책략은 2026-09-29에 추가됐다. 없는 세이브는 기본 장착·내성 없음·군령 없음으로 읽는다 —
+        기본값이 안전하므로 SAVE_VERSION을 올리지 않는다(배치와 같은 판단).
+        잠긴 카드가 장착돼 있으면(수동 편집) 뺀다.
+      */
+      stratagemLoadout: sanitizeLoadout(r.stratagemLoadout, maxFloorReached),
+      stratagemResist: sanitizeResist(r.stratagemResist),
+      fallback: sanitizeOrders({ fallback: r.fallback }).fallback,
     },
     version,
   );

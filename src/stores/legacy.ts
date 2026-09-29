@@ -12,6 +12,7 @@
 import type { CodexEntry, HeroDefId } from '../game/types';
 import type { FallenRecord, Legacy, RunRecord, SummitRecord } from '../game/legacyTypes';
 import { isLegendId } from '../game/legend';
+import { sanitizeDeeds } from '../game/chronicle';
 
 export const LEGACY_KEY = 'tower-of-picks:legacy';
 export const LEGACY_VERSION = 1;
@@ -77,6 +78,7 @@ export function deserializeLegacy(raw: string): Legacy {
           // 유언은 선택 필드 — 없으면 키 자체를 안 만든다(옛 기록과 모양이 같아야 한다)
           ...(typeof f.lastWords === 'string' && f.lastWords !== ''
             ? { lastWords: f.lastWords } : {}),
+          ...(() => { const deeds = sanitizeDeeds(f.deeds); return deeds ? { deeds } : {}; })(),
         })).filter((f) => f.name !== '')
       : [];
 

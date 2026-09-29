@@ -9,6 +9,8 @@
 // 0. 기본 별칭 (원시 타입 혼동 방지)
 // ============================================================
 
+import type { Deed } from './chronicle';
+
 export type HeroDefId = string & { readonly __brand: 'HeroDefId' }; // 도감상 영웅 종류 ID
 export type HeroInstId = string & { readonly __brand: 'HeroInstId' }; // 보유 중인 개별 영웅 ID
 export type EnemyDefId = string & { readonly __brand: 'EnemyDefId' };
@@ -231,6 +233,12 @@ export interface HeroInstance {
    * 모르는 id는 불러올 때 버린다(save.ts). 선택적인 이유: 일반 개체와 옛 세이브.
    */
   legendId?: string;
+  /**
+   * 영웅 연대기 — 이 영웅이 수행한 책략(층·책략·성패), 최근 5개. 저장한다.
+   * 문장이 아니라 사실만 둔다 — 문장은 `deedText`가 표시할 때 만든다.
+   * 선택적인 이유: 책략을 한 번도 안 한 영웅과 옛 세이브.
+   */
+  deeds?: Deed[];
   /** 던전 진행 중 유지되는 현재 HP (층 사이 자동회복 없음) */
   currentHp: number;
   /** 퍼머데스. true면 파티 편성 불가, 복구 불가. */

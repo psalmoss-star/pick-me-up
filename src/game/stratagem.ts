@@ -9,7 +9,8 @@
  */
 import type { Combatant } from './types';
 import {
-  STRATAGEM_TUNING, type StratagemCondition, type StratagemId,
+  STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_SLOTS, STRATAGEM_TUNING,
+  type StratagemCondition, type StratagemId,
 } from './data/stratagems';
 
 /** 판정에 필요한 전장 상태 — 엔진이 매 턴 만들어 넘긴다 */
@@ -95,6 +96,55 @@ export function nextResist(
       ? Math.min(STRATAGEM_TUNING.resistMax, (prev[id] ?? 0) + 1)
       : Math.max(0, (prev[id] ?? 0) - 1);
     if (v > 0) out[id] = v;
+  }
+  return out;
+}
+
+// ------------------------------------------------------------
+// 해금·장착 — 스토어와 화면이 쓴다
+// ------------------------------------------------------------
+
+/**
+ * 해금 여부. `maxFloorReached`는 **인덱스**다 — 5층(인덱스 4)을 깨면 5가 된다.
+ * 그래서 "n층을 깼다" ⇔ `maxFloorReached >= n`. 해금은 저장하지 않고 진행도에서 파생한다.
+ */
+export function isStratagemUnlocked(id: StratagemId, maxFloorReached: number): boolean {
+  const def = STRATAGEM_BY_ID[id];
+  return !!def && (def.unlockFloor === 0 || maxFloorReached >= def.unlockFloor);
+}
+
+export function unlockedStratagems(maxFloorReached: number): StratagemId[] {
+  return STRATAGEMS.filter((s) => isStratagemUnlocked(s.id, maxFloorReached)).map((s) => s.id);
+}
+
+/** 새 런의 기본 장착 — 처음부터 쓸 수 있는 카드로 슬롯을 채운다 */
+export function defaultLoadout(): StratagemId[] {
+  return unlockedStratagems(0).slice(0, STRATAGEM_SLOTS);
+}
+
+/** 저장본의 장착 검증 — 모르는·잠긴·중복 카드는 빼고 슬롯 수로 자른다 */
+export function sanitizeLoadout(raw: unknown, maxFloorReached: number): StratagemId[] {
+  if (!Array.isArray(raw)) return defaultLoadout();
+  const out: StratagemId[] = [];
+  for (const v of raw) {
+    if (typeof v !== 'string') continue;
+    const id = v as StratagemId;
+    if (!isStratagemUnlocked(id, maxFloorReached) || out.includes(id)) continue;
+    out.push(id);
+    if (out.length >= STRATAGEM_SLOTS) break;
+  }
+  return out;
+}
+
+/** 저장본의 내성 검증 — 0~상한 정수, 모르는 책략은 버린다 */
+export function sanitizeResist(raw: unknown): Partial<Record<StratagemId, number>> {
+  const out: Partial<Record<StratagemId, number>> = {};
+  if (typeof raw !== 'object' || raw === null) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!STRATAGEM_BY_ID[k as StratagemId]) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const n = Math.max(0, Math.min(STRATAGEM_TUNING.resistMax, Math.floor(v)));
+    if (n > 0) out[k as StratagemId] = n;
   }
   return out;
 }

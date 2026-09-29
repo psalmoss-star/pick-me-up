@@ -10,6 +10,7 @@
  * 저장 구현과 표시가 얽힌다. 타입은 게임 계층에 두고 저장은 stores/legacy.ts가 한다.
  */
 import type { CodexEntry, HeroDefId, Star } from './types';
+import type { Deed } from './chronicle';
 
 /** 죽은 영웅 하나. 이름은 영구히 봉인된다. */
 export interface FallenRecord {
@@ -32,6 +33,11 @@ export interface FallenRecord {
    * 선택적인 이유: 이 필드 이전의 기록, 그리고 seed 없는 옛 개체(말하지 않는다).
    */
   lastWords?: string;
+  /**
+   * 생전의 책략 — 「박망파에서 불을 놓은 자」. 죽는 전투의 책략까지 포함한다.
+   * 선택적인 이유: 책략을 한 번도 안 한 영웅과 이 필드 이전의 기록.
+   */
+  deeds?: Deed[];
 }
 
 /** 끝난 런 하나. 진행 중인 런은 여기 없다. */

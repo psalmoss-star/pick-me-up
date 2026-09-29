@@ -97,3 +97,20 @@ export function deedText(d: Deed): string {
   const def = STRATAGEM_BY_ID[d.stratagemId];
   return `${d.floor}층 · ${def ? def.name : '잊힌 책략'} · ${d.success ? '성공' : '간파당함'}`;
 }
+
+/**
+ * 저장본의 연대기 검증 — 모르는 책략·이상한 값은 버린다. 비면 undefined(키를 안 만든다).
+ * 세이브(영웅)와 무덤(쓰러진 영웅) 양쪽이 쓴다.
+ */
+export function sanitizeDeeds(raw: unknown): Deed[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Deed[] = [];
+  for (const d of raw) {
+    if (typeof d !== 'object' || d === null) continue;
+    const o = d as Record<string, unknown>;
+    if (typeof o.stratagemId !== 'string' || !STRATAGEM_BY_ID[o.stratagemId as StratagemId]) continue;
+    if (typeof o.floor !== 'number' || !Number.isFinite(o.floor) || o.floor < 1) continue;
+    out.push({ floor: Math.floor(o.floor), stratagemId: o.stratagemId as StratagemId, success: o.success === true });
+  }
+  return out.length > 0 ? out.slice(-DEEDS_KEEP) : undefined;
+}

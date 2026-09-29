@@ -11,7 +11,13 @@
  * 전부 `src/game/`의 순수 함수에 위임한다. 여기서 밸런스를 계산하지 않는다.
  */
 import { create } from 'zustand';
-import { createRng } from '../game/rng';
+import { createRng, substream, STREAM } from '../game/rng';
+import { DEFAULT_ORDERS, type FallbackOrder, type Orders } from '../game/orders';
+import {
+  defaultLoadout, isStratagemUnlocked, nextResist,
+} from '../game/stratagem';
+import { STRATAGEM_SLOTS, type StratagemId } from '../game/data/stratagems';
+import { appendDeeds, chronicleOf, deedsOf } from '../game/chronicle';
 import { runEncounter, type EncounterResult } from '../game/encounter';
 import type { Intervention } from '../game/intervention';
 import { klassFor, statsOfInstance } from '../game/stats';
@@ -258,6 +264,23 @@ export interface RunSlice {
    */
   prep: PrepId | null;
   /**
+   * 들고 가는 책략 카드(최대 `STRATAGEM_SLOTS`장, 슬롯 순서 = 발동 우선순위). 저장한다.
+   *
+   * 준비(`prep`)와 달리 층에 묶이지 않는다 — 매 전투 다시 꽂는 잡일이 되면 안 된다.
+   * ⚠️ `start()`와 `intervene()`이 **같은 값**을 넘겨야 한다(`battleInputs` 하나로 모았다).
+   */
+  stratagemLoadout: StratagemId[];
+  /**
+   * 적의 내성 — 같은 책략을 연속으로 쓰면 쌓이고, 쉬면 빠진다(`nextResist`). 저장한다.
+   * 저장하지 않으면 새로고침으로 적의 기억이 지워져 같은 책략 하나로 탑을 민다.
+   */
+  stratagemResist: Partial<Record<StratagemId, number>>;
+  /**
+   * 군령 — 퇴각 방침. HP가 이 이하면 그 영웅은 전투에서 빠진다(생존). 저장한다.
+   * 작전 카드 중 공격·보호 방침은 측정에서 독주·무효로 나와 화면에서 뺐다(2026-09-29).
+   */
+  fallback: FallbackOrder;
+  /**
    * 달성한 과제 id 목록.
    *
    * 한 번 달성하면 끝이므로 **반드시 저장된다** — 새로고침으로 초기화되면
@@ -353,6 +376,13 @@ export interface RunActions {
    * 확정은 `finish()`의 저장이 맡는다.
    */
   buyPrep: () => BuyPrepResult;
+  /**
+   * 책략 슬롯에 카드를 꽂는다(null이면 비운다). 잠긴 카드·전투 중·범위 밖 슬롯은 거부.
+   * 이미 다른 슬롯에 있는 카드를 꽂으면 **자리를 바꾼다** — 같은 카드 두 장은 없다.
+   */
+  setStratagemSlot: (slot: number, id: StratagemId | null) => boolean;
+  /** 군령(퇴각 방침)을 정한다. 전투 중에는 거부 */
+  setFallback: (order: FallbackOrder) => boolean;
   /** 영웅을 시설에 배치한다. 슬롯이 차 있거나 이미 묶인 영웅이면 거부된다 */
   assign: (kind: AssignableFacility, id: HeroInstId) => AssignResult;
   /**
@@ -553,6 +583,29 @@ function backfillCodex(
   return codex;
 }
 
+/**
+ * 군령·책략 — 전투 입력. **`start()`와 `intervene()`이 둘 다 이 함수 하나를 부른다.**
+ *
+ * 준비(`applyPrep`)에서 배운 것: 입력 변환이 두 곳에 적히면 한쪽이 빠지는 순간
+ * 개입(후퇴 신호)할 때마다 책략이 조용히 증발한다. 판정 난수는 전투 시드에서
+ * `STREAM.STRATAGEM`으로 판다 — 같은 시드로 다시 돌리면 같은 판정이 나온다.
+ *
+ * 잠긴 카드는 여기서도 거른다(세이브·스토어 검증과 이중 방어).
+ */
+function battleInputs(
+  s: Pick<RunSlice, 'stratagemLoadout' | 'stratagemResist' | 'fallback' | 'maxFloorReached'>,
+  seed: number,
+): { orders: Orders; stratagems: { ids: StratagemId[]; resist: Partial<Record<StratagemId, number>>; rng: ReturnType<typeof createRng> } } {
+  return {
+    orders: { ...DEFAULT_ORDERS, fallback: s.fallback },
+    stratagems: {
+      ids: s.stratagemLoadout.filter((id) => isStratagemUnlocked(id, s.maxFloorReached)),
+      resist: s.stratagemResist,
+      rng: substream(seed, STREAM.STRATAGEM),
+    },
+  };
+}
+
 function freshSlice(): RunSlice {
   const roster = initialRoster();
   return {
@@ -579,6 +632,9 @@ function freshSlice(): RunSlice {
     adventureOutcomes: [],
     carriedPotions: 0,
     prep: null,
+    stratagemLoadout: defaultLoadout(),
+    stratagemResist: {},
+    fallback: DEFAULT_ORDERS.fallback,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,
@@ -793,6 +849,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           allyAtkMult: armoryAtkMult(get().facilities.armory) * prepped.atkMult,
           inventory: gearIndex(get().gear),
           potions: carried,
+          ...battleInputs(get(), seed),
         }),
       });
       return true;
@@ -825,6 +882,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           allyAtkMult: armoryAtkMult(facilities.armory) * prepped.atkMult,
           inventory: gearIndex(get().gear),
           potions: carriedPotions,
+          // start()와 같은 군령·책략. 빠지면 후퇴 신호를 쓰는 순간 책략이 증발한다
+          ...battleInputs(get(), seed),
         }),
       });
     },
@@ -1010,6 +1069,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         gearSeq: get().gearSeq + dropped.length,
       });
 
+      /**
+       * 책략 — 이번 전투의 장면을 수행자 연대기에 붙이고, 적의 내성을 갱신한다.
+       * 결과 화면과 **같은 함수**(`chronicleOf`)로 읽어 기록이 갈리지 않게 한다.
+       * 내성은 **실제로 발동한** 책략만 센다 — 들고만 갔으면 적은 모른다.
+       */
+      const scenes = chronicleOf(result.events, result.roster);
+      const newDeeds = deedsOf(scenes, floorSpec.id);
+      const usedStratagems = scenes.map((c) => c.stratagemId);
+
       const questGear = grants.map((g) => g.gear).filter((g): g is GearInstance => g != null);
       const questGold = grants.reduce((sum, g) => sum + g.gold, 0);
       const questStones = grants.reduce((sum, g) => sum + g.promotionStones, 0);
@@ -1087,6 +1155,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
             }
           }
 
+          const gainedDeeds = newDeeds.get(h.instId);
+          if (gainedDeeds) next = { ...next, deeds: appendDeeds(next.deeds, gainedDeeds) };
+
           // 사망 표시는 참전 여부와 무관하게 casualties만 보고 판단한다 —
           // 두 판정을 얽으면 퍼머데스가 발굴 로직에 종속된다.
           //
@@ -1135,6 +1206,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 퍼머데스의 긴장과 결이 맞고, "졌으니 환불" 경로를 안 만들어 구현도 단순하다.
          */
         prep: null,
+        stratagemResist: nextResist(s.stratagemResist, usedStratagems),
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
         lockedSquad: s.lastSortieSquad ?? 0,
@@ -1218,6 +1290,11 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
               revealProgress: h.revealProgress ?? 0,
               runNo: legacy.runNo,
               ...(lastWords ? { lastWords } : {}),
+              // 죽는 전투의 책략까지 — snapshot은 전투 전 로스터라 이번 장면을 따로 붙인다
+              ...(() => {
+                const deeds = appendDeeds(h.deeds, newDeeds.get(h.instId) ?? []);
+                return deeds.length > 0 ? { deeds } : {};
+              })(),
             };
           });
 
@@ -1518,6 +1595,31 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       return { ok: true, prep: def.id, spent: def.cost };
     },
 
+    setStratagemSlot: (slot, id) => {
+      const s = get();
+      if (s.result != null) return false;
+      if (!Number.isInteger(slot) || slot < 0 || slot >= STRATAGEM_SLOTS) return false;
+      if (id !== null && !isStratagemUnlocked(id, s.maxFloorReached)) return false;
+
+      const next: Array<StratagemId | null> = Array.from(
+        { length: STRATAGEM_SLOTS }, (_, i) => s.stratagemLoadout[i] ?? null,
+      );
+      const other = id === null ? -1 : next.indexOf(id);
+      // 다른 슬롯에 이미 있으면 자리를 바꾼다 — 같은 카드 두 장은 없다
+      if (other >= 0) next[other] = next[slot];
+      next[slot] = id;
+      set({ stratagemLoadout: next.filter((x): x is StratagemId => x !== null) });
+      saveRun(get());
+      return true;
+    },
+
+    setFallback: (order) => {
+      if (get().result != null) return false;
+      set({ fallback: order });
+      saveRun(get());
+      return true;
+    },
+
     assign: (kind, id) => {
       const s = get();
 
@@ -1796,6 +1898,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         potions: saved.potions,
         materials: saved.materials,
         dispatches: saved.dispatches,
+        stratagemLoadout: saved.stratagemLoadout,
+        stratagemResist: saved.stratagemResist,
+        fallback: saved.fallback,
         claimedQuests: saved.claimedQuests,
         seenFirstLegendary: saved.seenFirstLegendary,
         towerCleared: saved.towerCleared,
