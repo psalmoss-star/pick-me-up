@@ -8,7 +8,7 @@
  *
  * 전투 엔진 자체는 건드리지 않는다. 여기는 조립만 한다.
  */
-import { simulateBattle, type BattleData, type BattleOutcome } from './battle';
+import { simulateBattle, type BattleData, type BattleInput, type BattleOutcome } from './battle';
 import { statsOfInstance } from './stats';
 import { displayName } from './identity';
 import { applyBonus, heroBonus } from './gear';
@@ -59,6 +59,8 @@ export function runEncounter(args: {
   potions?: number;
   /** 작전 카드. 생략하면 현행 엔진 그대로 */
   orders?: Orders;
+  /** 책략 카드. 판정 난수는 호출부가 `STREAM.STRATAGEM`으로 판다 */
+  stratagems?: BattleInput['stratagems'];
 }): EncounterResult {
   const { party, floor, data, rng, inventory } = args;
   const alive = party.filter((h) => !h.isDead);
@@ -73,6 +75,7 @@ export function runEncounter(args: {
     maxTurns: args.maxTurns,
     interventions: args.interventions,
     orders: args.orders,
+    stratagems: args.stratagems,
     allyAtkMult: args.allyAtkMult,
     /**
      * 층 깊이에 따른 적 강화.

@@ -12,7 +12,6 @@ import type {
   HeroDef, HeroDefId, HeroInstId, HeroInstance, RNG, Skill, SkillId,
   Star, StarScaling, StatusKind, Stats,
 } from './types';
-import { statsOfInstance } from './stats';
 import { displayName } from './identity';
 import { applyBonus, heroBonus } from './gear';
 import { POTION_TUNING } from './data/gear';
@@ -28,6 +27,11 @@ import {
   attackCandidates, fallbackRatio, protecteeUids, DEFAULT_ORDERS, type Orders,
 } from './orders';
 import { COVER_CHANCE, CRISIS_HP_RATIO } from './data/orders';
+import {
+  STRATAGEM_BY_ID, type StratagemEffect, type StratagemId,
+} from './data/stratagems';
+import { conditionMet, pickExecutor, successChance, type FieldView } from './stratagem';
+import { attributesOfInstance, statsOfInstance } from './stats';
 import { rngChance } from './rng';
 
 // ------------------------------------------------------------
@@ -99,6 +103,18 @@ export interface BattleInput {
    * 개입·포션과 같은 **전투 전 입력**이다.
    */
   orders?: Orders;
+  /**
+   * 책략 카드. 생략하면 책략 없이 돈다(현행과 비트 단위로 같다).
+   *
+   * `rng`는 **주 전투 난수와 다른 흐름**이어야 한다(`STREAM.STRATAGEM`) —
+   * 같은 흐름을 쓰면 판정 한 번이 이후 전투 전체를 다시 섞는다.
+   */
+  stratagems?: {
+    ids: StratagemId[];
+    /** 책략별 적의 내성 (0~3) */
+    resist?: Partial<Record<StratagemId, number>>;
+    rng: RNG;
+  };
 }
 
 /**
@@ -528,6 +544,19 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     const hurt = heroUnits.find((u) => inField(u) && u.currentHp / u.stats.hp <= CRISIS_HP_RATIO);
     if (hurt) crisis = { turn, at: events.length, uid: hurt.uid };
   };
+  /*
+    책략 — 카드를 들고 왔을 때만 준비한다. 지능은 셋업 때 한 번 계산해 둔다
+    (전투 중에 레벨이 변하지 않는다).
+  */
+  const strat = input.stratagems && input.stratagems.ids.length > 0 ? input.stratagems : null;
+  const usedStratagems = new Set<StratagemId>();
+  const intByUid = new Map<string, number>();
+  if (strat) {
+    for (const u of heroUnits) {
+      const inst = allies.find((a) => a.instId === u.sourceId)!;
+      intByUid.set(u.uid, attributesOfInstance(inst, data.heroes[inst.defId], data.starScaling).int.current);
+    }
+  }
   const withdraw = (u: Combatant) => {
     if (withdrawnUids.has(u.uid)) return;
     withdrawnUids.add(u.uid);
@@ -607,6 +636,44 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     if (fallbackAt !== null) {
       for (const u of heroUnits) {
         if (inField(u) && u.currentHp / u.stats.hp <= fallbackAt) withdraw(u);
+      }
+    }
+
+    /*
+      책략 — 퇴각 다음에 본다: 빠질 사람이 빠진 뒤의 전장으로 "불리한가"를 판단한다.
+      한 턴에 하나만, 카드마다 전투당 한 번. 슬롯 순서가 우선순위다.
+      판정 난수는 `strat.rng`(별도 흐름)만 쓴다 — 주 전투 난수를 밀지 않는다.
+    */
+    if (strat) {
+      const view: FieldView = {
+        turn,
+        heroes: heroUnits.filter(inField),
+        enemies: enemyUnits.filter((u) => u.isAlive),
+        bossPresent: enemyUnits.some(
+          (u) => u.isAlive && data.enemies[u.sourceId as EnemyDefId]?.isBoss,
+        ),
+      };
+      const id = strat.ids.find((sid) => !usedStratagems.has(sid)
+        && !!STRATAGEM_BY_ID[sid] && conditionMet(STRATAGEM_BY_ID[sid].condition, view));
+      if (id) {
+        usedStratagems.add(id);
+        const def = STRATAGEM_BY_ID[id];
+        const intOf = (uid: string) => intByUid.get(uid) ?? 0;
+        const exec = pickExecutor(view.heroes, intOf)!;
+        const avg = view.heroes.reduce((a, h) => a + intOf(h.uid), 0) / view.heroes.length;
+        const chance = successChance({
+          base: def.baseChance,
+          executorInt: intOf(exec.uid),
+          partyAvgInt: avg,
+          bossPresent: view.bossPresent,
+          resist: strat.resist?.[id] ?? 0,
+        });
+        const ok = rngChance(strat.rng, chance);
+        events.push({ turn, type: 'stratagem', actorUid: exec.uid, stratagemId: id, success: ok });
+        for (const eff of ok ? def.success : def.failure) {
+          applyStratagemEffect(eff, exec, view, events, turn);
+        }
+        noteCrisis();
       }
     }
 
@@ -764,6 +831,72 @@ function applyEffect(
       break;
     }
   }
+}
+
+/**
+ * 책략 효과 한 줄을 적용한다. 효과 문법은 `data/stratagems.ts`의 `StratagemEffect`.
+ *
+ * 스킬 효과(`applyEffect`)와 따로 둔 이유: 책략은 **비율 피해**(최대 HP 대비)라
+ * 공격력·방어력·상성을 거치지 않는다. 섞으면 "화공이 탱커에게 안 들어간다" 같은 일이 난다.
+ * RNG를 쓰지 않는다 — 판정은 이미 끝났다.
+ */
+function applyStratagemEffect(
+  eff: StratagemEffect,
+  exec: Combatant,
+  view: FieldView,
+  events: BattleEvent[],
+  turn: number,
+): void {
+  const liveEnemies = view.enemies.filter((u) => u.isAlive);
+  switch (eff.kind) {
+    case 'enemiesDamage':
+      for (const e of liveEnemies) {
+        applyDamage(e, Math.max(1, Math.round(e.stats.hp * eff.ratio)), events, turn, exec.uid);
+      }
+      break;
+    case 'strongestTo': {
+      if (liveEnemies.length === 0) break;
+      const target = liveEnemies.reduce((a, b) => (effAtk(b) > effAtk(a) ? b : a));
+      const cut = target.currentHp - Math.round(target.stats.hp * eff.ratio);
+      // 보호막을 거치지 않는다 — 매복은 방패 뒤를 친다
+      if (cut > 0) {
+        target.currentHp -= cut;
+        events.push({ turn, type: 'damage', actorUid: exec.uid, targetUids: [target.uid], amount: cut });
+      }
+      break;
+    }
+    case 'enemiesStatus':
+      for (const e of liveEnemies) addStatus(e, eff.status, eff.turns, events, turn, exec.uid);
+      break;
+    case 'alliesStatus':
+      for (const h of view.heroes) {
+        if (h.isAlive) addStatus(h, eff.status, eff.turns, events, turn, exec.uid);
+      }
+      break;
+    case 'executorLoses': {
+      // 치명적이지 않다 — HP 1에서 멈춘다 (data/stratagems.ts 주석)
+      const loss = Math.min(exec.currentHp - 1, Math.round(exec.stats.hp * eff.ratio));
+      if (loss > 0) {
+        exec.currentHp -= loss;
+        events.push({ turn, type: 'damage', targetUids: [exec.uid], amount: loss });
+      }
+      break;
+    }
+  }
+}
+
+/** 상태이상 부여 — `applyEffect`의 buff/debuff와 같은 규칙(이미 있으면 기간만 늘린다) */
+function addStatus(
+  target: Combatant, kind: StatusKind, turns: number,
+  events: BattleEvent[], turn: number, actorUid: string,
+): void {
+  const existing = target.statuses.find((s) => s.kind === kind);
+  if (existing) {
+    existing.remainingTurns = Math.max(existing.remainingTurns, turns);
+  } else {
+    target.statuses.push({ kind, remainingTurns: turns, magnitude: STATUS_MAGNITUDE[kind] });
+  }
+  events.push({ turn, type: 'statusApplied', actorUid, targetUids: [target.uid], status: kind });
 }
 
 function applyDamage(

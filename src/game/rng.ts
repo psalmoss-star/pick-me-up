@@ -51,6 +51,7 @@ export const STREAM = {
   TEMPER: 43,   // 기질 — 성격. 표시 전용, 전투 수치 영향 없음 (gdd-v3 §4.10)
   VOICE: 47,    // 대사 선택 — 같은 순간엔 같은 말. 표시 전용
   LEGEND: 53,   // 전설 판정 — ★5 소환이 전설인가, 누구인가. 소환 난수를 밀지 않는다 (gdd-v3 §4.11)
+  STRATAGEM: 59, // 책략 성공/간파 판정 — 전투 시드에서 판다. 주 전투 난수를 밀지 않는다
 } as const;
 
 export type StreamId = (typeof STREAM)[keyof typeof STREAM];

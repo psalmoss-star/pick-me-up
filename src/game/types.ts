@@ -418,6 +418,7 @@ export type BattleEventType =
   | 'retreat'      // 마스터의 개입으로 한 턴 물러남
   | 'withdraw'     // 전투에서 완전히 이탈 — 퇴각 방침 또는 후퇴 신호. 생존한다
   | 'cover'        // 보호 방침 — 아군 탱커(actorUid)가 보호 대상(targetUids)을 막아섰다
+  | 'stratagem'    // 책략 발동 — actorUid = 수행자, stratagemId·success. 뒤에 효과 이벤트가 따른다
   | 'battleEnd';
 
 /**
@@ -452,6 +453,10 @@ export interface BattleEvent {
    * 화면이 "누가 회복시켰나"가 아니라 "물약이 터졌다"로 읽어야 한다.
    */
   fromPotion?: boolean;
+  /** stratagem 이벤트 전용 — 어떤 책략인가. id는 `data/stratagems.ts` */
+  stratagemId?: string;
+  /** stratagem 이벤트 전용 — 성공(true) / 간파(false) */
+  success?: boolean;
 }
 
 /*
