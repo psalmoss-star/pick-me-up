@@ -218,3 +218,55 @@ describe('층 맵 경로', () => {
     expect(JSON.parse(serialize(s.getState())).run.route).toBeUndefined();
   });
 });
+
+describe('정찰자 (기획서 3단계)', () => {
+  it('고르지 않으면 첫 출전자가 정찰하고, 출정하면 그 사람의 보고가 남는다', () => {
+    const s = store();
+    const first = s.getState().squads[0][0];
+    s.getState().start();
+    expect(s.getState().report?.scoutId).toBe(first);
+  });
+  it('편성된 사람을 고르면 그 사람이 정찰한다 — 브리핑과 같은 함수로 같은 보고', async () => {
+    const { scoutReport } = await import('../game/report');
+    const { floorMapOf } = await import('../game/floormap');
+    const { floorAt, gameData } = await import('../game/data');
+    const s = store();
+    const second = s.getState().squads[0][1];
+    expect(s.getState().setScout(second)).toBe(true);
+    const hero = s.getState().roster.find((h) => h.instId === second)!;
+    const f = floorAt(s.getState().floorIndex);
+    const expected = scoutReport(hero, f, floorMapOf(f), gameData);
+    s.getState().start();
+    expect(s.getState().report).toEqual(expected);
+  });
+  it('편성 밖·없는 사람·전투 중은 거부', () => {
+    const s = store();
+    const outside = s.getState().roster.find((h) => !s.getState().squads.flat().includes(h.instId));
+    if (outside) expect(s.getState().setScout(outside.instId)).toBe(false);
+    expect(s.getState().setScout('nobody#1' as never)).toBe(false);
+    s.getState().start();
+    expect(s.getState().setScout(s.getState().squads[0][0])).toBe(false);
+  });
+  it('후퇴 신호로 다시 돌려도 보고는 그대로다 (보고는 전투 입력이 아니다)', () => {
+    const s = store();
+    s.getState().setScout(s.getState().squads[0][1]);
+    s.getState().start();
+    const before = s.getState().report;
+    const hero = s.getState().result!.roster.find((u) => u.side === 'ally')!;
+    s.getState().intervene([{ turn: 2, kind: 'withdraw', targetId: hero.sourceId }]);
+    expect(s.getState().report).toBe(before);
+  });
+  it('저장하지 않고, 층을 바꾸거나 전투가 끝나면 비운다', () => {
+    const s = store();
+    const second = s.getState().squads[0][1];
+    s.getState().setScout(second);
+    expect(JSON.parse(serialize(s.getState())).run.scout).toBeUndefined();
+    expect(JSON.parse(serialize(s.getState())).run.report).toBeUndefined();
+    s.getState().selectFloor(0);
+    expect(s.getState().scout).toBeNull();
+    s.getState().setScout(second);
+    s.getState().start();
+    s.getState().finish();
+    expect(s.getState().scout).toBeNull();
+  });
+});

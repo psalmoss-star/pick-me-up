@@ -41,6 +41,7 @@ import {
 } from '../game/gear';
 import { craft as craftPure, spendMaterials, type CraftResult } from '../game/craft';
 import { applyPrep } from '../game/prep';
+import { resolveScout, scoutReport, type ScoutReport } from '../game/report';
 import { prepForMission, prepById, type PrepId } from '../game/data/preps';
 import { evaluateQuests, questContext, questRng, type QuestGrant } from '../game/quest';
 import type { QuestId } from '../game/data/quests';
@@ -289,6 +290,20 @@ export interface RunSlice {
    */
   route: number;
   /**
+   * 정찰자 — 브리핑에서 고른 한 명. 보고(적 수·전력·접점·위기 창)가 이 사람의 기질대로 틀린다.
+   * null이거나 출전 명단에 없으면 첫 번째 출전자다(`resolveScout`). 기획서 3단계.
+   *
+   * ⚠️ **저장하지 않는다 — 경로(`route`)와 같은 자리다.** 비우는 지점도 같다:
+   * `finish()` · `selectFloor()` · `hydrate()`.
+   */
+  scout: HeroInstId | null;
+  /**
+   * 이번 전투의 정찰 보고. `start()`가 브리핑과 **같은 함수**(`scoutReport`)로 만든다.
+   * 전투 화면이 위기 창 시점을, 결과 화면이 "보고와 실제"를 이걸로 읽는다.
+   * 전투 입력이 아니다 — `intervene()`은 건드리지 않는다. result와 같은 이유로 저장하지 않는다.
+   */
+  report: ScoutReport | null;
+  /**
    * 달성한 과제 id 목록.
    *
    * 한 번 달성하면 끝이므로 **반드시 저장된다** — 새로고침으로 초기화되면
@@ -393,6 +408,8 @@ export interface RunActions {
   setFallback: (order: FallbackOrder) => boolean;
   /** 이 층의 경로를 고른다. 맵 밖 번호·전투 중은 거부 */
   setRoute: (index: number) => boolean;
+  /** 정찰자를 고른다. 출전 명단 밖·전투 중은 거부 */
+  setScout: (id: HeroInstId) => boolean;
   /** 영웅을 시설에 배치한다. 슬롯이 차 있거나 이미 묶인 영웅이면 거부된다 */
   assign: (kind: AssignableFacility, id: HeroInstId) => AssignResult;
   /**
@@ -649,6 +666,8 @@ function freshSlice(): RunSlice {
     stratagemResist: {},
     fallback: DEFAULT_ORDERS.fallback,
     route: 0,
+    scout: null,
+    report: null,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,
@@ -838,6 +857,15 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
       const seed = seedSource();
 
+      /*
+        정찰 보고 — 브리핑이 보여 준 것과 같은 함수·같은 정찰자 규칙이다.
+        어긋나면 브리핑의 보고와 전투의 위기 창이 서로 다른 사람의 말이 된다.
+      */
+      const scoutHero = resolveScout(members, get().scout);
+      const report = scoutHero
+        ? scoutReport(scoutHero, floorAt(floorIndex), floorMapOf(floorAt(floorIndex)), gameData)
+        : null;
+
       /**
        * 준비 한 수를 전투 입력에 반영한다.
        *
@@ -855,6 +883,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         snapshot: roster,
         lastSortieSquad: squad,
         lockedSquad: null,
+        report,
         result: runEncounter({
           party: members,
           floor: prepped.floor,
@@ -1222,6 +1251,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         prep: null,
         // 경로도 그 층에서만 유효하다 — 다음 층은 맵이 다르다
         route: 0,
+        scout: null,
         stratagemResist: nextResist(s.stratagemResist, usedStratagems),
         squads: s.squads.map((m) => m.filter((id) => !casualties.has(id))),
         // 출전한 군은 다음 전투까지 편성이 잠긴다
@@ -1395,6 +1425,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         prep: null,
         // 층이 바뀌면 맵이 바뀐다 — 옛 경로 번호가 새 맵의 엉뚱한 길을 가리키면 안 된다
         route: 0,
+        scout: null,
       })),
 
     startNewRun: () => {
@@ -1638,6 +1669,19 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       if (clampRoute(map, index) !== index) return false;
       // 저장하지 않는다(준비와 같다) — saveRun을 부르지 않는다
       set({ route: index });
+      return true;
+    },
+
+    setScout: (id) => {
+      const s = get();
+      if (s.result != null) return false;
+      // 편성된 살아 있는 사람만 — start()가 정찰자를 찾는 명단(파견자 제외)과 같은 조건이다.
+      // 어느 군으로 나갈지는 start()가 정하므로 여기선 군을 가리지 않는다(명단 밖이면 resolveScout가 첫 번째로 돌린다)
+      const inSquad = s.squads.some((m) => m.includes(id));
+      const hero = s.roster.find((h) => h.instId === id);
+      if (!inSquad || !hero || hero.isDead || dispatchedHeroIds(s.dispatches).has(id)) return false;
+      // 저장하지 않는다(경로와 같다) — saveRun을 부르지 않는다
+      set({ scout: id });
       return true;
     },
 
@@ -1949,6 +1993,8 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         // 준비도 전투 중 상태다. 안 비우면 새로고침 뒤 유령 준비가 남는다
         prep: null,
         route: 0,
+        scout: null,
+        report: null,
       }),
 
     reset: () => set(freshSlice()),

@@ -50,6 +50,8 @@ const sample = (): RunSlice => {
     stratagemResist: {},
     fallback: 'none',
     route: 0,
+    scout: null,
+    report: null,
     claimedQuests: [],
     questGrants: [],
     seenFirstLegendary: false,
