@@ -1,89 +1,28 @@
 import { T } from '../../ui/tokens';
-import { TOUCH_MIN } from '../../ui/Button';
-import {
-  INTERVENTION_LABEL, INTERVENTION_DESC,
-  type InterventionKind,
-} from '../../game/intervention';
-
-const KINDS: InterventionKind[] = ['focus', 'guard', 'retreat'];
 
 export interface InterventionBarProps {
-  /** 지금 개입할 수 있는가 (턴당 1회 + 쿨다운) */
-  available: boolean;
-  /** 못 쓸 때 사유 표시용 */
-  nextTurn: number;
-  currentTurn: number;
-  /** 선택 중인 개입. null이면 아직 안 고름 */
-  selecting: InterventionKind | null;
-  onPick: (kind: InterventionKind) => void;
-  onCancel: () => void;
+  /** 후퇴 신호를 이미 썼는가 (전투당 1회) */
+  used: boolean;
   /** 전투가 끝났으면 숨긴다 */
   hidden?: boolean;
 }
 
 /**
- * 개입 바.
+ * 후퇴 신호 상태 줄.
  *
- * 이 게임에서 플레이어가 전투 중에 만질 수 있는 유일한 것.
- * 관전만 하던 화면에 이게 들어가면서 '볼 이유'가 생긴다.
+ * 출정 후 마스터가 손댈 수 있는 것은 후퇴 신호 하나뿐이다(사용자 결정 §8-1, 2026-09-29).
+ * 예전의 집중·수호·후퇴(1턴) 버튼은 뺐다 — 집중·수호는 책략·군령이 흡수했고,
+ * 신호는 **위기 순간 리플레이가 멈출 때만** 쓴다(그 창은 `BattleScreen`이 띄운다).
+ * 여기는 "아직 남아 있는가"만 보여 준다. 아껴 뒀다가 못 쓰고 잃는 경험이 퍼머데스의 무게다.
  */
-export function InterventionBar({
-  available, nextTurn, currentTurn, selecting, onPick, onCancel, hidden,
-}: InterventionBarProps) {
+export function InterventionBar({ used, hidden }: InterventionBarProps) {
   if (hidden) return null;
-
-  if (selecting) {
-    return (
-      <div style={shell}>
-        <div style={{ fontSize: 11, color: T.rare, letterSpacing: '.16em' }}>
-          {INTERVENTION_LABEL[selecting]} — 대상을 고르십시오
-        </div>
-        <button onClick={onCancel} style={cancelStyle}>취소</button>
-      </div>
-    );
-  }
-
-  if (!available) {
-    const wait = Math.max(0, nextTurn - currentTurn);
-    return (
-      <div style={{ ...shell, color: T.dim }}>
-        <div style={{ fontSize: 11, letterSpacing: '.14em' }}>
-          {wait > 0 ? `개입 재정비 — ${wait}턴 후` : '이번 턴 개입을 사용했습니다'}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ ...shell, gap: 8 }}>
-      {KINDS.map((kind) => (
-        <button
-          key={kind}
-          onClick={() => onPick(kind)}
-          title={INTERVENTION_DESC[kind]}
-          style={{
-            flex: 1,
-            minHeight: TOUCH_MIN,
-            display: 'inline-flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 2,
-            padding: '6px 4px',
-            background: 'transparent',
-            border: `1px solid ${T.rare}`,
-            boxShadow: `0 0 14px ${T.rare}22`,
-            color: T.text,
-            fontFamily: 'inherit',
-            cursor: 'pointer',
-            boxSizing: 'border-box',
-          }}
-        >
-          <span style={{ fontSize: 13, letterSpacing: '.14em' }}>
-            {INTERVENTION_LABEL[kind]}
-          </span>
-        </button>
-      ))}
+    <div style={{ ...shell, color: used ? T.dim : T.rare }}>
+      <div style={{ fontSize: 11, letterSpacing: '.14em' }}>
+        {/* 위기가 올지 안 올지는 말하지 않는다 — 미래를 흘리면 긴장이 사라진다 */}
+        {used ? '후퇴 신호를 보냈다' : '후퇴 신호 — 위기가 오면 한 번'}
+      </div>
     </div>
   );
 }
@@ -93,20 +32,9 @@ const shell: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: 12,
-  minHeight: 52,
+  minHeight: 44,
   padding: '6px 8px',
   border: `1px solid ${T.panelHi}`,
   background: '#08070C',
   boxSizing: 'border-box',
-};
-
-const cancelStyle: React.CSSProperties = {
-  minHeight: 36,
-  padding: '6px 14px',
-  background: 'transparent',
-  border: `1px solid ${T.dim}`,
-  color: T.dim,
-  fontFamily: 'inherit',
-  fontSize: 12,
-  cursor: 'pointer',
 };

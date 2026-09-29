@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button } from '../ui/Button';
 import { Scene } from '../ui/art/Scene';
@@ -6,13 +6,12 @@ import { T } from '../ui/tokens';
 import { BattleUnit, STATUS_MARK, type Floater } from './battle/BattleUnit';
 import { InterventionBar } from './battle/InterventionBar';
 import { deriveBeats } from '../game/beats';
+import { chronicleOf } from '../game/chronicle';
 import { MISSION_LABEL } from '../game/mission';
 import { gameData } from '../game/data';
-import {
-  canIntervene, nextAvailableTurn, retreatedAt,
-  targetSideOf, type Intervention, type InterventionKind,
-} from '../game/intervention';
+import { canWithdraw, retreatedAt, type Intervention } from '../game/intervention';
 import type { EncounterResult, RosterUnit } from '../game/encounter';
+import { STRATAGEM_BY_ID, type StratagemId } from '../game/data/stratagems';
 import type { FloorSpec } from '../game/data/floors';
 import type { StatusKind } from '../game/types';
 
@@ -45,7 +44,8 @@ export interface BattleScreenProps {
  * 관전 화면.
  *
  * 전투 엔진이 만든 BattleEvent[]를 재생만 한다.
- * 단 하나의 예외가 개입 — 마스터가 판을 비틀면 같은 시드로 다시 계산해 이어붙인다.
+ * 단 하나의 예외가 후퇴 신호 — 위기 순간 리플레이가 멈추고, 마스터가 한 명을 빼내면
+ * 같은 시드로 다시 계산해 이어붙인다(발효는 다음 턴이라 지금까지 본 장면은 그대로다).
  */
 export function BattleScreen({
   result, floor, floorIndex: _floorIndex, onEnd, onIntervene, interventions = [],
@@ -56,21 +56,32 @@ export function BattleScreen({
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [hitUid, setHitUid] = useState<string | null>(null);
   const [flash, setFlash] = useState(0);
-  const [selecting, setSelecting] = useState<InterventionKind | null>(null);
+  /** 위기 창을 이미 넘겼는가 — 신호를 보냈든 그대로 싸우기로 했든 */
+  const [crisisHandled, setCrisisHandled] = useState(false);
   const floaterId = useRef(0);
 
   const bossName = floor.isBoss ? gameData.enemies[floor.enemyIds[0]]?.name : undefined;
+  /** 책략 장면 — 결과 화면의 전투 기록과 같은 함수·같은 문장 */
+  const chronicle = useMemo(() => chronicleOf(result.events, result.roster), [result]);
   const beats = useMemo(
-    () => deriveBeats(result.events, { roster: result.roster, bossName }),
-    [result, bossName],
+    () => deriveBeats(result.events, { roster: result.roster, bossName, chronicle }),
+    [result, bossName, chronicle],
   );
   const pending = beats[beatIdx] && beats[beatIdx].at <= step ? beats[beatIdx] : null;
+
+  /**
+   * 위기 — 아군 누군가 처음으로 30% 아래로 떨어진 순간(`result.crisis`).
+   * 비트가 먼저 뜨고(같은 순간이면 책략·사망 알림부터), 그다음 이 창이 뜬다.
+   */
+  const signalLeft = !!onIntervene && canWithdraw(interventions);
+  const crisisOpen = !pending && !crisisHandled && signalLeft
+    && !!result.crisis && step >= result.crisis.at;
 
   /** step 시점의 HP — 이벤트 로그가 단일 출처 */
   const hp = useMemo(() => {
     const m: Record<string, number> = {};
     const max: Record<string, number> = {};
-    for (const u of result.roster) { m[u.uid] = u.maxHp; max[u.uid] = u.maxHp; }
+    for (const u of result.roster) { m[u.uid] = u.startHp ?? u.maxHp; max[u.uid] = u.maxHp; }
     for (const e of result.events.slice(0, step)) {
       if (e.type !== 'damage' && e.type !== 'heal') continue;
       for (const uid of e.targetUids ?? []) {
@@ -116,9 +127,18 @@ export function BattleScreen({
     [interventions, curTurn],
   );
 
+  /** step 시점까지 전투에서 이탈한 영웅 uid — 군령(퇴각)과 후퇴 신호 모두 */
+  const withdrawnNow = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of result.events.slice(0, step)) {
+      if (e.type === 'withdraw') for (const uid of e.targetUids ?? []) set.add(uid);
+    }
+    return set;
+  }, [step, result]);
+
   // --- 재생 루프 ---
   useEffect(() => {
-    if (pending || selecting || step >= result.events.length) return;
+    if (pending || crisisOpen || step >= result.events.length) return;
     const timer = setTimeout(() => {
       const e = result.events[step];
       if (e && (e.type === 'damage' || e.type === 'heal')) {
@@ -147,7 +167,7 @@ export function BattleScreen({
       setStep((s) => s + 1);
     }, STEP_MS / speed);
     return () => clearTimeout(timer);
-  }, [step, speed, pending, selecting, result]);
+  }, [step, speed, pending, crisisOpen, result]);
 
   const done = step >= result.events.length && !pending;
 
@@ -160,33 +180,34 @@ export function BattleScreen({
     .slice(0, step)
     .filter((e) =>
       e.type === 'skillUse' || e.type === 'damage' || e.type === 'heal'
-      || e.type === 'death' || e.type === 'retreat' || e.type === 'statusApplied')
+      || e.type === 'death' || e.type === 'retreat' || e.type === 'statusApplied'
+      || e.type === 'stratagem' || e.type === 'withdraw')
     .slice(-SIZE.logLines);
 
   const nameOf = (uid?: string) => result.roster.find((u) => u.uid === uid)?.name ?? '';
 
-  const skipAll = () => { setStep(result.events.length); setBeatIdx(beats.length); };
+  const skipAll = () => {
+    setStep(result.events.length);
+    setBeatIdx(beats.length);
+    // 건너뛰면 위기 창도 지나간다 — 끝난 전투에 신호를 보낼 수는 없다
+    setCrisisHandled(true);
+  };
 
-  // --- 개입 ---
-  const canUse = !done && canIntervene(curTurn, interventions) && !!onIntervene;
-
-  const applyIntervention = useCallback((kind: InterventionKind, targetId: string) => {
-    if (!onIntervene) return;
-    // 다음 턴부터 발효한다. 이번 턴은 이미 재생 중이라 되돌리면 화면이 튄다.
-    onIntervene([...interventions, { turn: curTurn + 1, kind, targetId }]);
-    setSelecting(null);
-  }, [onIntervene, interventions, curTurn]);
+  /**
+   * 후퇴 신호 — 한 명을 전투에서 빼낸다. 위기 **다음 턴**부터 발효한다.
+   * 이번 턴은 이미 재생 중이라 되돌리면 화면이 튄다(개입의 원래 원칙).
+   */
+  const sendSignal = (instId: string) => {
+    if (!onIntervene || !result.crisis) return;
+    onIntervene([...interventions, { turn: result.crisis.turn + 1, kind: 'withdraw', targetId: instId }]);
+    setCrisisHandled(true);
+  };
 
   const enemies = result.roster.filter((u) => u.kind === 'enemy');
   const guards = result.roster.filter((u) => u.kind === 'guard');
   const heroes = result.roster.filter((u) => u.kind === 'hero');
-
-  /** 개입 대상으로 고를 수 있는 유닛인가 */
-  const isSelectable = (u: RosterUnit) => {
-    if (!selecting) return false;
-    if ((hp[u.uid] ?? u.maxHp) <= 0) return false;
-    return targetSideOf(selecting) === 'enemy' ? u.kind === 'enemy' : u.kind === 'hero';
-  };
+  /** 신호로 빼낼 수 있는 영웅 — 지금 살아서 전장에 있는 사람 */
+  const signalable = heroes.filter((u) => (hp[u.uid] ?? u.maxHp) > 0 && !withdrawnNow.has(u.uid));
 
   const renderUnit = (u: RosterUnit, artSize: number, scale: number) => (
     <BattleUnit
@@ -196,12 +217,12 @@ export function BattleScreen({
       castingSkill={casting?.uid === u.uid ? casting.name : undefined}
       floaters={floaters.filter((f) => f.uid === u.uid)}
       shaking={hitUid === u.uid}
-      retreated={u.kind === 'hero' && retreatedNow.has(u.sourceId)}
+      retreated={u.kind === 'hero' && (retreatedNow.has(u.sourceId) || withdrawnNow.has(u.uid))}
       statuses={statuses[u.uid] ?? []}
       artSize={artSize}
       scale={scale}
-      selectable={isSelectable(u)}
-      onSelect={() => applyIntervention(selecting!, u.kind === 'enemy' ? u.uid : u.sourceId)}
+      selectable={false}
+      onSelect={() => undefined}
     />
   );
 
@@ -276,7 +297,8 @@ export function BattleScreen({
             style={{
               color: e.type === 'death' ? T.blood
                 : e.type === 'heal' ? '#6FBF8F'
-                : e.type === 'retreat' ? T.rare
+                : e.type === 'retreat' || e.type === 'withdraw' ? T.rare
+                : e.type === 'stratagem' ? (e.success ? T.gold : T.amber)
                 : e.type === 'statusApplied' ? T.dim
                 : e.type === 'damage' && e.affinity === 'adv' ? '#FFB454'
                 : e.type === 'damage' && e.affinity === 'dis' ? '#7E93A8'
@@ -306,21 +328,18 @@ export function BattleScreen({
             )}
             {e.type === 'death' && `✖ ${nameOf((e.targetUids ?? [])[0])} 쓰러짐`}
             {e.type === 'retreat' && `↩ ${nameOf((e.targetUids ?? [])[0])} 후퇴`}
+            {e.type === 'withdraw' && `↩ ${nameOf((e.targetUids ?? [])[0])} 전장 이탈`}
+            {e.type === 'stratagem' && (
+              `⚑ ${nameOf(e.actorUid)} — ${STRATAGEM_BY_ID[e.stratagemId as StratagemId]?.name ?? '책략'}`
+              + ` ${e.success ? '성공' : '간파당함'}`
+            )}
           </div>
         ))}
       </div>
 
       {/* 개입 */}
       <div style={{ marginBottom: 10 }}>
-        <InterventionBar
-          available={canUse}
-          currentTurn={curTurn}
-          nextTurn={nextAvailableTurn(interventions)}
-          selecting={selecting}
-          onPick={setSelecting}
-          onCancel={() => setSelecting(null)}
-          hidden={done}
-        />
+        <InterventionBar used={!canWithdraw(interventions)} hidden={done || !onIntervene} />
       </div>
 
       {/* 컨트롤 */}
@@ -337,6 +356,35 @@ export function BattleScreen({
         같이 쓰면 내용이 뷰포트보다 커질 때 위쪽이 스크롤로 닿을 수 없게 된다
         (DetailModal에서 실제로 확인 버튼이 잘렸다). 비트 줄 수가 늘어도 안전하도록 맞춰둔다.
       */}
+      {/*
+        위기 — 후퇴 신호 창. 비트 창과 같은 틀(확인 창)을 쓴다.
+        빼낼 영웅을 여기서 바로 고른다 — 전장의 작은 초상을 누르게 하면 375px에서 빗나간다.
+      */}
+      {crisisOpen && result.crisis && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', zIndex: 60, overflowY: 'auto' }}>
+          <div style={{ maxWidth: 420, width: '100%', margin: 'auto' }}>
+            <SystemPanel tone="warning">
+              <div style={{ fontSize: 12, letterSpacing: '.3em', color: T.dim, marginBottom: 14 }}>위기</div>
+              <div style={{ fontSize: 15, lineHeight: 2 }}>
+                {nameOf(result.crisis.uid)}의 숨이 가빠졌다.
+              </div>
+              <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, marginTop: 8 }}>
+                후퇴 신호로 한 명을 전장에서 빼낼 수 있다. 빠진 자는 살아남지만 다시 싸우지 않는다.
+                <br />이 전투에서 단 한 번이다.
+              </div>
+            </SystemPanel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 18, alignItems: 'center' }}>
+              {signalable.map((u) => (
+                <Button key={u.uid} tone="rare" onClick={() => sendSignal(u.sourceId)}>
+                  {u.name} 후퇴 · HP {Math.max(0, Math.round(hp[u.uid] ?? u.maxHp))}/{u.maxHp}
+                </Button>
+              ))}
+              <Button onClick={() => setCrisisHandled(true)}>그대로 싸운다</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pending && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', zIndex: 60, overflowY: 'auto' }}>
           <div style={{ maxWidth: 420, width: '100%', margin: 'auto' }}>

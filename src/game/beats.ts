@@ -23,6 +23,12 @@ export interface BeatUnit {
   uid: string;
   name: string;
   maxHp: number;
+  /**
+   * 전투 시작 HP. 없으면 만피. 영웅은 층 사이 HP를 들고 오므로(숙소 회복 전 잔여) 만피가 아니다 —
+   * 이 값 없이 되짚으면 화면 HP가 실제보다 높게 보여 위기 창이 "36%인데 위기"를 말한다.
+   * 엔진(`buildAlly`)과 같은 식으로 `runEncounter`가 채운다.
+   */
+  startHp?: number;
   kind: 'hero' | 'enemy' | 'guard';
   /** kind === 'guard'일 때만 의미가 있다 */
   guardKind?: 'objective' | 'npc';
@@ -47,7 +53,7 @@ export function deriveBeats(events: BattleEvent[], ctx: BeatContext): Beat[] {
   const byUid = new Map(ctx.roster.map((u) => [u.uid, u]));
 
   const hp: Record<string, number> = {};
-  for (const u of ctx.roster) hp[u.uid] = u.maxHp;
+  for (const u of ctx.roster) hp[u.uid] = u.startHp ?? u.maxHp;
 
   const warned: Record<string, boolean> = {};
 

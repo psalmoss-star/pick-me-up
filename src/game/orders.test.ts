@@ -281,3 +281,29 @@ describe('위기 기록', () => {
     }
   });
 });
+
+describe('위기 창의 HP — 화면이 엔진과 같은 시작 HP에서 되짚는다', () => {
+  it('다친 채 출전한 영웅은 startHp가 잔여 HP이고, 위기 순간 되짚은 HP가 기준 이하다', () => {
+    const hurt = () => party().map((h) => ({ ...h, currentHp: 200 }));
+    let checked = 0;
+    for (let f = 0; f < 20; f++) {
+      for (let seed = 1; seed <= 5; seed++) {
+        const r = runEncounter({ party: hurt(), floor: floorAt(f), data: gameData, rng: createRng(seed) });
+        for (const u of r.roster.filter((x) => x.kind === 'hero')) {
+          expect(u.startHp).toBe(Math.min(200, u.maxHp));
+        }
+        if (!r.crisis) continue;
+        const u = r.roster.find((x) => x.uid === r.crisis!.uid)!;
+        let hp = u.startHp ?? u.maxHp;
+        for (const e of r.events.slice(0, r.crisis.at)) {
+          if (!(e.targetUids ?? []).includes(u.uid)) continue;
+          if (e.type === 'damage') hp -= e.amount ?? 0;
+          if (e.type === 'heal') hp = Math.min(u.maxHp, hp + (e.amount ?? 0));
+        }
+        expect(hp).toBeLessThanOrEqual(u.maxHp * CRISIS_HP_RATIO);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});

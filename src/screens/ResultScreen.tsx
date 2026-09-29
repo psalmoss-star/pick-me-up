@@ -8,6 +8,7 @@ import { MISSION_LABEL } from '../game/mission';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
 import { lineFor, pickSpeaker, templateLastWords } from '../game/voice';
+import { chronicleOf } from '../game/chronicle';
 import { Quote } from '../ui/Quote';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
@@ -111,6 +112,14 @@ export function ResultScreen({
     promotionStones: Math.round(base.promotionStones * rewardMult),
   };
 
+  /**
+   * 전투 기록 — 책략 장면. 전투 중 비트와 **같은 함수·같은 문장**이고,
+   * `finish()`가 수행자 연대기에 남기는 것도 이 목록이다.
+   */
+  const scenes = chronicleOf(result.events, result.roster);
+  /** 군령·후퇴 신호로 물러나 살아남은 자 */
+  const withdrawn = result.withdrawn.map(find).filter((h): h is HeroInstance => !!h);
+
   /** 엔딩은 최상층을 '이겼을 때'만. 최상층에서 져도 뜨면 안 된다. */
   const ending = towerCleared && win;
 
@@ -180,6 +189,34 @@ export function ResultScreen({
               variant={heroVariantOf(mvp)}
             />
           </div>
+        </div>
+      )}
+
+      {/*
+        전투 기록 — MVP와 획득 **사이**. 무엇을 얻었나보다 먼저 "어떻게 싸웠나"를 읽게 한다.
+        성공도 간파도 같은 목록에 둔다 — 기쁨과 상실을 분리하지 않는다는 원칙과 같다.
+      */}
+      {(scenes.length > 0 || withdrawn.length > 0) && (
+        <div style={{ marginBottom: 16 }}>
+          <SystemPanel tone={scenes.some((c) => c.success) ? 'rare' : 'normal'} compact>
+            <div style={{ fontSize: 13, color: T.dim, letterSpacing: '.2em', marginBottom: 10 }}>
+              전투 기록
+            </div>
+            {scenes.map((c) => (
+              <div key={c.at} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 14, letterSpacing: '.08em', color: c.success ? T.gold : T.amber }}>
+                  {c.turn}턴 · {c.title} · {c.success ? '성공' : '간파당함'}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.9, marginTop: 4 }}>{c.text}</div>
+                <div style={{ fontSize: 10, color: T.dim, lineHeight: 1.7, marginTop: 2 }}>{c.source}</div>
+              </div>
+            ))}
+            {withdrawn.length > 0 && (
+              <div style={{ fontSize: 12, color: T.rare, lineHeight: 1.9 }}>
+                물러나 살아남은 자 — {withdrawn.map(nameOf).join(', ')}
+              </div>
+            )}
+          </SystemPanel>
         </div>
       )}
 

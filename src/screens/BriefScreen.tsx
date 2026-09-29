@@ -16,6 +16,7 @@ import type { HeroInstance } from '../game/types';
 import { displayName } from '../game/identity';
 import { lineFor, pickSpeaker } from '../game/voice';
 import { Quote } from '../ui/Quote';
+import { StratagemPanel, type StratagemPanelProps } from './brief/StratagemPanel';
 
 export interface BriefScreenProps {
   floor: FloorSpec;
@@ -41,12 +42,14 @@ export interface BriefScreenProps {
    * 누가 말할지는 층 번호로 정한다. 같은 층에 다시 오면 같은 사람이 같은 말을 한다.
    */
   speakers?: HeroInstance[];
+  /** 작전 — 책략 2장 + 군령. 없으면 패널을 그리지 않는다 */
+  stratagem?: StratagemPanelProps;
 }
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
   floor, partySize, quests = [], onBack, onStart,
-  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [],
+  prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem,
 }: BriefScreenProps) {
   const speaker = pickSpeaker(speakers, floor.id);
   const sortieLine = speaker ? lineFor(speaker, 'sortie', floor.id) : null;
@@ -183,6 +186,16 @@ export function BriefScreen({
               </>
             )}
           </SystemPanel>
+        </div>
+      )}
+
+      {/*
+        작전 — 준비 한 수 **아래**. 준비는 이 층 한정의 소비이고 작전은 매 전투 들고 가는
+        방침이라, 층 정보 → 이 층 결정 → 늘 쓰는 결정 순서로 읽힌다.
+      */}
+      {stratagem && (
+        <div style={{ marginTop: 16 }}>
+          <StratagemPanel {...stratagem} />
         </div>
       )}
 

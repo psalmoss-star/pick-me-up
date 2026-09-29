@@ -103,6 +103,8 @@ export function runEncounter(args: {
         // 화면에 뜨는 이름. 개체 이름이 유일한 진실이다 (identity.ts).
         name: displayName(h, data.heroes),
         maxHp: stats.hp,
+        // battle.ts의 buildAlly와 같은 식 — currentHp 0은 "만피"라는 뜻이다
+        startHp: Math.min(h.currentHp > 0 ? h.currentHp : stats.hp, stats.hp),
         kind: 'hero',
         side: 'ally',
         sourceId: h.instId,

@@ -10,6 +10,7 @@ import { statsOfInstance, attributesOfInstance, klassFor } from '../game/stats';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
+import { DeedList } from './DeedList';
 import { livingHeroes } from '../game/roster';
 import { canPromote, expToNext } from '../game/progression';
 import { heroPower } from '../game/power';
@@ -254,7 +255,7 @@ export function StatusScreen({
         })}
       </SystemPanel>
 
-      {(def.lore || origin || temper) && (
+      {(def.lore || origin || temper || hero.deeds?.length) && (
         <>
       <SectionLabel>기록</SectionLabel>
           <SystemPanel compact>
@@ -278,6 +279,12 @@ export function StatusScreen({
                 }}
               >
                 {originText(origin)}
+              </div>
+            )}
+            {/* 연대기 — 생전(태어나기 전)이 아니라 이 탑에서 한 일. 생전 바로 아래에 둔다 */}
+            {hero.deeds && hero.deeds.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+                <DeedList deeds={hero.deeds} />
               </div>
             )}
             {legend && (

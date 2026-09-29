@@ -7,6 +7,7 @@ import { HeroCard } from '../ui/HeroCard';
 import { heroArtOf } from '../ui/artMap';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
+import { DeedList } from './DeedList';
 import { klassFor } from '../game/stats';
 import { gameData } from '../game/data';
 import type { Legacy } from '../game/legacyTypes';
@@ -133,6 +134,12 @@ export function GraveScreen({
               {f.lastWords && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.panelHi}` }}>
                   <Quote text={f.lastWords} tone="death" />
+                </div>
+              )}
+              {/* 생전의 책략 — 「박망파에서 불을 놓은 자」로 기억되게 한다 */}
+              {f.deeds && f.deeds.length > 0 && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.panelHi}` }}>
+                  <DeedList deeds={f.deeds} />
                 </div>
               )}
             </SystemPanel>

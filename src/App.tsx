@@ -12,6 +12,7 @@ import { SmithScreen } from './screens/SmithScreen';
 import { GraveScreen } from './screens/GraveScreen';
 import { AdventureScreen } from './screens/AdventureScreen';
 import { dispatchedHeroIds } from './game/adventure';
+import { unlockedStratagems } from './game/stratagem';
 import { TowerScreen } from './screens/TowerScreen';
 import { BattleScreen } from './screens/BattleScreen';
 import { ResultScreen } from './screens/ResultScreen';
@@ -117,6 +118,11 @@ export default function App() {
   const selectFloor = useRunStore((s) => s.selectFloor);
   const startBattle = useRunStore((s) => s.start);
   const intervene = useRunStore((s) => s.intervene);
+  const stratagemLoadout = useRunStore((s) => s.stratagemLoadout);
+  const stratagemResist = useRunStore((s) => s.stratagemResist);
+  const fallback = useRunStore((s) => s.fallback);
+  const setStratagemSlot = useRunStore((s) => s.setStratagemSlot);
+  const setFallback = useRunStore((s) => s.setFallback);
   const finishBattle = useRunStore((s) => s.finish);
   const hydrate = useRunStore((s) => s.hydrate);
   const grantTestFunds = useRunStore((s) => s.grantTestFunds);
@@ -666,6 +672,14 @@ export default function App() {
             prepBought={prep != null}
             gold={wallet.gold}
             onBuyPrep={buyPrep}
+            stratagem={{
+              loadout: stratagemLoadout,
+              unlocked: unlockedStratagems(maxFloorReached),
+              resist: stratagemResist,
+              fallback,
+              onSetSlot: setStratagemSlot,
+              onSetFallback: setFallback,
+            }}
           />
         )}
         {screen === 'battle' && result && (
