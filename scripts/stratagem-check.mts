@@ -15,6 +15,7 @@ import { klassFor } from '../src/game/stats';
 import { gameData, FLOORS } from '../src/game/data';
 import { HERO } from '../src/game/data/sample';
 import { STRATAGEMS, type StratagemId } from '../src/game/data/stratagems';
+import type { TerrainTag } from '../src/game/data/terrain';
 import type { FloorSpec } from '../src/game/data/floors';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from '../src/game/types';
 
@@ -54,7 +55,7 @@ interface Stat {
   okBoss: number; firedBoss: number; failDeaths: number; failGames: number;
 }
 
-function measure(band: Band, ids: StratagemId[]): Stat {
+function measure(band: Band, ids: StratagemId[], terrain: TerrainTag | null = null): Stat {
   const st: Stat = { win: 0, deaths: 0, fired: 0, ok: 0, okBoss: 0, firedBoss: 0, failDeaths: 0, failGames: 0 };
   let total = 0;
   for (const floor of band.floors) {
@@ -63,7 +64,7 @@ function measure(band: Band, ids: StratagemId[]): Stat {
     for (let s = 0; s < band.n; s++) {
       const r = runEncounter({
         party: make(), floor, data: gameData, rng: createRng(s),
-        stratagems: ids.length ? { ids, rng: substream(s, STREAM.STRATAGEM) } : undefined,
+        stratagems: ids.length ? { ids, terrain, rng: substream(s, STREAM.STRATAGEM) } : undefined,
       });
       total++;
       if (r.outcome === 'victory') st.win++;
@@ -108,3 +109,16 @@ for (const [name, g] of Object.entries(gains)) {
   console.log(`  ${w(name, 14)} ${((avg >= 0 ? '+' : '') + avg.toFixed(1)).padStart(6)}p   [${g.map((x) => x.toFixed(0)).join(', ')}]`);
 }
 console.log('');
+
+/*
+  지형 (기획서 2단계) — 기본 장착(매복·야습)으로 접점 지형만 바꿔 본다.
+  숲 = 둘 다 유리, 관문 = 매복 불리, 지형 없음 = 맵 이전. 경로 선택이 얼마나 무거운지의 크기다.
+*/
+console.log('  지형 — 기본 장착(매복·야습), 구간별 승률 (지형 없음 / 숲: 둘 다 유리 / 관문: 매복 불리)\n');
+for (const band of BANDS) {
+  const ids: StratagemId[] = ['ambush', 'nightRaid'];
+  const [none, forest, fort] = [null, 'forest', 'fort'].map((t) => measure(band, ids, t as TerrainTag | null));
+  console.log(`  ${w(band.name, 20)} ${pct(none.win)} / ${pct(forest.win)} / ${pct(fort.win)}`);
+}
+console.log('');
+
