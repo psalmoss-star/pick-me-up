@@ -21,9 +21,13 @@ import {
   type GuardDef, type Mission,
 } from './mission';
 import {
-  focusTargetAt, guardedAt, retreatedAt,
+  focusTargetAt, guardedAt, retreatedAt, withdrawnBy,
   GUARD_DEF_BONUS, GUARD_STATUS, type Intervention,
 } from './intervention';
+import {
+  attackCandidates, fallbackRatio, protecteeUids, DEFAULT_ORDERS, type Orders,
+} from './orders';
+import { COVER_CHANCE, CRISIS_HP_RATIO } from './data/orders';
 import { rngChance } from './rng';
 
 // ------------------------------------------------------------
@@ -90,14 +94,36 @@ export interface BattleInput {
    * 같은 시드 + 같은 개수 = 같은 결과가 유지된다.
    */
   potions?: number;
+  /**
+   * 작전 카드 3장(공격·보호·퇴각). 생략 = `DEFAULT_ORDERS` = 현행 엔진과 비트 단위로 같다.
+   * 개입·포션과 같은 **전투 전 입력**이다.
+   */
+  orders?: Orders;
+}
+
+/**
+ * 위기 — 아군 영웅의 HP가 처음으로 `CRISIS_HP_RATIO` 이하가 된 순간.
+ *
+ * ⚠️ **이벤트가 아니라 결과 필드다.** `events`에 한 줄이라도 더하면 카드 없는 전투가
+ * 기준선과 달라진다(`ordersBaseline.test.ts`). 화면은 이 값으로 리플레이를 멈춘다.
+ */
+export interface Crisis {
+  turn: number;
+  /** 이 인덱스의 이벤트까지 재생하면 멈춘다 (`Beat.at`과 같은 뜻) */
+  at: number;
+  uid: string;
 }
 
 export interface BattleOutcome {
   outcome: 'victory' | 'defeat' | 'timeout';
   events: BattleEvent[];
+  /** 살아남은 영웅. **전투에서 이탈한 영웅도 여기 있다**(이탈 = 생존) */
   survivors: Array<{ instId: HeroInstId; currentHp: number }>;
   casualties: HeroInstId[];
+  /** 퇴각 방침·후퇴 신호로 이탈한 영웅. `survivors`의 부분집합 */
+  withdrawn: HeroInstId[];
   turnsElapsed: number;
+  crisis: Crisis | null;
 }
 
 // ------------------------------------------------------------
@@ -305,19 +331,32 @@ export function affinityOf(elem: number): Affinity | undefined {
 // 타겟 선택
 // ------------------------------------------------------------
 
+/** 타겟 선택이 전투 상태에서 읽는 것들 — 인자가 늘어 묶었다 */
+interface TargetingCtx {
+  focus?: Mission['enemyFocus'];
+  /** 개입 '집중'으로 지정된 적 uid. 아군의 단일 공격이 여기로 몰린다. */
+  focusedEnemyUid?: string | null;
+  /** 개입 '후퇴' 중인 유닛 uid — 피격 대상에서 빠진다 */
+  retreatedUids?: Set<string>;
+  /** 전투에서 이탈한 영웅 uid — 어떤 스킬의 대상도 되지 않는다 */
+  withdrawnUids?: Set<string>;
+  orders: Orders;
+  /** 보호 방침으로 탱커가 막아섰을 때 부른다 (이벤트 기록용) */
+  onCover?: (tank: Combatant, protectee: Combatant) => void;
+}
+
 function selectTargets(
   actor: Combatant,
   skill: Skill,
   all: Combatant[],
   rng: RNG,
-  focus?: Mission['enemyFocus'],
-  /** 개입 '집중'으로 지정된 적 uid. 아군의 단일 공격이 여기로 몰린다. */
-  focusedEnemyUid?: string | null,
-  /** 개입 '후퇴' 중인 유닛 uid — 피격 대상에서 빠진다 */
-  retreatedUids?: Set<string>,
+  ctx: TargetingCtx,
 ): Combatant[] {
+  const { focus, focusedEnemyUid, retreatedUids, withdrawnUids, orders } = ctx;
   const pool = all.filter((c) => {
     if (!c.isAlive) return false;
+    // 이탈한 영웅은 전장에 없다 — 공격도 회복도 닿지 않는다
+    if (withdrawnUids?.has(c.uid)) return false;
     // 후퇴한 유닛은 전선에서 빠져 있으므로 공격 대상이 되지 않는다.
     // 단 아군의 회복/버프 대상으로는 남는다.
     if (retreatedUids?.has(c.uid) && skill.targetSide === 'enemy') return false;
@@ -338,28 +377,79 @@ function selectTargets(
       return pool.length <= 2 ? pool : [...pool].sort(() => rng() - 0.5).slice(0, 2);
     case 'single':
     default: {
-      // 개입 '집중' — 아군의 단일 공격을 지정한 적에게 몰아준다.
-      // 마스터의 지시이므로 확률이 아니라 확정이다.
-      if (focusedEnemyUid && actor.side === 'ally' && skill.targetSide === 'enemy') {
-        const focused = pool.find((c) => c.uid === focusedEnemyUid);
-        if (focused) return [focused];
-      }
-      // 임무 집중 타겟 — 적은 보호 대상을 우선 노린다
-      if (focus && actor.side === 'enemy' && skill.targetSide === 'enemy') {
-        const protectee = pool.filter((c) => c.sourceId.startsWith(`${focus.kind}:`));
-        if (protectee.length > 0 && rng() < focus.chance) {
-          return [protectee[Math.floor(rng() * protectee.length)]];
-        }
-      }
-      // 탱커 우선 피격 — 단, 확정이 아니라 확률 (무한 사수 방지)
-      const tanks = pool.filter((c) => c.role === 'tank');
-      // 노리는 쪽이 적이면 '아군이 적 탱커를 친다' — 진영마다 계수가 다르다(위 주석)
-      const aggro = actor.side === 'ally' ? TANK_AGGRO_VS_ENEMY : TANK_AGGRO_VS_ALLY;
-      const useTank = skill.targetSide === 'enemy' && tanks.length > 0 && rng() < aggro;
-      const candidates = useTank ? tanks : pool;
-      return [candidates[Math.floor(rng() * candidates.length)]];
+      const picked = pickSingle(actor, skill, pool, rng, focus, focusedEnemyUid, orders);
+      return [coverIfOrdered(actor, skill, picked, pool, rng, ctx)];
     }
   }
+}
+
+function pickSingle(
+  actor: Combatant,
+  skill: Skill,
+  pool: Combatant[],
+  rng: RNG,
+  focus: Mission['enemyFocus'] | undefined,
+  focusedEnemyUid: string | null | undefined,
+  orders: Orders,
+): Combatant {
+  const allyAttack = actor.side === 'ally' && skill.targetSide === 'enemy';
+  // 개입 '집중' — 아군의 단일 공격을 지정한 적에게 몰아준다.
+  // 마스터의 지시이므로 확률이 아니라 확정이다.
+  if (focusedEnemyUid && allyAttack) {
+    const focused = pool.find((c) => c.uid === focusedEnemyUid);
+    if (focused) return focused;
+  }
+  /*
+    작전 카드 — 공격 방침. `free`면 null이 와서 아래 현행 규칙으로 떨어진다.
+    ⚠️ 이 분기는 `free`일 때 RNG를 한 번도 뽑지 않아야 한다(기준선 잠금).
+  */
+  if (allyAttack) {
+    const ordered = attackCandidates(orders.attack, pool, effAtk);
+    if (ordered) {
+      return ordered.length === 1 ? ordered[0] : ordered[Math.floor(rng() * ordered.length)];
+    }
+  }
+  // 임무 집중 타겟 — 적은 보호 대상을 우선 노린다
+  if (focus && actor.side === 'enemy' && skill.targetSide === 'enemy') {
+    const protectee = pool.filter((c) => c.sourceId.startsWith(`${focus.kind}:`));
+    if (protectee.length > 0 && rng() < focus.chance) {
+      return protectee[Math.floor(rng() * protectee.length)];
+    }
+  }
+  // 탱커 우선 피격 — 단, 확정이 아니라 확률 (무한 사수 방지)
+  const tanks = pool.filter((c) => c.role === 'tank');
+  // 노리는 쪽이 적이면 '아군이 적 탱커를 친다' — 진영마다 계수가 다르다(위 주석)
+  const aggro = actor.side === 'ally' ? TANK_AGGRO_VS_ENEMY : TANK_AGGRO_VS_ALLY;
+  const useTank = skill.targetSide === 'enemy' && tanks.length > 0 && rng() < aggro;
+  const candidates = useTank ? tanks : pool;
+  return candidates[Math.floor(rng() * candidates.length)];
+}
+
+/**
+ * 작전 카드 — 보호 방침. 적의 단일 공격이 보호 대상을 노리면 아군 탱커가 확률로 막아선다.
+ *
+ * 새 능력치가 아니라 **대상 교체**다. 탱커가 없거나, 보호 대상이 탱커 자신이면 아무 일도 없다.
+ * `free`면 RNG를 뽑지 않는다(기준선 잠금).
+ */
+function coverIfOrdered(
+  actor: Combatant,
+  skill: Skill,
+  target: Combatant,
+  pool: Combatant[],
+  rng: RNG,
+  ctx: TargetingCtx,
+): Combatant {
+  if (ctx.orders.protect === 'free') return target;
+  if (actor.side !== 'enemy' || skill.targetSide !== 'enemy' || !isHero(target)) return target;
+  if (target.role === 'tank') return target;
+  // 보호 대상은 **이 순간** 기준으로 정한다 — "가장 약한 아군"은 매 공격마다 바뀐다
+  const protectees = protecteeUids(ctx.orders.protect, pool.filter(isHero));
+  if (!protectees.has(target.uid)) return target;
+  const tank = pool.find((c) => isHero(c) && c.role === 'tank');
+  if (!tank) return target;
+  if (!rngChance(rng, COVER_CHANCE)) return target;
+  ctx.onCover?.(tank, target);
+  return tank;
 }
 
 // ------------------------------------------------------------
@@ -386,6 +476,8 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   const missionFocus = focusOf(mission);
   const guardDefs = input.guards ?? [];
   const interventions = input.interventions ?? [];
+  const orders = input.orders ?? DEFAULT_ORDERS;
+  const fallbackAt = fallbackRatio(orders.fallback);
 
   const units: Combatant[] = [
     ...allies.filter((a) => !a.isDead)
@@ -406,7 +498,14 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   const heroUnits = units.filter(isHero);
   const guardUnits = units.filter(isGuard);
   const enemyUnits = units.filter((u) => u.side === 'enemy');
-  const heroesAlive = () => heroUnits.some((u) => u.isAlive);
+  /**
+   * 전투에서 이탈한 영웅 uid. 한 번 들어가면 끝까지 나오지 않는다.
+   * 이탈한 영웅은 행동·피격·회복이 전부 없고 **생존**한다 — 전장에 남은 인원이 지면 패배다.
+   */
+  const withdrawnUids = new Set<string>();
+  const inField = (u: Combatant) => u.isAlive && !withdrawnUids.has(u.uid);
+  // 이탈한 영웅을 "살아 있음"으로 세면 남은 인원이 전멸해도 전투가 안 끝난다
+  const heroesAlive = () => heroUnits.some(inField);
   const enemiesAlive = () => enemyUnits.some((u) => u.isAlive);
 
   const checkMission = (turn: number) =>
@@ -422,6 +521,18 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   let outcome: BattleOutcome['outcome'] = 'timeout';
   // 파티 공용 재고. 전투 전 입력이므로 도중에 늘지 않는다.
   let potionsLeft = Math.max(0, Math.floor(input.potions ?? 0));
+  let crisis: Crisis | null = null;
+  /** 위기 기록 — 행동 하나가 끝날 때마다 본다. 전투당 한 번뿐이다 */
+  const noteCrisis = () => {
+    if (crisis) return;
+    const hurt = heroUnits.find((u) => inField(u) && u.currentHp / u.stats.hp <= CRISIS_HP_RATIO);
+    if (hurt) crisis = { turn, at: events.length, uid: hurt.uid };
+  };
+  const withdraw = (u: Combatant) => {
+    if (withdrawnUids.has(u.uid)) return;
+    withdrawnUids.add(u.uid);
+    events.push({ turn, type: 'withdraw', targetUids: [u.uid] });
+  };
 
   while (turn < maxTurns) {
     turn++;
@@ -435,10 +546,16 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     );
     const focusedEnemyUid = focusTargetAt(interventions, turn);
 
+    // 후퇴 신호 — 발효 턴부터 끝까지 이탈
+    const signalled = withdrawnBy(interventions, turn);
+    for (const u of heroUnits) {
+      if (u.isAlive && signalled.has(u.sourceId)) withdraw(u);
+    }
+
     // 수호 — 해당 턴에 방어 상태를 걸어준다
     const guardedIds = guardedAt(interventions, turn);
     for (const u of units) {
-      if (!isHero(u) || !guardedIds.has(u.sourceId) || !u.isAlive) continue;
+      if (!isHero(u) || !guardedIds.has(u.sourceId) || !inField(u)) continue;
       if (u.statuses.some((s) => s.kind === GUARD_STATUS && s.magnitude >= GUARD_DEF_BONUS)) continue;
       u.statuses.push({
         kind: GUARD_STATUS,
@@ -465,7 +582,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
      */
     if (potionsLeft > 0) {
       const needy = units
-        .filter((u) => u.isAlive && u.side === 'ally' && !isGuard(u)
+        .filter((u) => inField(u) && u.side === 'ally' && !isGuard(u)
           && u.currentHp / u.stats.hp <= POTION_TUNING.triggerAt)
         .sort((a, b) => a.currentHp / a.stats.hp - b.currentHp / b.stats.hp);
 
@@ -482,13 +599,24 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       }
     }
 
+    /*
+      작전 카드 — 퇴각 방침. 포션 **다음**에 본다: 포션이 기준 위로 끌어올렸으면 남는다.
+      턴 시작에만 보는 이유는 포션과 같다 — 행동 도중에 빠지면 이미 맞은 뒤라 늦거나,
+      같은 턴 안에서 누가 먼저 움직였느냐에 따라 결과가 흔들린다.
+    */
+    if (fallbackAt !== null) {
+      for (const u of heroUnits) {
+        if (inField(u) && u.currentHp / u.stats.hp <= fallbackAt) withdraw(u);
+      }
+    }
+
     // 턴 시작 시 속도 순 정렬 (버프 반영)
     const order = units
-      .filter((u) => u.isAlive && !isGuard(u))
+      .filter((u) => inField(u) && !isGuard(u))
       .sort((a, b) => effSpd(b) - effSpd(a));
 
     for (const actor of order) {
-      if (!actor.isAlive) continue;
+      if (!inField(actor)) continue;
       // 후퇴한 영웅은 이번 턴 행동하지 않는다
       if (retreatedUids.has(actor.uid)) continue;
 
@@ -499,6 +627,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
           applyDamage(actor, dot, events, turn, undefined);
         }
       }
+      noteCrisis();
       if (!actor.isAlive) continue;
 
       if (isStunned(actor)) {
@@ -508,9 +637,12 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
 
       const skill = chooseSkill(actor, data, skillsOf(actor));
       if (skill) {
-        const targets = selectTargets(
-          actor, skill, units, rng, missionFocus, focusedEnemyUid, retreatedUids,
-        );
+        const targets = selectTargets(actor, skill, units, rng, {
+          focus: missionFocus, focusedEnemyUid, retreatedUids, withdrawnUids, orders,
+          onCover: (tank, protectee) => events.push({
+            turn, type: 'cover', actorUid: tank.uid, targetUids: [protectee.uid],
+          }),
+        });
         if (targets.length > 0) {
           events.push({
             turn, type: 'skillUse', actorUid: actor.uid, skillId: skill.id,
@@ -524,6 +656,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
           actor.cooldowns[skill.id] = skill.cooldown;
         }
       }
+      noteCrisis();
 
       // 쿨다운 감소
       for (const k of Object.keys(actor.cooldowns)) {
@@ -552,6 +685,10 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       .filter((u) => u.isAlive)
       .map((u) => ({ instId: u.sourceId as HeroInstId, currentHp: u.currentHp })),
     casualties: allyUnits.filter((u) => !u.isAlive).map((u) => u.sourceId as HeroInstId),
+    withdrawn: allyUnits
+      .filter((u) => u.isAlive && withdrawnUids.has(u.uid))
+      .map((u) => u.sourceId as HeroInstId),
+    crisis,
   };
 }
 

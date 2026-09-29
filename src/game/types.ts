@@ -416,6 +416,8 @@ export type BattleEventType =
   | 'statusExpired'
   | 'death'
   | 'retreat'      // 마스터의 개입으로 한 턴 물러남
+  | 'withdraw'     // 전투에서 완전히 이탈 — 퇴각 방침 또는 후퇴 신호. 생존한다
+  | 'cover'        // 보호 방침 — 아군 탱커(actorUid)가 보호 대상(targetUids)을 막아섰다
   | 'battleEnd';
 
 /**

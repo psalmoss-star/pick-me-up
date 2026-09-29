@@ -12,6 +12,7 @@ import { simulateBattle, type BattleData, type BattleOutcome } from './battle';
 import { statsOfInstance } from './stats';
 import { displayName } from './identity';
 import { applyBonus, heroBonus } from './gear';
+import type { Orders } from './orders';
 import type { FloorSpec } from './data/floors';
 import { enemyStatMultFor } from './data/floorgen';
 import type { BeatUnit } from './beats';
@@ -56,6 +57,8 @@ export function runEncounter(args: {
   inventory?: Map<GearInstId, GearInstance>;
   /** 들려 보낸 포션 개수 */
   potions?: number;
+  /** 작전 카드. 생략하면 현행 엔진 그대로 */
+  orders?: Orders;
 }): EncounterResult {
   const { party, floor, data, rng, inventory } = args;
   const alive = party.filter((h) => !h.isDead);
@@ -69,6 +72,7 @@ export function runEncounter(args: {
     guards: floor.guards,
     maxTurns: args.maxTurns,
     interventions: args.interventions,
+    orders: args.orders,
     allyAtkMult: args.allyAtkMult,
     /**
      * 층 깊이에 따른 적 강화.
