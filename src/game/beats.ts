@@ -6,6 +6,7 @@
  * 플레이어가 반드시 봐야 하는 순간만 골라낸다.
  */
 import type { BattleEvent } from './types';
+import type { ChronicleEntry } from './chronicle';
 
 export type BeatTone = 'normal' | 'rare' | 'warning' | 'death';
 
@@ -31,6 +32,11 @@ export interface BeatContext {
   roster: BeatUnit[];
   /** 보스 층이면 조우 경고를 맨 앞에 넣는다 */
   bossName?: string;
+  /**
+   * 책략 장면 — `chronicleOf`가 만든 것을 그대로 받는다.
+   * 결과 화면의 전투 기록과 **같은 문장**이어야 해서 여기서 다시 만들지 않는다.
+   */
+  chronicle?: ChronicleEntry[];
 }
 
 /** 보호 대상이 이 비율 밑으로 떨어지면 한 번 경고한다 */
@@ -117,5 +123,16 @@ export function deriveBeats(events: BattleEvent[], ctx: BeatContext): Beat[] {
     }
   });
 
+  // 책략 — 성공은 드문 장면(rare), 간파는 경고(warning)
+  for (const c of ctx.chronicle ?? []) {
+    beats.push({
+      at: c.at,
+      tone: c.success ? 'rare' : 'warning',
+      title: `${c.title} — ${c.success ? '성공' : '간파당함'}`,
+      lines: [c.text],
+    });
+  }
+
+  // 같은 인덱스면 넣은 순서를 지킨다(Array.prototype.sort는 안정 정렬)
   return beats.sort((a, b) => a.at - b.at);
 }
