@@ -109,6 +109,17 @@
 - **전설(gdd-v3 §4.11)은 소환 주 난수를 밀지 않는다.** 판정은 `STREAM.LEGEND`로, 주 난수를 다 쓴 뒤에 한다.
   전투 수치는 빌린 유형의 ★5와 같다. 전설이 죽으면 이름이 봉인되어 **모든 회차에서** 다시 안 나온다.
   `data/legends.ts`의 id는 세이브에 남으므로 바꾸거나 지우지 말 것(추가만).
+- **책략(STEP 58)은 전투 입력이다.** 카드가 없으면 전투 로그가 **비트 단위로 같아야** 한다 —
+  `ordersBaseline.test.ts`의 지문 스냅샷이 잠근다. **깨지면 스냅샷을 갱신하지 말고 변경을 의심할 것.**
+  판정 난수는 `STREAM.STRATAGEM`(59) 별도 흐름이다. 주 전투 난수로 굴리면 판정 한 번이 이후 전투를 다시 섞는다.
+  `data/stratagems.ts`의 id는 세이브(장착·내성·연대기)에 남으므로 **추가만** 한다.
+  **삼국지연의(책)의 책략만** 넣는다 — 배수진·십면매복은 초한지라 뺐다.
+- **책략은 불리할 때 영웅이 자동으로 쓴다**(사용자 결정, 2026-09-29 — 기획서의 "제안, 자동 아님"을 대체).
+  간파의 대가는 **치명적이지 않다**(HP 1에서 멈춘다). 마스터가 고르지 않은 판정으로 영웅이 죽으면 퍼머데스가 운이 된다.
+- **출정 후 마스터가 손댈 수 있는 것은 후퇴 신호 하나뿐이다**(사용자 결정 §8-1). 위기 순간(`result.crisis`)에
+  리플레이가 멈추고, 1명을 전투에서 빼낸다(생존). 전투당 1회다. 집중·수호·1턴 후퇴 바는 화면에서 뺐다(엔진엔 남아 있다).
+  군령(퇴각)과 책략은 `start()`·`intervene()`이 **`battleInputs` 하나로** 넘긴다 — 한쪽이 빠지면 신호를 쓰는 순간 증발한다.
+- 작전 카드 중 **공격·보호 방침은 쓰지 않는다**(측정: '약한 적' 독주 +25~30p, 보호 ±1p). 되살리려면 먼저 `orders-check`로 다시 잴 것.
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
 
@@ -118,7 +129,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 962개 통과)
+npm test           # Vitest 1회 실행 (현재 1047개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -130,7 +141,12 @@ npx tsx scripts/fresh-check.mts         # 갓 뽑은 개체 — 등급×레벨 �
 npx tsx scripts/agi-impact.mts          # 마르·예니 — 위 세 도구가 안 쓰는 두 영웅
 npx tsx scripts/floor-tune.mts          # 생성 층(21~100) 승률 점검
 npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
+npx tsx scripts/stratagem-check.mts     # 책략 카드별 승률·사망·발동률·성공률 (STEP 58)
+npx tsx scripts/orders-check.mts        # 방침 카드(공격·보호·퇴각) — 퇴각만 쓰인다
 ```
+
+⚠️ **`sim`·`climb-check`·`floor-tune`은 책략을 쓰지 않는다.** 층 난이도는 "책략 없음" 기준이고,
+실제 플레이(기본 장착 매복·야습)는 중·상층이 표보다 5~9p 쉽다. 책략 수치를 만졌으면 `stratagem-check`를 돌릴 것.
 
 ⚠️ **소환 시작 레벨(`summonLevel`)·성장 곡선을 만졌으면 `fresh-check`를 돌릴 것.**
 `sim`과 `climb-check`는 **자체 기준 파티(★2 Lv.15~★4 Lv.50)만** 쓰므로 이 축을
@@ -219,7 +235,10 @@ src/
 │  ├─ encounter.ts    # runEncounter — 로스터/MVP 조립
 │  ├─ power.ts        # 전투력 — **표시 전용.** 엔진이 import하면 안 된다(테스트로 잠금)
 │  ├─ formation.ts    # 진형·속성 구성·자동 편성 후보. 전부 표시/보조용 파생값
-│  ├─ intervention.ts # 개입(집중/수호/후퇴)
+│  ├─ intervention.ts # 개입 — 화면이 쓰는 것은 후퇴 신호(withdraw)뿐. 집중/수호/1턴 후퇴는 엔진에만 남았다
+│  ├─ orders.ts       # 작전 방침 — 퇴각(군령)만 쓴다. 기본값 = 현행 엔진(비트 단위)
+│  ├─ stratagem.ts    # 책략 판정(조건·수행자·성공률·내성·해금). RNG를 받지 않는다
+│  ├─ chronicle.ts    # 책략 장면 문장·영웅 연대기 — 비트·결과·연대기가 같은 함수를 쓴다
 │  ├─ beats.ts        # 이벤트 비트 (확인 창 트리거)
 │  ├─ sim.ts          # 밸런싱용 CLI
 │  └─ data/
@@ -243,6 +262,9 @@ src/
 │     ├─ temperaments.ts # 기질 8종. **순서를 바꾸면 기존 개체의 성격이 바뀐다**
 │     ├─ voice.ts     # 대사 표 — 5순간 × 8기질 × 자각 2단계(low=★1~3 / high=★4~6)
 │     ├─ legends.ts   # 고유 전설 6명 + ★5 중 전설 몫. **id는 세이브에 남는다 — 추가만**
+│     ├─ stratagems.ts # 책략 6종(삼국지연의) + 튜닝. **id는 세이브에 남는다 — 추가만**
+│     ├─ chronicle.ts # 책략별 성공·간파 문장. {ally:이/가} 규칙
+│     ├─ orders.ts    # 퇴각 기준·보호 확률·위기 HP 비율
 │     └─ index.ts     # 전투 엔진용 데이터 번들 (gameData)
 ├─ stores/
 │  ├─ runStore.ts     # 런 상태(Zustand). 게임 상태의 단일 출처
