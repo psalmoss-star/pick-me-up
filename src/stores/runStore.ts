@@ -425,6 +425,12 @@ export interface RunActions {
   buyGear: (defId: GearDefId) => BuyGearResult;
   /** 장비 착용. 같은 슬롯에 있던 것은 자동으로 창고로 돌아간다. */
   equipGear: (heroId: HeroInstId, gearId: GearInstId) => EquipGearResult;
+  /**
+   * 가져오기 — 다른 영웅이 낀 장비를 **명시적으로** 옮겨 낀다. 창고의 장비면 착용과 같다.
+   * `equipGear`는 남의 장비를 막는다(조용히 뺏으면 그쪽 전투력이 말없이 떨어진다) —
+   * 이 액션은 화면이 그 하락을 보여 준 뒤에만 부른다.
+   */
+  takeGear: (heroId: HeroInstId, gearId: GearInstId) => TakeGearResult;
   /** 장비 해제 */
   unequipGear: (heroId: HeroInstId, slot: GearSlot) => void;
   /** 장비 강화. 실패해도 파괴되지 않고 금만 잃는다. */
@@ -495,6 +501,10 @@ export type AssignResult =
 export type BuyGearResult =
   | { ok: true; gear: GearInstance; spent: number }
   | { ok: false; reason: 'not-sold' | 'not-enough-gold' };
+
+export type TakeGearResult =
+  | { ok: true; from: HeroInstId | null; unequipped: GearInstId | null }
+  | Exclude<EquipGearResult, { ok: true }>;
 
 export type EquipGearResult =
   | { ok: true; unequipped: GearInstId | null }
@@ -1797,6 +1807,42 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       }));
       saveRun(get());
       return { ok: true, unequipped: r.unequipped };
+    },
+
+    takeGear: (heroId, gearId) => {
+      const { roster, gear } = get();
+      const hero = roster.find((h) => h.instId === heroId);
+      if (!hero) return { ok: false, reason: 'no-hero' };
+      const inst = gear.find((g) => g.instId === gearId);
+      const from = inst?.equippedBy && inst.equippedBy !== heroId ? inst.equippedBy : null;
+      const holder = from ? roster.find((h) => h.instId === from) : undefined;
+
+      // 원 소유자에게서 먼저 벗긴 **가상의** 인벤토리로 판정한다 — 실패하면 아무것도 안 바뀐다
+      const index = gearIndex(gear);
+      if (inst && from) index.set(gearId, { ...inst, equippedBy: null });
+      const r = equipGearPure({ hero, gearId, inventory: index });
+      if (!r.ok) return r;
+      const slot = GEAR_DEFS[inst!.defId].slot;
+
+      // 한 번의 set — 중간 상태(두 영웅이 같은 장비를 낀 순간)가 저장되지 않게
+      set((s) => ({
+        roster: s.roster.map((h) => {
+          if (h.instId === heroId) return { ...h, gear: r.gear };
+          if (holder && h.instId === from) {
+            const g = { ...(h.gear ?? {}) };
+            delete g[slot];
+            return { ...h, gear: g };
+          }
+          return h;
+        }),
+        gear: s.gear.map((g) => {
+          if (g.instId === gearId) return { ...g, equippedBy: heroId };
+          if (g.instId === r.unequipped) return { ...g, equippedBy: null };
+          return g;
+        }),
+      }));
+      saveRun(get());
+      return { ok: true, from, unequipped: r.unequipped };
     },
 
     unequipGear: (heroId, slot) => {

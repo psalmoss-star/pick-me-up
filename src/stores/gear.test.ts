@@ -130,6 +130,46 @@ describe('착용 / 해제', () => {
       .toEqual({ ok: false, reason: 'equipped-elsewhere' });
   });
 
+  it('가져오기 — 원 소유자의 슬롯이 비고, 장비는 새 영웅에게 간다 (명시적 행동)', () => {
+    const { s, heroId, gearId } = setup();
+    s.getState().equipGear(heroId, gearId);
+    const other = s.getState().roster[1].instId;
+
+    expect(s.getState().takeGear(other, gearId)).toEqual({ ok: true, from: heroId, unequipped: null });
+    const st = s.getState();
+    expect(st.roster.find((h) => h.instId === heroId)!.gear?.weapon).toBeUndefined();
+    expect(st.roster.find((h) => h.instId === other)!.gear?.weapon).toBe(gearId);
+    expect(st.gear.find((g) => g.instId === gearId)!.equippedBy).toBe(other);
+  });
+
+  it('가져오기 — 받는 영웅이 끼고 있던 것은 창고로 돌아간다', () => {
+    const { s, heroId, gearId } = setup();
+    s.getState().buyGear(gd('w_chipped'));
+    const other = s.getState().roster[1].instId;
+    const chipped = s.getState().gear[1].instId;
+    s.getState().equipGear(heroId, gearId);
+    s.getState().equipGear(other, chipped);
+
+    expect(s.getState().takeGear(other, gearId)).toEqual({ ok: true, from: heroId, unequipped: chipped });
+    expect(s.getState().gear.find((g) => g.instId === chipped)!.equippedBy).toBeNull();
+  });
+
+  it('가져오기 — 창고의 장비면 그냥 착용과 같다', () => {
+    const { s, heroId, gearId } = setup();
+    expect(s.getState().takeGear(heroId, gearId)).toEqual({ ok: true, from: null, unequipped: null });
+    expect(s.getState().gear[0].equippedBy).toBe(heroId);
+  });
+
+  it('가져오기 — 죽은 영웅에게는 안 된다, 원 소유자는 그대로', () => {
+    const { s, heroId, gearId } = setup();
+    s.getState().equipGear(heroId, gearId);
+    const other = s.getState().roster[1].instId;
+    s.setState({ roster: s.getState().roster.map((h) => (h.instId === other ? { ...h, isDead: true } : h)) });
+
+    expect(s.getState().takeGear(other, gearId).ok).toBe(false);
+    expect(s.getState().gear[0].equippedBy).toBe(heroId);
+  });
+
   it('해제하면 양쪽에서 풀린다', () => {
     const { s, heroId, gearId } = setup();
     s.getState().equipGear(heroId, gearId);
