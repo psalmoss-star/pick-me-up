@@ -8,11 +8,11 @@
  *   4. 자동 편성이 정원·사망을 지킨다
  */
 import { describe, it, expect } from 'vitest';
-import { formationOf, elementSpread, pickAutoParty, lineOf } from './formation';
+import { formationOf, elementSpread, recommendParty, matchupScore, lineOf } from './formation';
+import { enemyKindsOf } from './floorIntel';
 import { ROLE_LINE, LINE_ORDER, ROLE_KR, LINE_KR } from './data/formation';
 import { klassFor } from './stats';
-import { heroPower } from './power';
-import { heroes, starScaling, HERO } from './data/sample';
+import { heroes, enemies, skills, elementChart, starScaling, HERO, ENEMY } from './data/sample';
 import type { HeroDefId, HeroInstId, HeroInstance, Role, Star } from './types';
 
 const ROLES: Role[] = ['dealer', 'tank', 'healer', 'support', 'breaker'];
@@ -121,50 +121,55 @@ describe('elementSpread — 속성 구성', () => {
   });
 });
 
-describe('pickAutoParty — 자동 편성', () => {
+describe('recommendParty — 추천 편성과 이유', () => {
   const pool = () => [
     hero(HERO.ashen, 2, 5, 1),
     hero(HERO.bulwark, 2, 20, 2),
     hero(HERO.tide, 3, 30, 3),
     hero(HERO.ashen, 2, 12, 4),
   ];
+  const kinds = enemyKindsOf(
+    { id: 1, name: '', scene: 'ruins', mission: { kind: 'subjugate', briefing: '' }, enemyIds: [ENEMY.hound] },
+    enemies,
+  ); // 화 속성 적
+  const rec = (members: HeroInstance[], candidates: HeroInstance[], room: number) =>
+    recommendParty({ members, candidates, defs: heroes, skills, scaling: starScaling, room, kinds, chart: elementChart });
 
-  it('정원을 넘지 않는다', () => {
-    expect(pickAutoParty(pool(), heroes, starScaling, 3)).toHaveLength(3);
+  it('남은 칸을 넘지 않는다', () => {
+    expect(rec([], pool(), 3).ids).toHaveLength(3);
   });
-
-  /**
-   * 특정 영웅을 이름으로 못박지 않는다 — 누가 1등인지는 가중치를 조정하면 바뀐다.
-   * 지켜야 하는 것은 "뽑힌 사람이 안 뽑힌 사람보다 약하지 않다"는 성질이다.
-   */
-  it('전투력 상위부터 고른다', () => {
-    const candidates = pool();
-    const picked = pickAutoParty(candidates, heroes, starScaling, 2);
-    const powerOf = (id: string) => {
-      const h = candidates.find((x) => x.instId === id)!;
-      return heroPower(h, heroes[h.defId], starScaling);
-    };
-    const inn = picked.map(powerOf);
-    const out = candidates
-      .filter((h) => !picked.includes(h.instId))
-      .map((h) => heroPower(h, heroes[h.defId], starScaling));
-
-    expect(Math.min(...inn)).toBeGreaterThanOrEqual(Math.max(...out));
-    // 내림차순으로 돌려준다
-    expect(inn).toEqual([...inn].sort((a, b) => b - a));
-  });
-
   it('사망자를 고르지 않는다', () => {
     const withDead = pool().map((h, i) => (i === 2 ? { ...h, isDead: true } : h));
-    const picked = pickAutoParty(withDead, heroes, starScaling, 4);
-    expect(picked).not.toContain('h_tide#3');
+    expect(rec([], withDead, 4).ids).not.toContain('h_tide#3');
   });
-
-  it('후보가 정원보다 적으면 있는 만큼만 고른다', () => {
-    expect(pickAutoParty(pool().slice(0, 2), heroes, starScaling, 5)).toHaveLength(2);
+  it('후보가 칸보다 적으면 있는 만큼만', () => {
+    expect(rec([], pool().slice(0, 2), 5).ids).toHaveLength(2);
   });
-
-  it('정원 0이면 아무도 고르지 않는다', () => {
-    expect(pickAutoParty(pool(), heroes, starScaling, 0)).toEqual([]);
+  it('칸 0이면 빈 추천', () => {
+    expect(rec([], pool(), 0)).toEqual({ ids: [], reasons: {} });
+  });
+  it('편성에 수호가 없으면 수호를 먼저 — 전투력이 낮아도', () => {
+    const r = rec([], [hero(HERO.ashen, 4, 60, 1), hero(HERO.bulwark, 1, 1, 2)], 1);
+    expect(r.ids).toEqual(['h_bulwark#2']);
+    expect(r.reasons['h_bulwark#2' as HeroInstId]).toMatch(/수호/);
+  });
+  it('이미 수호가 있으면 수호를 우선하지 않는다', () => {
+    const r = rec([hero(HERO.bulwark, 3, 30, 9)], [hero(HERO.ashen, 4, 60, 1), hero(HERO.bulwark, 1, 1, 2)], 1);
+    expect(r.ids).toEqual(['h_ashen#1']);
+  });
+  it('치유 스킬 보유자가 없으면 치유자를 먼저 (수호 다음)', () => {
+    const r = rec([], [hero(HERO.ashen, 4, 60, 1), hero(HERO.bulwark, 1, 1, 2), hero(HERO.tide, 1, 1, 3)], 2);
+    expect(r.ids).toEqual(['h_bulwark#2', 'h_tide#3']);
+    expect(r.reasons['h_tide#3' as HeroInstId]).toMatch(/치유/);
+  });
+  it('나머지는 전투력 × 상성 순 — 유리한 영웅은 이유에 적 종류 수를 말한다', () => {
+    // 화 속성 적(hound)에게 수 속성(tide)이 유리하다
+    const r = rec([hero(HERO.bulwark, 3, 30, 8), hero('h_ward' as HeroDefId, 3, 30, 9)], [hero(HERO.tide, 3, 30, 3)], 1);
+    expect(r.reasons['h_tide#3' as HeroInstId]).toMatch(/1종 중 1종에 유리/);
+  });
+  it('상성 보정은 정렬 키일 뿐 — 유리 +, 불리 −', () => {
+    expect(matchupScore(100, { strong: 1, weak: 0 })).toBeGreaterThan(100);
+    expect(matchupScore(100, { strong: 0, weak: 1 })).toBeLessThan(100);
+    expect(matchupScore(100, { strong: 0, weak: 0 })).toBe(100);
   });
 });

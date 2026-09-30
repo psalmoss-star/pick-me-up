@@ -5,10 +5,11 @@
  * 전투 엔진은 이 모듈을 모른다.
  */
 import type {
-  Element, GearBonus, HeroDef, HeroDefId, HeroInstance, HeroInstId, Star, StarScaling,
+  Element, GearBonus, HeroDef, HeroDefId, HeroInstance, HeroInstId, Skill, SkillId, Star, StarScaling,
 } from './types';
 import { heroPower } from './power';
-import { ROLE_LINE, LINE_ORDER, type Line } from './data/formation';
+import { canHeal, matchupOf, type EnemyKind, type Matchup } from './floorIntel';
+import { ROLE_LINE, LINE_ORDER, RECOMMEND_MATCHUP_WEIGHT, type Line } from './data/formation';
 
 export interface FormationSlot {
   hero: HeroInstance;
@@ -70,25 +71,76 @@ export function elementSpread(
     .sort((a, b) => b.count - a.count);
 }
 
+/** 상성 보정 정렬 키 — 표시 보조일 뿐 전투에 안 닿는다 */
+export function matchupScore(power: number, m: Matchup): number {
+  return power * (1 + RECOMMEND_MATCHUP_WEIGHT * (m.strong - m.weak));
+}
+
+export interface Recommendation {
+  ids: HeroInstId[];
+  /** 영웅마다 왜 골랐는지 한 줄 */
+  reasons: Record<HeroInstId, string>;
+}
+
 /**
- * 자동 편성 후보 — 살아있는 영웅 중 전투력 상위 `limit`명.
+ * 추천 편성 — 이미 편성된 영웅(`members`)은 두고 **남은 칸(`room`)만** 채운다.
+ *
+ * 1. 편성에 수호가 없으면 수호 1명(전투력 최고)
+ * 2. 편성에 치유 스킬 보유자가 없으면 1명 — 역할이 아니라 스킬로 본다(`canHeal`)
+ * 3. 나머지는 전투력 × 상성 보정(`matchupScore`) 순
+ *
+ * 수호·치유 우선의 근거는 엔진에 있다: 탱커가 단일 공격의 60%를 대신 맞고(`TANK_AGGRO`),
+ * 도발 없는 파티는 치유자가 먼저 쓰러진다(HANDOFF 측정). 그 밖의 역할 균형은 맞추지 않는다.
  *
  * ⚠️ 고르기만 한다. 실제 편성은 호출부가 `toggleSquadMember`를 반복 호출해서 한다 —
  * 잠금·정원·중복 판정은 **스토어가 정본**이고, 여기서 다시 판정하면 두 곳으로 갈린다.
- *
- * 역할 균형(탱1 힐1 같은 것)은 맞추지 않는다. 그건 밸런스 설계 영역이다.
  */
-export function pickAutoParty(
-  candidates: readonly HeroInstance[],
-  defs: Record<HeroDefId, HeroDef>,
-  scaling: Record<Star, StarScaling>,
-  limit: number,
-  bonusOfHero?: (h: HeroInstance) => GearBonus | undefined,
-): HeroInstId[] {
-  return candidates
-    .filter((h) => !h.isDead)
-    .map((h) => ({ h, p: heroPower(h, defs[h.defId], scaling, bonusOfHero?.(h)) }))
-    .sort((a, b) => b.p - a.p)
-    .slice(0, Math.max(0, limit))
-    .map((x) => x.h.instId);
+export function recommendParty(args: {
+  members: readonly HeroInstance[];
+  candidates: readonly HeroInstance[];
+  defs: Record<HeroDefId, HeroDef>;
+  skills: Record<SkillId, Skill>;
+  scaling: Record<Star, StarScaling>;
+  room: number;
+  kinds: readonly EnemyKind[];
+  chart: Record<Element, Record<Element, number>>;
+  bonusOfHero?: (h: HeroInstance) => GearBonus | undefined;
+}): Recommendation {
+  const { members, defs, skills, scaling, kinds, chart, bonusOfHero } = args;
+  const ids: HeroInstId[] = [];
+  const reasons: Record<HeroInstId, string> = {};
+  let room = Math.max(0, args.room);
+
+  const pool = args.candidates
+    .filter((h) => !h.isDead && defs[h.defId])
+    .map((h) => {
+      const def = defs[h.defId];
+      const power = heroPower(h, def, scaling, bonusOfHero?.(h));
+      const m = matchupOf(def.element, kinds, chart);
+      return { h, def, power, m, score: matchupScore(power, m) };
+    });
+  const partyDefs = members.map((h) => defs[h.defId]).filter(Boolean);
+  const take = (x: (typeof pool)[number], reason: string) => {
+    partyDefs.push(x.def);
+    ids.push(x.h.instId);
+    reasons[x.h.instId] = reason;
+    pool.splice(pool.indexOf(x), 1);
+    room--;
+  };
+  const strongest = (ok: (x: (typeof pool)[number]) => boolean) =>
+    pool.filter(ok).sort((a, b) => b.power - a.power)[0];
+
+  if (room > 0 && !partyDefs.some((d) => d.role === 'tank')) {
+    const t = strongest((x) => x.def.role === 'tank');
+    if (t) take(t, '수호 — 먼저 맞아 준다');
+  }
+  if (room > 0 && !partyDefs.some((d) => canHeal(d, skills))) {
+    const t = strongest((x) => canHeal(x.def, skills));
+    if (t) take(t, '치유 — 회복을 맡는다');
+  }
+  for (const x of [...pool].sort((a, b) => b.score - a.score)) {
+    if (room <= 0) break;
+    take(x, x.m.strong > 0 ? `적 ${kinds.length}종 중 ${x.m.strong}종에 유리` : '전투력 상위');
+  }
+  return { ids, reasons };
 }

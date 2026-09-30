@@ -46,3 +46,9 @@ export const ROLE_LINE: Record<Role, Line> = {
   healer: 'back',
   support: 'back',
 };
+
+/**
+ * 추천 편성의 상성 보정 — 정렬 키 `전투력 × (1 + 이 값 × (유리 − 불리))`.
+ * **표시 보조일 뿐 전투에 안 닿는다**(엔진은 `formation.ts`를 모른다). 상성 배수 1.5와 섞지 말 것.
+ */
+export const RECOMMEND_MATCHUP_WEIGHT = 0.1;

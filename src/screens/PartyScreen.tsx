@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { tabSafePadding } from '../ui/TabBar';
 import { Button, TOUCH_MIN } from '../ui/Button';
@@ -8,8 +9,12 @@ import { heroVariantOf } from '../ui/art/heroImages';
 import { T, ELEMENT_KR, ELEMENT_TINT } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { SQUAD_OPEN_ROSTER } from '../game/data/party';
-import { LINE_KR } from '../game/data/formation';
-import { formationOf, elementSpread, pickAutoParty } from '../game/formation';
+import { LINE_KR, ROLE_KR } from '../game/data/formation';
+import { formationOf, elementSpread, recommendParty } from '../game/formation';
+import {
+  compositionWarnings, enemyKindsOf, matchupOf, type CompositionWarning,
+} from '../game/floorIntel';
+import { MISSION_LABEL } from '../game/mission';
 import { heroPower, partyPower } from '../game/power';
 import { sortRoster } from '../game/rosterSort';
 import { klassFor } from '../game/stats';
@@ -17,6 +22,7 @@ import { displayName } from '../game/identity';
 import { livingHeroes } from '../game/roster';
 import { estimatePotential } from '../game/reveal';
 import { gameData } from '../game/data';
+import type { FloorSpec } from '../game/data/floors';
 import type { HeroInstId, HeroInstance } from '../game/types';
 
 export interface PartyScreenProps {
@@ -35,6 +41,8 @@ export interface PartyScreenProps {
   onInspect: (hero: HeroInstance) => void;
   /** 탑(층 선택)으로. 파티가 비면 호출부가 막는다 */
   onSortie: () => void;
+  /** 다음에 오를 층(탑의 ◀ 현재) — 적 종류·상성·경고의 기준 */
+  floor: FloorSpec;
 }
 
 /**
@@ -47,8 +55,10 @@ export interface PartyScreenProps {
  */
 export function PartyScreen({
   roster, squads, editing, onEditingChange, partyLimit,
-  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie,
+  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor,
 }: PartyScreenProps) {
+  /** 자동 편성이 붙인 이유 — 손으로 편성을 바꾸면 지운다(이유가 더는 맞지 않는다) */
+  const [reasons, setReasons] = useState<Record<HeroInstId, string>>({});
   const alive = livingHeroes(roster);
   /*
     영웅 탭의 **기본 정렬과 같게** 맞춘다. 예전엔 원본 배열 순서라
@@ -75,6 +85,16 @@ export function PartyScreen({
     ? Math.round(members.reduce((n, h) => n + h.level, 0) / members.length)
     : 0;
   const spread = elementSpread(members, gameData.heroes);
+  /*
+    ⚠️ 적 **종류**만 보인다. 수·전력은 정찰 보고(브리핑)의 영역이다(사용자 결정, 2026-09-30) —
+    `enemyKindsOf`는 수를 돌려주지 않는다.
+  */
+  const kinds = enemyKindsOf(floor, gameData.enemies);
+  const warnings = compositionWarnings(members, gameData.heroes, gameData.skills, kinds, gameData.elementChart);
+  const toggle = (id: HeroInstId) => {
+    setReasons({});
+    onToggleParty(editing, id);
+  };
 
   const doAuto = () => {
     if (locked) return;
@@ -83,10 +103,15 @@ export function PartyScreen({
     if (room <= 0) return;
     const taken = new Set(squads.flat());
     const free = alive.filter((h) => !taken.has(h.instId));
-    for (const id of pickAutoParty(free, gameData.heroes, gameData.starScaling, room)) {
+    const rec = recommendParty({
+      members, candidates: free, defs: gameData.heroes, skills: gameData.skills,
+      scaling: gameData.starScaling, room, kinds, chart: gameData.elementChart,
+    });
+    for (const id of rec.ids) {
       // 정원·잠금·중복 판정은 스토어가 정본이다 — 여기서 다시 판정하지 않는다
       onToggleParty(editing, id);
     }
+    setReasons(rec.reasons);
   };
 
   return (
@@ -143,6 +168,32 @@ export function PartyScreen({
         </div>
       )}
 
+      <SectionLabel>다음 층</SectionLabel>
+      <SystemPanel compact>
+        <div style={{ fontSize: 12, letterSpacing: '.08em' }}>
+          {floor.id}층 · {floor.name} · {MISSION_LABEL[floor.mission.kind]}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 8 }}>
+          {kinds.map((k) => (
+            <span
+              key={k.defId}
+              style={{
+                fontSize: 11, padding: '3px 8px', lineHeight: 1.5,
+                border: `1px solid ${ELEMENT_TINT[k.element]}88`, color: T.text,
+              }}
+            >
+              {k.isBoss ? '👑 ' : ''}{k.name}
+              <span style={{ color: ELEMENT_TINT[k.element] }}> {ELEMENT_KR[k.element]}</span>
+              <span style={{ color: T.dim }}> · {ROLE_KR[k.role]}</span>
+            </span>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: T.dim, marginTop: 6 }}>
+          적의 수와 전력은 출정 전 정찰 보고로 듣습니다
+        </div>
+      </SystemPanel>
+
+      <div style={{ height: 14 }} />
       <SectionLabel>진형</SectionLabel>
 
       {/*
@@ -184,6 +235,11 @@ export function PartyScreen({
                 </div>
                 {slot && (
                   <div style={{ fontSize: 9, color: T.gold }}>{slot.power.toLocaleString()}</div>
+                )}
+                {slot && reasons[slot.hero.instId] && (
+                  <div style={{ fontSize: 9, color: T.rare, lineHeight: 1.4, wordBreak: 'keep-all' }}>
+                    {reasons[slot.hero.instId]}
+                  </div>
                 )}
               </div>
             );
@@ -228,6 +284,16 @@ export function PartyScreen({
           속성은 적과의 상성으로만 작용합니다
         </div>
       </SystemPanel>
+
+      {warnings.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          {warnings.map((w) => (
+            <div key={w.kind + ('element' in w ? w.element : '')} style={{ fontSize: 11, color: T.amber, lineHeight: 1.8 }}>
+              ⚠ {warningText(w)}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', margin: '16px 0 20px' }}>
         <Button small onClick={doAuto} disabled={locked || members.length >= partyLimit}>
@@ -275,10 +341,11 @@ export function PartyScreen({
                 favorite={h.favorite}
                 reveal={estimatePotential(h).progress}
                 variant={heroVariantOf(h)}
-                onClick={() => !locked && onToggleParty(editing, h.instId)}
+                onClick={() => !locked && toggle(h.instId)}
               />
               <div style={{ fontSize: 10, color: T.gold, marginTop: 2 }}>
                 {heroPower(h, def, gameData.starScaling).toLocaleString()}
+                <MatchupMark m={matchupOf(def.element, kinds, gameData.elementChart)} />
               </div>
               <button
                 onClick={() => onInspect(h)}
@@ -327,4 +394,27 @@ function Row({ label, value, gold }: { label: string; value: React.ReactNode; go
       <span style={{ color: gold ? T.gold : T.text }}>{value}</span>
     </div>
   );
+}
+
+/**
+ * 다음 층 적 종류에 대한 상성 — ▲ 때릴 때 유리한 적 종류 수, ▼ 맞을 때 불리한 적 종류 수.
+ * 0인 쪽은 그리지 않는다(둘 다 0이면 아무것도).
+ */
+function MatchupMark({ m }: { m: { strong: number; weak: number } }) {
+  if (m.strong === 0 && m.weak === 0) return null;
+  return (
+    <span style={{ marginLeft: 6 }}>
+      {m.strong > 0 && <span style={{ color: T.rare }}>▲{m.strong}</span>}
+      {m.weak > 0 && <span style={{ color: T.amber, marginLeft: 3 }}>▼{m.weak}</span>}
+    </span>
+  );
+}
+
+/** 경고 문구 — 엔진에 있는 사실만 말하고 수치를 약속하지 않는다 */
+function warningText(w: CompositionWarning): string {
+  switch (w.kind) {
+    case 'noTank': return '수호 없음 — 적의 공격이 후위에게도 그대로 간다';
+    case 'noHealer': return '치유 없음 — 회복은 포션뿐이다';
+    case 'weakMajority': return `${ELEMENT_KR[w.element]} 속성 적에게 약한 영웅이 절반 이상이다`;
+  }
 }

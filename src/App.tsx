@@ -496,6 +496,7 @@ export default function App() {
             onInspect={setDetail}
             /* 출전은 층 선택을 거친다 — start()를 직접 부르면 재도전 입구가 사라진다 */
             onSortie={() => goToSpot('tower')}
+            floor={floor}
           />
         )}
         {screen === 'facility' && (
