@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { Button, TOUCH_MIN } from '../ui/Button';
 import { HeroPortrait } from '../ui/art/HeroPortrait';
@@ -8,6 +9,7 @@ import { computeAttributes, computeHeroStats, isAtCap, klassFor } from '../game/
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { applyBonus, heroBonus, bonusOf } from '../game/gear';
+import { bestFreeGear, gearDelta, type GearDelta } from '../game/gearCompare';
 import { GEAR_DEFS, GEAR_SLOTS, SLOT_LABEL, RANK_LABEL } from '../game/data/gear';
 import { gameData } from '../game/data';
 import type {
@@ -21,6 +23,10 @@ export interface DetailModalProps {
   gear?: GearInstance[];
   onEquip?: (gearId: GearInstId) => void;
   onUnequip?: (slot: GearSlot) => void;
+  /** 다른 영웅이 낀 장비를 가져온다(명시적). 없으면 남의 장비는 보이기만 한다 */
+  onTake?: (gearId: GearInstId) => void;
+  /** 착용자 이름·전투력 하락을 보이려고 쓴다 */
+  roster?: HeroInstance[];
   /** 즐겨찾기 토글. 없으면 버튼을 그리지 않는다(무덤처럼 못 바꾸는 화면). */
   onToggleFavorite?: () => void;
 }
@@ -32,8 +38,10 @@ function Stat({ v, up }: { v: number; up: boolean }) {
 
 /** 영웅 상세 — 능력치의 현재/상한을 그대로 드러낸다. 상한 도달은 금색. */
 export function DetailModal({
-  hero, onClose, gear, onEquip, onUnequip, onToggleFavorite,
+  hero, onClose, gear, onEquip, onUnequip, onTake, roster, onToggleFavorite,
 }: DetailModalProps) {
+  /** 후보 목록을 펼친 슬롯 — 기존 모바일 RPG 관례(슬롯 탭 → 목록 → 비교 → 착용) */
+  const [openSlot, setOpenSlot] = useState<GearSlot | null>(null);
   const def = gameData.heroes[hero.defId];
   const attrs = computeAttributes(def, hero.star, hero.level, gameData.starScaling);
   const baseStats = computeHeroStats(def, hero.star, hero.level, gameData.starScaling);
@@ -49,13 +57,22 @@ export function DetailModal({
   const bonus = gear ? heroBonus(hero.gear, index) : {};
   const stats = gear ? applyBonus(baseStats, bonus) : baseStats;
 
-  /** 이 슬롯에 낄 수 있는 후보 — 창고에 있거나 이 영웅이 이미 낀 것 */
+  const holderOf = (g: GearInstance) =>
+    g.equippedBy ? roster?.find((h) => h.instId === g.equippedBy && !h.isDead) : undefined;
+  /**
+   * 이 슬롯의 후보 — 창고의 것 + 살아 있는 다른 영웅이 낀 것(가져오기용). 전투력이 오르는 순.
+   * 이 영웅이 지금 낀 것은 빼고 슬롯 줄에 따로 보인다.
+   */
   const candidatesFor = (slot: GearSlot) =>
-    (gear ?? []).filter((g) => {
-      const d = GEAR_DEFS[g.defId];
-      if (!d || d.slot !== slot) return false;
-      return !g.equippedBy || g.equippedBy === hero.instId;
-    });
+    (gear ?? [])
+      .filter((g) => GEAR_DEFS[g.defId]?.slot === slot && g.equippedBy !== hero.instId)
+      .filter((g) => !g.equippedBy || !!holderOf(g))
+      .map((g) => ({ g, delta: gearDelta(hero, def, gameData.starScaling, index, slot, g) }))
+      .sort((a, b) => b.delta.power - a.delta.power);
+  /** 슬롯마다 창고에서 전투력이 가장 오르는 것 — 자동 장착과 '추천' 표식이 같은 값을 쓴다 */
+  const autoPicks = GEAR_SLOTS
+    .map((slot) => (gear ? bestFreeGear(hero, def, gameData.starScaling, index, slot) : null))
+    .filter((g): g is GearInstance => !!g);
 
   /** 보정을 사람이 읽는 짧은 문구로 */
   const bonusText = (g: GearInstance) => {
@@ -130,22 +147,42 @@ export function DetailModal({
           {/* 장비 — 슬롯 3칸. gear를 안 넘기면 통째로 감춘다 */}
           {gear && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${T.panelHi}` }}>
-              <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.3em', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.3em', marginBottom: 6 }}>
                 장비
               </div>
+              {onEquip && (
+                <div style={{ marginBottom: 10 }}>
+                  {/* 자동 장착은 창고의 장비만 쓴다 — 남의 장비를 조용히 가져오지 않는다 */}
+                  <Button small disabled={autoPicks.length === 0} onClick={() => autoPicks.forEach((g) => onEquip(g.instId))}>
+                    자동 장착
+                  </Button>
+                  <div style={{ fontSize: 10, color: T.dim, marginTop: 4 }}>
+                    {autoPicks.length ? '창고에서 전투력이 가장 오르는 것으로 낍니다' : '창고에 더 나은 장비가 없습니다'}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'grid', gap: 10 }}>
                 {GEAR_SLOTS.map((slot) => {
                   const wornId = hero.gear?.[slot];
                   const worn = wornId ? index.get(wornId) : undefined;
                   const wornDef = worn ? GEAR_DEFS[worn.defId] : undefined;
-                  const others = candidatesFor(slot).filter((g) => g.instId !== wornId);
 
                   return (
                     <div key={slot} style={{ border: `1px solid ${T.panelHi}`, padding: '8px 10px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, color: T.dim, letterSpacing: '.1em', minWidth: 44, textAlign: 'left' }}>
-                          {SLOT_LABEL[slot]}
-                        </span>
+                        <button
+                          onClick={() => setOpenSlot(openSlot === slot ? null : slot)}
+                          disabled={!onEquip}
+                          style={{
+                            minHeight: TOUCH_MIN, minWidth: 64, padding: '0 8px',
+                            background: openSlot === slot ? T.panelHi : 'transparent',
+                            border: `1px solid ${openSlot === slot ? T.gold : T.panelHi}`,
+                            color: T.text, fontFamily: 'inherit', fontSize: 11, letterSpacing: '.1em',
+                            cursor: onEquip ? 'pointer' : 'default',
+                          }}
+                        >
+                          {SLOT_LABEL[slot]} {onEquip ? (openSlot === slot ? '▴' : '▾') : ''}
+                        </button>
                         <span style={{ flex: 1, fontSize: 13, textAlign: 'left', color: wornDef ? T.text : T.dim }}>
                           {wornDef
                             ? `${wornDef.name}${worn!.enhance > 0 ? ` +${worn!.enhance}` : ''}`
@@ -170,26 +207,40 @@ export function DetailModal({
                         </div>
                       )}
 
-                      {/* 교체 후보 */}
-                      {onEquip && others.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                          {others.map((g) => {
+                      {/* 후보 목록 — 슬롯 이름을 누르면 펼친다 */}
+                      {onEquip && openSlot === slot && (
+                        <div style={{ marginTop: 8, borderTop: `1px solid ${T.panelHi}`, paddingTop: 6 }}>
+                          {candidatesFor(slot).length === 0 && (
+                            <div style={{ fontSize: 11, color: T.dim, padding: '6px 0' }}>낄 수 있는 장비가 없습니다</div>
+                          )}
+                          {candidatesFor(slot).map(({ g, delta }) => {
                             const d = GEAR_DEFS[g.defId];
+                            const holder = holderOf(g);
+                            const recommended = autoPicks.some((x) => x.instId === g.instId);
+                            const loss = holder
+                              ? gearDelta(holder, gameData.heroes[holder.defId], gameData.starScaling, index, slot, null).power
+                              : 0;
                             return (
-                              <button
-                                key={g.instId}
-                                onClick={() => onEquip(g.instId)}
-                                style={{
-                                  minHeight: TOUCH_MIN,
-                                  background: 'transparent',
-                                  border: `1px solid ${T.frame}55`,
-                                  color: T.text, fontFamily: 'inherit', fontSize: 11,
-                                  padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
-                                }}
-                              >
-                                {d.name}{g.enhance > 0 ? ` +${g.enhance}` : ''}
-                                <span style={{ color: T.dim }}> · {bonusText(g)}</span>
-                              </button>
+                              <div key={g.instId} style={{ padding: '6px 0', borderBottom: `1px solid ${T.panelHi}55` }}>
+                                <div style={{ fontSize: 12, textAlign: 'left' }}>
+                                  {recommended && <span style={{ color: T.gold, fontSize: 10, marginRight: 4 }}>추천</span>}
+                                  {d.name}{g.enhance > 0 ? ` +${g.enhance}` : ''}
+                                  <span style={{ color: T.dim, fontSize: 10 }}> · {RANK_LABEL[d.rank]}</span>
+                                </div>
+                                <DeltaLine delta={delta} />
+                                {holder && (
+                                  <div style={{ fontSize: 10, color: T.amber, textAlign: 'left' }}>
+                                    {displayName(holder, gameData.heroes)} 착용 중 · 가져오면 그 영웅 전투력 {loss}
+                                  </div>
+                                )}
+                                <div style={{ textAlign: 'right', marginTop: 4 }}>
+                                  {holder ? (
+                                    onTake && <Button small tone="warning" onClick={() => onTake(g.instId)}>가져오기</Button>
+                                  ) : (
+                                    <Button small onClick={() => { onEquip(g.instId); setOpenSlot(null); }}>착용</Button>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
@@ -258,6 +309,30 @@ export function DetailModal({
           <Button onClick={onClose}>닫기</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const DELTA_LABEL: Record<string, string> = { hp: 'HP', atk: '공격', def: '방어', spd: '속도', crit: '치명' };
+
+/** 착용하면 바뀌는 수치 — 오름 금색, 내림 주황. 전투력을 마지막에 */
+function DeltaLine({ delta }: { delta: GearDelta }) {
+  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const parts = Object.entries(delta.stats).map(([k, v]) => ({
+    k,
+    v: v ?? 0,
+    text: `${DELTA_LABEL[k]} ${k === 'crit' ? `${sign(Math.round((v ?? 0) * 100))}%` : sign(v ?? 0)}`,
+  }));
+  return (
+    <div style={{ fontSize: 11, textAlign: 'left', lineHeight: 1.7 }}>
+      {parts.map((p, i) => (
+        <span key={p.k} style={{ color: p.v > 0 ? T.gold : T.amber }}>
+          {i > 0 ? ' · ' : ''}{p.text}
+        </span>
+      ))}
+      <span style={{ color: delta.power > 0 ? T.gold : delta.power < 0 ? T.amber : T.dim }}>
+        {parts.length ? ' · ' : ''}전투력 {sign(delta.power)}
+      </span>
     </div>
   );
 }

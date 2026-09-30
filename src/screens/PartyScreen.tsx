@@ -16,6 +16,7 @@ import {
 } from '../game/floorIntel';
 import { MISSION_LABEL } from '../game/mission';
 import { heroPower, partyPower } from '../game/power';
+import { heroBonus } from '../game/gear';
 import { sortRoster } from '../game/rosterSort';
 import { klassFor } from '../game/stats';
 import { displayName } from '../game/identity';
@@ -23,7 +24,7 @@ import { livingHeroes } from '../game/roster';
 import { estimatePotential } from '../game/reveal';
 import { gameData } from '../game/data';
 import type { FloorSpec } from '../game/data/floors';
-import type { HeroInstId, HeroInstance } from '../game/types';
+import type { GearInstance, HeroInstId, HeroInstance } from '../game/types';
 
 export interface PartyScreenProps {
   roster: HeroInstance[];
@@ -43,6 +44,8 @@ export interface PartyScreenProps {
   onSortie: () => void;
   /** 다음에 오를 층(탑의 ◀ 현재) — 적 종류·상성·경고의 기준 */
   floor: FloorSpec;
+  /** 보유 장비 — 전투력에 장비를 태운다(상세창·전투와 같은 숫자여야 한다) */
+  gear: GearInstance[];
 }
 
 /**
@@ -55,8 +58,10 @@ export interface PartyScreenProps {
  */
 export function PartyScreen({
   roster, squads, editing, onEditingChange, partyLimit,
-  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor,
+  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor, gear,
 }: PartyScreenProps) {
+  const gearIndex = new Map(gear.map((g) => [g.instId, g]));
+  const bonusOf = (h: HeroInstance) => heroBonus(h.gear, gearIndex);
   /** 자동 편성이 붙인 이유 — 손으로 편성을 바꾸면 지운다(이유가 더는 맞지 않는다) */
   const [reasons, setReasons] = useState<Record<HeroInstId, string>>({});
   const alive = livingHeroes(roster);
@@ -78,7 +83,7 @@ export function PartyScreen({
     .map((id) => alive.find((h) => h.instId === id))
     .filter((h): h is HeroInstance => !!h);
 
-  const slots = formationOf(members, gameData.heroes, gameData.starScaling);
+  const slots = formationOf(members, gameData.heroes, gameData.starScaling, bonusOf);
   const powers = slots.map((s) => s.power);
   const total = partyPower(powers);
   const avgLevel = members.length
@@ -105,7 +110,7 @@ export function PartyScreen({
     const free = alive.filter((h) => !taken.has(h.instId));
     const rec = recommendParty({
       members, candidates: free, defs: gameData.heroes, skills: gameData.skills,
-      scaling: gameData.starScaling, room, kinds, chart: gameData.elementChart,
+      scaling: gameData.starScaling, room, kinds, chart: gameData.elementChart, bonusOfHero: bonusOf,
     });
     for (const id of rec.ids) {
       // 정원·잠금·중복 판정은 스토어가 정본이다 — 여기서 다시 판정하지 않는다
@@ -344,7 +349,7 @@ export function PartyScreen({
                 onClick={() => !locked && toggle(h.instId)}
               />
               <div style={{ fontSize: 10, color: T.gold, marginTop: 2 }}>
-                {heroPower(h, def, gameData.starScaling).toLocaleString()}
+                {heroPower(h, def, gameData.starScaling, bonusOf(h)).toLocaleString()}
                 <MatchupMark m={matchupOf(def.element, kinds, gameData.elementChart)} />
               </div>
               <button

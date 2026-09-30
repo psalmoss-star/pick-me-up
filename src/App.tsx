@@ -158,6 +158,7 @@ export default function App() {
   const buyGear = useRunStore((s) => s.buyGear);
   const equipGear = useRunStore((s) => s.equipGear);
   const unequipGear = useRunStore((s) => s.unequipGear);
+  const takeGear = useRunStore((s) => s.takeGear);
   const toggleFavorite = useRunStore((s) => s.toggleFavorite);
   const enhanceGear = useRunStore((s) => s.enhanceGear);
   const craftGear = useRunStore((s) => s.craftGear);
@@ -497,6 +498,7 @@ export default function App() {
             /* 출전은 층 선택을 거친다 — start()를 직접 부르면 재도전 입구가 사라진다 */
             onSortie={() => goToSpot('tower')}
             floor={floor}
+            gear={gear}
           />
         )}
         {screen === 'facility' && (
@@ -795,6 +797,8 @@ export default function App() {
             gear={gear}
             onEquip={(gearId) => equipGear(live.instId, gearId)}
             onUnequip={(slot) => unequipGear(live.instId, slot)}
+            onTake={(gearId) => takeGear(live.instId, gearId)}
+            roster={roster}
             onToggleFavorite={() => toggleFavorite(live.instId)}
             onClose={() => setDetail(null)}
           />
