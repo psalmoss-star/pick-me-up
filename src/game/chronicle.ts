@@ -26,11 +26,11 @@ export interface ChronicleEntry {
   success: boolean;
   /** 수행자 instId */
   actor: HeroInstId;
-  /** 카드 이름 — 「유인 후 화공」 */
+  /** 카드 이름 — 「유인 화공」 */
   title: string;
   /** 장면 문장 — 수행자 이름이 채워져 있다 */
   text: string;
-  /** 연의 출처 한 줄 */
+  /** 출전 한 줄 — 책 이름 + 편 */
   source: string;
 }
 
@@ -92,7 +92,7 @@ export function appendDeeds(prev: Deed[] | undefined, add: Deed[]): Deed[] {
   return [...(prev ?? []), ...add].slice(-DEEDS_KEEP);
 }
 
-/** 연대기 한 줄 — 「12층 · 유인 후 화공 · 성공」 */
+/** 연대기 한 줄 — 「12층 · 유인 화공 · 성공」 */
 export function deedText(d: Deed): string {
   const def = STRATAGEM_BY_ID[d.stratagemId];
   return `${d.floor}층 · ${def ? def.name : '잊힌 책략'} · ${d.success ? '성공' : '간파당함'}`;

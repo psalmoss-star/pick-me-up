@@ -45,7 +45,7 @@ describe('chronicleOf', () => {
       ev({ type: 'stratagem', turn: 5, actorUid: 'A:h2', stratagemId: 'ambush', success: false }),
     ], roster);
     expect(out).toHaveLength(2);
-    expect(out[0]).toMatchObject({ at: 2, turn: 3, actor: 'h1', success: true, title: '유인 후 화공' });
+    expect(out[0]).toMatchObject({ at: 2, turn: 3, actor: 'h1', success: true, title: '유인 화공' });
     expect(out[0].text).toContain('세인이');
     expect(out[0].text).not.toMatch(/[{}]/);
     expect(out[1]).toMatchObject({ actor: 'h2', success: false });
@@ -75,7 +75,7 @@ describe('연대기', () => {
     expect(appendDeeds(undefined, long).at(-1)!.floor).toBe(8);
   });
   it('한 줄 표기', () => {
-    expect(deedText({ floor: 12, stratagemId: 'lureFire', success: true })).toBe('12층 · 유인 후 화공 · 성공');
+    expect(deedText({ floor: 12, stratagemId: 'lureFire', success: true })).toBe('12층 · 유인 화공 · 성공');
     expect(deedText({ floor: 3, stratagemId: 'ambush', success: false })).toBe('3층 · 매복 · 간파당함');
   });
 });

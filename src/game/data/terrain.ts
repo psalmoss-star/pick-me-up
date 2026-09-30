@@ -5,7 +5,7 @@
  * 고른 경로의 **접점**(적과 부딪히는 노드) 지형이 책략 **성공률에만** ±를 준다.
  * 새 능력치·새 전투 규칙은 없다.
  *
- * 태그와 책략의 궁합은 연의의 장면에서 온다 — 박망파의 골짜기, 번성의 강, 서성의 성문.
+ * 태그와 책략의 궁합은 책략의 원리에서 온다 — 좁은 곳에서 태우고, 물이 있어야 물을 쓰고, 성이 있어야 성문을 연다.
  */
 import type { FloorScene } from './floors';
 import type { StratagemId } from './stratagems';
@@ -27,16 +27,16 @@ export interface TerrainDef {
 }
 
 export const TERRAIN: Record<TerrainTag, TerrainDef> = {
-  // 박망파 — 좁은 골짜기로 끌어들여 태운다. 복병을 숨기기도 좋다
-  narrow: { tag: 'narrow', name: '좁은 통로', good: ['lureFire', 'ambush'], bad: ['nightRaid'] },
-  // 번성의 수몰·적벽의 강 — 물이 있어야 물을 쓰고, 강 위의 배를 태운다. 젖은 땅엔 불이 안 번진다
-  river: { tag: 'river', name: '강가', good: ['flood', 'redCliffs'], bad: ['lureFire'] },
-  // 정군산 — 숲에 숨어 기다린다. 물길을 낼 곳이 없다
+  // 좁은 골짜기로 끌어들여 태운다. 복병을 숨기기도 좋다. 양동은 돌아갈 옆길이 없다
+  narrow: { tag: 'narrow', name: '좁은 통로', good: ['lureFire', 'ambush'], bad: ['nightRaid', 'feint'] },
+  // 물이 있어야 물을 쓰고, 강 위의 배를 태운다. 젖은 땅엔 불이 안 번진다. 강을 등지면 물러날 곳이 없다(배수진)
+  river: { tag: 'river', name: '강가', good: ['flood', 'redCliffs', 'lastStand'], bad: ['lureFire'] },
+  // 숲에 숨어 기다린다. 물길을 낼 곳이 없다
   forest: { tag: 'forest', name: '숲', good: ['ambush', 'nightRaid'], bad: ['flood'] },
-  // 트인 곳 — 숨을 곳이 없어 매복이 보이고, 대신 밤을 틈타 치고 빠지기 좋다
-  open: { tag: 'open', name: '개활지', good: ['nightRaid'], bad: ['ambush', 'lureFire'] },
-  // 서성 — 성문을 열어 두는 계책은 성이 있어야 성립한다
-  fort: { tag: 'fort', name: '관문', good: ['emptyFort'], bad: ['flood', 'ambush'] },
+  // 트인 곳 — 숨을 곳이 없어 매복이 보이고, 대신 치고 빠지거나 양동하기 좋다. 등질 것이 없다
+  open: { tag: 'open', name: '개활지', good: ['nightRaid', 'feint'], bad: ['ambush', 'lureFire', 'lastStand'] },
+  // 성문을 열어 두는 계책은 성이 있어야 성립한다. 에워싼 성 밖에서 노래가 들린다
+  fort: { tag: 'fort', name: '관문', good: ['emptyFort', 'besieged'], bad: ['flood', 'ambush'] },
 };
 
 export const TERRAIN_TAGS: TerrainTag[] = ['narrow', 'river', 'forest', 'open', 'fort'];

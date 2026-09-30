@@ -9,8 +9,8 @@
  */
 import type { Combatant } from './types';
 import {
-  STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_SLOTS, STRATAGEM_TUNING,
-  type StratagemCondition, type StratagemId,
+  STATUS_WORD, STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_SLOTS, STRATAGEM_TUNING,
+  type StratagemCondition, type StratagemDef, type StratagemEffect, type StratagemId,
 } from './data/stratagems';
 
 /** 판정에 필요한 전장 상태 — 엔진이 매 턴 만들어 넘긴다 */
@@ -101,6 +101,58 @@ export function nextResist(
     if (v > 0) out[id] = v;
   }
   return out;
+}
+
+// ------------------------------------------------------------
+// 카드 설명 — 화면이 쓴다
+// ------------------------------------------------------------
+
+export interface StratagemText {
+  /** 언제 발동하는가 */
+  trigger: string;
+  success: string;
+  failure: string;
+}
+
+const pct = (r: number) => `${Math.round(r * 100)}%`;
+
+function conditionText(c: StratagemCondition): string {
+  switch (c.kind) {
+    case 'allyHpBelow': return `아군 누군가 HP ${pct(c.ratio)} 이하`;
+    case 'outnumbered': return '적이 아군보다 많을 때';
+    case 'swarmLosing': return `적 ${c.minEnemies}체 이상에게 밀릴 때`;
+    case 'longBattle': return `${c.turn}턴 이상 싸웠을 때`;
+    case 'desperate': return `아군 HP 합 ${pct(c.ratio)} 이하 또는 적이 두 배 이상`;
+    case 'bigBattle': return `적 ${c.minEnemies}체 이상 또는 보스, ${c.turn}턴부터`;
+  }
+}
+
+function effectText(e: StratagemEffect): string {
+  switch (e.kind) {
+    case 'enemiesDamage': return `적 전원 HP −${pct(e.ratio)}`;
+    case 'strongestTo': return `가장 강한 적 HP를 ${pct(e.ratio)}까지`;
+    case 'enemiesStatus': return `적 전원 ${STATUS_WORD[e.status]} ${e.turns}턴`;
+    case 'alliesStatus': return `아군 전원 ${STATUS_WORD[e.status]} ${e.turns}턴`;
+    case 'executorLoses': return `책사 HP −${pct(e.ratio)}`;
+  }
+}
+
+/**
+ * 카드의 발동·성공·간파 문장. **데이터에서 만든다** — 문장을 손으로 적으면 수치를 고칠 때 갈라진다.
+ * 같은 대상에 이어지는 효과는 대상을 한 번만 쓴다(「적 전원 HP −10% · 기절 1턴」).
+ */
+export function describeStratagem(def: StratagemDef): StratagemText {
+  const join = (effs: StratagemEffect[]) => {
+    let prevTarget = '';
+    return effs.map((e) => {
+      const t = effectText(e);
+      const target = t.startsWith('적 전원 ') ? '적 전원 ' : t.startsWith('아군 전원 ') ? '아군 전원 ' : '';
+      const out = target && target === prevTarget ? t.slice(target.length) : t;
+      prevTarget = target;
+      return out;
+    }).join(' · ');
+  };
+  return { trigger: conditionText(def.condition), success: join(def.success), failure: join(def.failure) };
 }
 
 // ------------------------------------------------------------

@@ -6,8 +6,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  conditionMet, nextResist, pickExecutor, successChance, type FieldView,
+  conditionMet, describeStratagem, nextResist, pickExecutor, successChance, type FieldView,
 } from './stratagem';
+import { CHRONICLE_LINES } from './data/chronicle';
 import {
   STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_TUNING, type StratagemId,
 } from './data/stratagems';
@@ -67,12 +68,45 @@ describe('책략 데이터', () => {
   it('처음부터 쓸 수 있는 카드가 슬롯 수 이상 있다', () => {
     expect(STRATAGEMS.filter((s) => s.unlockFloor === 0).length).toBeGreaterThanOrEqual(2);
   });
-  it('초한지 책략은 넣지 않는다', () => {
-    const names = STRATAGEMS.map((s) => s.name).join();
-    expect(names).not.toMatch(/배수진|십면매복/);
+  it('처음 6장의 id는 그대로다 — 세이브에 남는다, 새 카드는 뒤에 붙는다', () => {
+    expect(STRATAGEMS.slice(0, 6).map((s) => s.id))
+      .toEqual(['ambush', 'nightRaid', 'lureFire', 'flood', 'emptyFort', 'redCliffs']);
   });
-  it('모든 카드에 연의 출처가 있다', () => {
-    for (const s of STRATAGEMS) expect(s.source).toMatch(/연의 \d+/);
+  it('모든 카드에 책 출전이 있다 (연의·삼십육계·손자병법·사기)', () => {
+    for (const s of STRATAGEMS) expect(s.source).toMatch(/^(삼국지연의|삼십육계|손자병법|사기) /);
+  });
+  it('카드와 기록 문장에 역사 인물 이름을 쓰지 않는다 — 원리가 먼저 읽혀야 한다 (2026-09-30 셀프 테스트)', () => {
+    const PEOPLE = /조조|유비|관우|장비|제갈량|황충|하후연|하후돈|감녕|우금|사마의|황개|방통|주유|손권|한신|항우|유방/;
+    for (const s of STRATAGEMS) {
+      expect(`${s.name} ${s.principle} ${s.source}`).not.toMatch(PEOPLE);
+      expect(`${CHRONICLE_LINES[s.id].success} ${CHRONICLE_LINES[s.id].failure}`).not.toMatch(PEOPLE);
+    }
+  });
+  it('21층 이후 새 카드가 있다', () => {
+    expect(STRATAGEMS.some((s) => s.unlockFloor > 20)).toBe(true);
+  });
+});
+
+describe('카드 설명 — 수치는 효과 데이터에서 만든다', () => {
+  it('발동·성공·간파가 전부 채워진다', () => {
+    for (const s of STRATAGEMS) {
+      const d = describeStratagem(s);
+      expect(d.trigger.length).toBeGreaterThan(0);
+      expect(d.success.length).toBeGreaterThan(0);
+      expect(d.failure.length).toBeGreaterThan(0);
+    }
+  });
+  it('매복 — 조건과 효과의 숫자가 데이터와 같다', () => {
+    const d = describeStratagem(STRATAGEM_BY_ID.ambush);
+    expect(d.trigger).toBe('아군 누군가 HP 50% 이하');
+    expect(d.success).toBe('가장 강한 적 HP를 30%까지');
+    expect(d.failure).toBe('책사 HP −30%');
+  });
+  it('효과 여럿은 한 줄로 잇는다', () => {
+    expect(describeStratagem(STRATAGEM_BY_ID.nightRaid).success).toBe('적 전원 HP −10% · 기절 1턴');
+  });
+  it('배수진 — 아군에게 거는 효과는 아군이라고 쓴다', () => {
+    expect(describeStratagem(STRATAGEM_BY_ID.lastStand).success).toBe('아군 전원 공격↑ 3턴');
   });
 });
 
@@ -100,6 +134,18 @@ describe('발동 조건', () => {
     const c = STRATAGEM_BY_ID.redCliffs.condition;
     expect(conditionMet(c, view([u('a', 1, 1)], [u('e', 1, 1)], 5, false))).toBe(false);
     expect(conditionMet(c, view([u('a', 1, 1)], [u('e', 1, 1)], 5, true))).toBe(true);
+  });
+  it('성동격서 4턴 · 사면초가 6턴', () => {
+    const one = [u('a', 1, 1)], foe = [u('e', 1, 1)];
+    expect(conditionMet(STRATAGEM_BY_ID.feint.condition, view(one, foe, 3))).toBe(false);
+    expect(conditionMet(STRATAGEM_BY_ID.feint.condition, view(one, foe, 4))).toBe(true);
+    expect(conditionMet(STRATAGEM_BY_ID.besieged.condition, view(one, foe, 5))).toBe(false);
+    expect(conditionMet(STRATAGEM_BY_ID.besieged.condition, view(one, foe, 6))).toBe(true);
+  });
+  it('배수진 — 무너지기 직전(HP 합 30% 이하)', () => {
+    const c = STRATAGEM_BY_ID.lastStand.condition;
+    expect(conditionMet(c, view([u('a', 40, 100)], [u('e', 1, 1)]))).toBe(false);
+    expect(conditionMet(c, view([u('a', 30, 100)], [u('e', 1, 1)]))).toBe(true);
   });
   it('아군이나 적이 없으면 발동하지 않는다', () => {
     for (const s of STRATAGEMS) {

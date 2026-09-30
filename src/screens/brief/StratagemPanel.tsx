@@ -3,8 +3,10 @@ import { SystemPanel } from '../../ui/SystemPanel';
 import { Button } from '../../ui/Button';
 import { T } from '../../ui/tokens';
 import {
-  STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_SLOTS, STRATAGEM_TUNING, type StratagemId,
+  STRATAGEMS, STRATAGEM_BY_ID, STRATAGEM_SLOTS, STRATAGEM_TUNING,
+  type StratagemDef, type StratagemId,
 } from '../../game/data/stratagems';
+import { describeStratagem } from '../../game/stratagem';
 import { FALLBACK_LABEL, FALLBACK_ORDERS, type FallbackOrder } from '../../game/orders';
 
 export interface StratagemPanelProps {
@@ -69,9 +71,7 @@ export function StratagemPanel({
                   <div style={{ fontSize: 15, color: T.gold, letterSpacing: '.1em', marginTop: 4 }}>
                     {def.name}
                   </div>
-                  <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7, marginTop: 2 }}>
-                    {def.when}
-                  </div>
+                  <CardText def={def} />
                   <ResistNote n={resist[def.id] ?? 0} />
                 </>
               ) : (
@@ -99,7 +99,7 @@ export function StratagemPanel({
                         {d.name}
                         {loadout.includes(sid) && !here ? ' · 다른 칸에 있음' : ''}
                       </div>
-                      <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>{d.source}</div>
+                      <CardText def={d} />
                       <ResistNote n={resist[sid] ?? 0} />
                     </button>
                   );
@@ -141,6 +141,23 @@ export function StratagemPanel({
         출정 후 바꿀 수 있는 것은 후퇴 신호 하나뿐입니다.
       </div>
     </SystemPanel>
+  );
+}
+
+/**
+ * 카드 본문 — 원리 한 줄 · 발동/성공/간파 · 출전.
+ * 수치 문장은 `describeStratagem`이 효과 데이터에서 만든다(손으로 적으면 튜닝 때 갈라진다).
+ */
+function CardText({ def }: { def: StratagemDef }) {
+  const d = describeStratagem(def);
+  return (
+    <>
+      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, marginTop: 2 }}>{def.principle}</div>
+      <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7, marginTop: 4 }}>발동 · {d.trigger}</div>
+      <div style={{ fontSize: 11, color: T.rare, lineHeight: 1.7 }}>성공 · {d.success}</div>
+      <div style={{ fontSize: 11, color: T.amber, lineHeight: 1.7 }}>간파 · {d.failure}</div>
+      <div style={{ fontSize: 10, color: T.dim, lineHeight: 1.7, marginTop: 2, opacity: 0.8 }}>{def.source}</div>
+    </>
   );
 }
 

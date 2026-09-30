@@ -4,8 +4,8 @@
  * 자리표시는 `{ally}`(수행자 이름)와 조사 꼴 `{ally:이/가}`만 쓴다 — `fillVoice`로 채운다.
  * `{ally}가`처럼 조사를 붙여 쓰면 「세인가」가 찍힌다(CLAUDE.md 규칙). `chronicle.test.ts`가 잠근다.
  *
- * 문장은 연의의 장면을 **영웅이 다시 사는 것**으로 쓴다. 원작 인물 이름(황충·제갈량…)은
- * 카드의 출처 줄에만 두고, 여기서는 우리 영웅이 주어다.
+ * 문장은 책략을 **우리 영웅이 해내는 장면**으로 쓴다. 역사 인물 이름은 어디에도 쓰지 않는다
+ * (2026-09-30 — `stratagem.test.ts`가 금지 목록으로 잠근다).
  */
 import type { StratagemId } from './stratagems';
 
@@ -38,5 +38,17 @@ export const CHRONICLE_LINES: Record<StratagemId, ChronicleLines> = {
   redCliffs: {
     success: '{ally:이/가} 적을 한데 묶어 불을 질렀다. 바람을 탄 불길이 적진 전체를 삼켰다.',
     failure: '거짓 투항이 간파됐다. {ally:이/가} 매를 맞은 채 돌아왔고, 아군의 기세가 꺾였다.',
+  },
+  feint: {
+    success: '{ally:이/가} 한쪽을 요란하게 두드렸다. 적이 그쪽으로 몰린 사이 빈 옆구리가 뚫렸다.',
+    failure: '적은 소리 나는 쪽을 보지 않았다. 홀로 떨어진 {ally:이/가} 역습을 받았다.',
+  },
+  lastStand: {
+    success: '{ally:이/가} 물러날 길을 끊었다. 돌아갈 곳이 없는 아군이 이를 악물고 칼을 휘둘렀다.',
+    failure: '길을 끊자 아군이 흔들렸다. 등 뒤가 막힌 줄 안 자들의 방패가 떨렸다.',
+  },
+  besieged: {
+    success: '{ally:이/가} 사방에서 노래를 퍼뜨렸다. 고향 노래를 들은 적들이 무기를 늘어뜨렸다.',
+    failure: '노래는 적의 귀에 닿지 않았다. 목이 쉬도록 외친 {ally:이/가} 적의 표적이 됐다.',
   },
 };
