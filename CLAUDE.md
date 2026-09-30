@@ -137,6 +137,13 @@
   위기 단계는 엔진이 결과 필드 `crises`로 셋 다 기록하고(이벤트 아님 → 지문 불변), 화면은 `crisisFor`로 고른다.
   정찰자(`scout`)는 경로와 같은 자리다 — 저장하지 않고 `finish()`·`selectFloor()`·`hydrate()`에서 비운다.
   브리핑과 `start()`는 **같은 `resolveScout`·`scoutReport`**를 써야 한다 — 어긋나면 브리핑의 보고와 전투의 위기 창이 다른 사람의 말이 된다.
+- **편성 화면의 적 정보는 종류(이름·속성·역할)만 참이다**(사용자 결정, 2026-09-30). **적 수·전력은 쓰지 않는다** —
+  그건 정찰 보고의 영역이고, 편성 화면이 참 수를 보이면 보고 왜곡(STEP 60)이 무의미해진다.
+  `enemyKindsOf`는 반환형에 수가 없다. 역할 경고·추천 이유는 **엔진에 있는 것만** 말하고 수치를 약속하지 않는다.
+  치유 여부는 역할이 아니라 **치유 스킬 보유**로 판정한다(`canHeal` — 보조 역할에도 치유자가 있다).
+- **남의 장비를 조용히 가져오지 않는다.** `equipGear`는 막고, `takeGear`는 화면이 원 소유자의 전투력 하락을
+  보여 준 뒤에만 부른다. 자동 장착(`bestFreeGear`)은 창고의 장비만 쓴다. 비교·전투력 계산은 `gearCompare.ts`
+  (표시 전용)에 둔다 — `gear.ts`는 엔진이 import하므로 거기 넣으면 엔진이 전투력에 간접으로 닿는다.
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
 
@@ -146,7 +153,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1092개 통과)
+npm test           # Vitest 1회 실행 (현재 1123개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -252,7 +259,9 @@ src/
 │  ├─ reveal.ts        # 발굴 — 잠재치 구간 추정, 전투로 진행도 상승
 │  ├─ encounter.ts    # runEncounter — 로스터/MVP 조립
 │  ├─ power.ts        # 전투력 — **표시 전용.** 엔진이 import하면 안 된다(테스트로 잠금)
-│  ├─ formation.ts    # 진형·속성 구성·자동 편성 후보. 전부 표시/보조용 파생값
+│  ├─ formation.ts    # 진형·속성 구성·추천 편성(recommendParty — 수호·치유 우선 + 이유). 전부 표시/보조용
+│  ├─ floorIntel.ts   # 다음 층 적 종류(수 없음)·상성 ▲▼·역할 경고. 표시 보조, 엔진은 모른다
+│  ├─ gearCompare.ts  # 장비 착용 전 비교(gearDelta)·슬롯 추천(bestFreeGear). 표시 전용
 │  ├─ intervention.ts # 개입 — 화면이 쓰는 것은 후퇴 신호(withdraw)뿐. 집중/수호/1턴 후퇴는 엔진에만 남았다
 │  ├─ orders.ts       # 작전 방침 — 퇴각(군령)만 쓴다. 기본값 = 현행 엔진(비트 단위)
 │  ├─ stratagem.ts    # 책략 판정(조건·수행자·성공률·내성·해금)·카드 설명 문장. RNG를 받지 않는다
