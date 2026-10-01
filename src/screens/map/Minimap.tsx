@@ -112,20 +112,18 @@ export function Minimap({ map, route, width, labels, onSelectRoute, contacts: re
                 strokeWidth={small ? 0.8 : 1.2}
               />
             )}
-            {labels && (
-              <text
-                x={x} y={y + (n.y > 0.5 ? -11 : 19)}
-                textAnchor="middle"
-                fontSize={10}
-                fill={on ? T.text : T.dim}
-                stroke={MM.ground}
-                strokeWidth={3}
-                paintOrder="stroke"
-                style={{ fontFamily: 'inherit' }}
-              >
-                {n.kind === 'entry' ? '입구' : n.kind === 'exit' ? '계단' : TERRAIN[n.tag!].name}
-              </text>
-            )}
+            {labels && (() => {
+              const text = n.kind === 'entry' ? '입구' : n.kind === 'exit' ? '계단' : TERRAIN[n.tag!].name;
+              const at = { x, y: y + (n.y > 0.5 ? -11 : 19), textAnchor: 'middle' as const, fontSize: 10, style: { fontFamily: 'inherit' } };
+              // 테두리를 별도 층으로 먼저 그린다 — paint-order를 무시하는 폰 브라우저에서는
+              // 테두리가 글자 위에 덮여 10px 글자가 뭉개졌다(2026-10-01 폰 실측).
+              return (
+                <>
+                  <text {...at} fill="none" stroke={MM.ground} strokeWidth={3} strokeLinejoin="round">{text}</text>
+                  <text {...at} fill={on ? T.text : T.dim}>{text}</text>
+                </>
+              );
+            })()}
           </g>
         );
       })}
