@@ -1,18 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import {
-  crisisFor, partyPowerOf, reportLine, reportStyleOf, reportedTerrain, resolveScout, scoutReport, trueEnemyPower,
+  briefLine, crisisFor, forcesPhrase, partyPowerOf, reportLine, reportStyleOf, reportedTerrain, resolveScout,
+  scoutReport, trueEnemyPower, trueForces, type ScoutForce,
 } from './report';
-import { REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle } from './data/reports';
-import { TEMPERS } from './data/temperaments';
+import {
+  REPORT_BRIEF_BY_TEMPER, REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle,
+} from './data/reports';
+import { TEMPERS, type TemperId } from './data/temperaments';
+import { TERRAIN } from './data/terrain';
 import { CRISIS_LEVELS } from './data/orders';
 import { FLOORS, floorAt, gameData } from './data';
-import { floorMapOf } from './floormap';
+import { contactTerrain, floorMapOf } from './floormap';
 import { deriveTemper } from './temperament';
 import { runEncounter } from './encounter';
 import { createRng } from './rng';
 import { klassFor } from './stats';
 import { HERO } from './data/sample';
-import type { HeroDefId, HeroInstId, HeroInstance } from './types';
+import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance } from './types';
 
 const hero = (seed: number | undefined, n = 1, defId: HeroDefId = HERO.ashen): HeroInstance => ({
   instId: `${defId}#${n}` as HeroInstId, defId, star: 3, klass: klassFor(3), level: 20, exp: 0,
@@ -85,6 +89,12 @@ describe('보고 내용', () => {
       expect(b.enemyCount!).toBeLessThanOrEqual(f.enemyIds.length);
       expect(b.enemyCount!).toBeGreaterThanOrEqual(1);
       expect(b.enemyPower!).toBeLessThan(power);
+      // 보스만 있는 층(6층)은 부풀릴 졸개가 없다 — 보스 수는 늘 참이므로 수는 참, 전력만 부풀린다
+      if (f.enemyIds.every((id) => gameData.enemies[id].isBoss)) {
+        expect(c.enemyCount).toBe(f.enemyIds.length);
+        expect(c.enemyPower!).toBeGreaterThan(power);
+        continue;
+      }
       expect(c.enemyCount!).toBeGreaterThan(f.enemyIds.length);
       expect(c.enemyCount!).toBeLessThanOrEqual(f.enemyIds.length + REPORT_TUNING.countShiftMax);
       expect(c.enemyPower!).toBeGreaterThan(power);
@@ -171,15 +181,138 @@ describe('위기 단계 기록 (엔진)', () => {
   });
 });
 
+describe('종류별 보고 (2026-10-01 — 보고를 구체적으로)', () => {
+  const floors = FLOORS.filter((f) => f.id <= 60);
+  const kindsOf = (f: (typeof FLOORS)[number]) => [...new Set(f.enemyIds)];
+  const sum = (fs: ScoutForce[]) => fs.reduce((s, x) => s + x.count, 0);
+
+  it('정직 — 종류별 수가 참이다', () => {
+    const scout = hero(seedFor('honest'));
+    for (const f of floors) {
+      const r = scoutReport(scout, f, floorMapOf(f), gameData);
+      expect(r.forces).toEqual(trueForces(f));
+    }
+  });
+
+  it('종류는 언제나 참이고, 종류별 수의 합이 적 수와 같고, 종류마다 1기 이상이다', () => {
+    for (const style of ['honest', 'bluff', 'coward'] as const) {
+      const scout = hero(seedFor(style));
+      for (const f of floors) {
+        const r = scoutReport(scout, f, floorMapOf(f), gameData);
+        expect(r.forces!.map((x) => x.defId)).toEqual(kindsOf(f));
+        expect(sum(r.forces!)).toBe(r.enemyCount);
+        for (const x of r.forces!) expect(x.count).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it('보스 수는 늘 참이다 — 왜곡은 졸개에만 붙는다', () => {
+    for (const style of ['bluff', 'coward'] as const) {
+      const scout = hero(seedFor(style));
+      for (const f of floors) {
+        const truth = trueForces(f);
+        const r = scoutReport(scout, f, floorMapOf(f), gameData);
+        r.forces!.forEach((x, i) => {
+          if (gameData.enemies[x.defId].isBoss) expect(x.count).toBe(truth[i].count);
+        });
+      }
+    }
+  });
+
+  it('허세는 종류별로도 줄이기만, 겁많음은 늘리기만 하고, 실제로 어긋나는 층이 있다', () => {
+    let bent = 0;
+    for (const [style, sign] of [['bluff', -1], ['coward', 1]] as const) {
+      const scout = hero(seedFor(style));
+      for (const f of floors) {
+        const truth = trueForces(f);
+        const r = scoutReport(scout, f, floorMapOf(f), gameData);
+        r.forces!.forEach((x, i) => {
+          expect(Math.sign(x.count - truth[i].count) * sign).toBeGreaterThanOrEqual(0);
+          if (x.count !== truth[i].count) bent++;
+        });
+      }
+    }
+    expect(bent).toBeGreaterThan(20);
+  });
+
+  it('침묵은 종류별 수도 말하지 않는다', () => {
+    const f = floorAt(5);
+    expect(scoutReport(hero(seedFor('silent')), f, floorMapOf(f), gameData).forces).toBeNull();
+  });
+});
+
+describe('브리핑 문장 — 기질마다 다르고 구체적이다', () => {
+  const seedForTemper = (id: TemperId): number => {
+    for (let s = 1; s < 5000; s++) if (deriveTemper(s)?.id === id) return s;
+    throw new Error(id);
+  };
+  const f = floorAt(12);
+  const map = floorMapOf(f);
+
+  it('기질 8종 전부 문장이 있고, 서로 다르다', () => {
+    const lines = TEMPERS.map((t) => REPORT_BRIEF_BY_TEMPER[t.id]);
+    expect(lines.every((l) => l.length > 0)).toBe(true);
+    expect(new Set(lines).size).toBe(TEMPERS.length);
+  });
+
+  it('말하는 정찰자는 종류별 수와 보고된 접점 지형을 문장에 담는다', () => {
+    for (const t of TEMPERS) {
+      const scout = hero(seedForTemper(t.id));
+      const r = scoutReport(scout, f, map, gameData);
+      if (r.style === 'silent') continue;
+      map.routes.forEach((_, i) => {
+        const line = briefLine(scout, r, map, i, gameData.enemies, '세인');
+        for (const x of r.forces!) expect(line).toContain(gameData.enemies[x.defId].name);
+        expect(line).toContain(TERRAIN[reportedTerrain(map, r, i)!].name);
+      });
+    }
+  });
+
+  it('침묵은 수를 말하지 않고, 고른 경로의 **참** 접점 지형만 몸짓으로 알린다', () => {
+    for (const id of ['silent', 'resigned'] as const) {
+      const scout = hero(seedForTemper(id));
+      const r = scoutReport(scout, f, map, gameData);
+      map.routes.forEach((_, i) => {
+        const line = briefLine(scout, r, map, i, gameData.enemies, '세인');
+        expect(line).toContain(TERRAIN[contactTerrain(map, i)!].name);
+        for (const e of f.enemyIds) expect(line).not.toContain(gameData.enemies[e].name);
+      });
+    }
+  });
+
+  it('자리표시가 남지 않고, 조사가 받침에 맞고, 성향 이름을 말하지 않는다', () => {
+    for (const t of TEMPERS) {
+      const scout = hero(seedForTemper(t.id));
+      for (const fl of FLOORS.filter((x) => x.id <= 30)) {
+        const m = floorMapOf(fl);
+        const r = scoutReport(scout, fl, m, gameData);
+        for (const name of ['세인', '카이']) {
+          m.routes.forEach((_, i) => {
+            const line = briefLine(scout, r, m, i, gameData.enemies, name);
+            expect(line).not.toMatch(/[{}]/);
+            expect(line).not.toMatch(/세인가|카이이|세인는|카이은/);
+            for (const s of Object.values(REPORT_STYLES)) expect(line).not.toContain(s.label);
+          });
+        }
+      }
+    }
+  });
+
+  it('조사가 적 이름·지형 받침을 따른다', () => {
+    expect(forcesPhrase([{ defId: 'e_slime' as EnemyDefId, count: 3 }], gameData.enemies)).toBe('잿빛 슬라임이 셋');
+    expect(forcesPhrase(
+      [{ defId: 'e_slime' as EnemyDefId, count: 1 }, { defId: 'e_golem' as EnemyDefId, count: 2 }], gameData.enemies,
+    )).toBe('잿빛 슬라임이 하나, 균열의 골렘이 둘');
+  });
+});
+
 describe('보고 문장', () => {
   it('조사를 받침에 맞춰 고르고, 자리표시가 남지 않는다', () => {
     for (const style of ['honest', 'bluff', 'coward', 'silent'] as const) {
       for (const [scout, hurt] of [['세인', '카이'], ['카이', '세인']]) {
-        for (const moment of ['brief', 'crisis'] as const) {
-          const t = reportLine(style, moment, { scout, hurt });
-          expect(t).not.toMatch(/[{}]/);
-          expect(t).not.toMatch(/세인가|카이이|세인는|카이은/);
-        }
+        const t = reportLine(style, 'crisis', { scout, hurt });
+        expect(t).not.toMatch(/[{}]/);
+        expect(t).not.toMatch(/세인가|카이이|세인는|카이은/);
       }
     }
     expect(reportLine('bluff', 'crisis', { scout: '세인', hurt: '카일' })).toContain('세인이');
@@ -199,5 +332,22 @@ describe('위기 창 고르기', () => {
   });
   it('그 단계까지 안 떨어졌으면 창이 없다 — 허세는 위기를 끝내 말하지 않을 수 있다', () => {
     expect(crisisFor({ crisis: null, crises: { hp50: { at: 3 } } }, { crisisLevel: 'hp15' })).toBeNull();
+  });
+});
+
+describe('회귀 잠금 — 종류별 배분이 기존 보고를 밀지 않는다', () => {
+  it('허세·겁많음의 전력·접점이 2026-10-01 이전과 같다(난수를 기존 소비 뒤에 붙였다)', () => {
+    const parts: string[] = [];
+    for (const style of ['bluff', 'coward'] as const) {
+      const scout = hero(seedFor(style));
+      for (const f of FLOORS.filter((x) => x.id <= 60)) {
+        const r = scoutReport(scout, f, floorMapOf(f), gameData);
+        parts.push(`${r.enemyPower}:${r.contacts.join(',')}`);
+      }
+    }
+    let h = 2166136261;
+    for (const c of parts.join('|')) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    // 깨지면 지문을 갱신하지 말고 난수 소비 순서를 의심할 것
+    expect(h.toString(16)).toBe('b9f894a4');
   });
 });

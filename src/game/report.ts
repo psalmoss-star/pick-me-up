@@ -15,14 +15,22 @@ import type { FloorSpec } from './data/floors';
 import { enemyStatMultFor } from './data/floorgen';
 import type { CrisisLevel } from './data/orders';
 import {
-  REPORT_LINES, REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING, type ReportStyle,
+  COUNT_WORDS, REPORT_BRIEF_BY_TEMPER, REPORT_LINES, REPORT_STYLES, REPORT_STYLE_BY_TEMPER, REPORT_TUNING,
+  UNKNOWN_TERRAIN_WORD, type ReportStyle,
 } from './data/reports';
-import type { FloorMap } from './floormap';
+import { TERRAIN } from './data/terrain';
+import { contactTerrain, type FloorMap } from './floormap';
 import { combatPower, heroPower } from './power';
 import { STREAM, rngChance, rngInt, substream } from './rng';
 import { temperOf } from './temperament';
 import { hasBatchim } from './voice';
-import type { HeroInstance, HeroInstId, RNG } from './types';
+import type { EnemyDef, EnemyDefId, HeroInstance, HeroInstId, RNG } from './types';
+
+/** 종류별 수 — 종류는 늘 참이고(편성 화면과 같다), 수만 보고자의 성향대로 틀린다 */
+export interface ScoutForce {
+  defId: EnemyDefId;
+  count: number;
+}
 
 export interface ScoutReport {
   scoutId: HeroInstId;
@@ -31,6 +39,8 @@ export interface ScoutReport {
   enemyCount: number | null;
   /** 보고된 적 전력(아군 전투력과 같은 척도). 침묵이면 null */
   enemyPower: number | null;
+  /** 보고된 종류별 수(처음 나온 순서). 합 = `enemyCount`. 침묵이면 null */
+  forces: ScoutForce[] | null;
   /**
    * 경로마다 보고된 접점 노드 id(`map.routes`와 같은 순서). 침묵이면 전부 null — ✕를 그리지 않는다.
    * 틀린 보고는 **같은 경로의 다른 지점**을 가리킨다.
@@ -44,6 +54,17 @@ export interface ScoutReport {
 export function reportStyleOf(inst: Pick<HeroInstance, 'seed' | 'legendId'>): ReportStyle {
   const temper = temperOf(inst);
   return temper ? REPORT_STYLE_BY_TEMPER[temper.id] : 'honest';
+}
+
+/** 종류별 수 참값 — 층의 적 목록에서 처음 나온 순서대로 */
+export function trueForces(floor: Pick<FloorSpec, 'enemyIds'>): ScoutForce[] {
+  const out: ScoutForce[] = [];
+  for (const id of floor.enemyIds) {
+    const f = out.find((x) => x.defId === id);
+    if (f) f.count++;
+    else out.push({ defId: id, count: 1 });
+  }
+  return out;
 }
 
 /** 적 전력 참값 — 층 깊이 배수까지 반영한 적 스탯의 전투력 합. 엔진의 `buildEnemy`와 같은 배수 규칙 */
@@ -90,19 +111,31 @@ export function scoutReport(
   if (style === 'silent') {
     return {
       scoutId: scout.instId, style, crisisLevel,
-      enemyCount: null, enemyPower: null, contacts: map.routes.map(() => null),
+      enemyCount: null, enemyPower: null, forces: null, contacts: map.routes.map(() => null),
     };
   }
 
   const count = floor.enemyIds.length;
   const power = trueEnemyPower(floor, data);
+  const truth = trueForces(floor);
   if (style === 'honest') {
-    return { scoutId: scout.instId, style, crisisLevel, enemyCount: count, enemyPower: power, contacts: trueContacts };
+    return {
+      scoutId: scout.instId, style, crisisLevel,
+      enemyCount: count, enemyPower: power, forces: truth, contacts: trueContacts,
+    };
   }
+
+  // 보스 수는 늘 참이다(브리핑 장면에 보스가 그려진다) — 왜곡은 졸개 종류에만 붙는다.
+  // 허세여도 종류마다 1기는 남긴다: 종류는 편성 화면이 참으로 보여 주므로, 없앤 종류는 바로 들통난다.
+  const isMinion = (f: ScoutForce) => !data.enemies[f.defId].isBoss;
+  const bossCount = truth.filter((f) => !isMinion(f)).reduce((s, f) => s + f.count, 0);
+  const minionKinds = truth.filter(isMinion).length;
 
   const rng = reportRng(scout, floor.id);
   const shift = 1 + rngInt(rng, REPORT_TUNING.countShiftMax);
-  const enemyCount = style === 'bluff' ? Math.max(1, count - shift) : count + shift;
+  const enemyCount = style === 'bluff'
+    ? Math.max(bossCount + minionKinds, 1, count - shift)
+    : minionKinds > 0 ? count + shift : count;
   const [lo, hi] = REPORT_TUNING.powerMult[style];
   const enemyPower = Math.max(1, Math.round(power * (lo + rng() * (hi - lo))));
 
@@ -114,7 +147,23 @@ export function scoutReport(
     return wrong ? pick : r.contactId;
   });
 
-  return { scoutId: scout.instId, style, crisisLevel, enemyCount, enemyPower, contacts };
+  // 종류별 배분 — 난수를 **기존 소비 뒤에** 붙인다. 앞에 끼우면 전력·접점이 전부 밀린다(테스트가 지문으로 잠근다)
+  const forces = truth.map((f) => ({ ...f }));
+  let diff = enemyCount - count;
+  while (diff < 0) {
+    const pool = forces.filter((f) => isMinion(f) && f.count > 1);
+    if (pool.length === 0) break;
+    pool[rngInt(rng, pool.length)].count--;
+    diff++;
+  }
+  while (diff > 0) {
+    const pool = forces.filter(isMinion);
+    if (pool.length === 0) break;
+    pool[rngInt(rng, pool.length)].count++;
+    diff--;
+  }
+
+  return { scoutId: scout.instId, style, crisisLevel, enemyCount, enemyPower, forces, contacts };
 }
 
 /** 보고된 접점의 지형 — 경로 패널이 이걸로 유리/불리를 말한다. 모르면 null */
@@ -133,17 +182,52 @@ export function resolveScout<H extends Pick<HeroInstance, 'instId'>>(members: H[
 }
 
 /**
- * 보고 문장을 채운다 — `{scout:이/가}`·`{hurt:이/가}`·`{scout}`·`{hurt}`.
+ * 자리표시를 채운다 — `{k:이/가}`(받침에 맞춰 조사)·`{k}`.
  * 조사는 `voice.ts`의 `hasBatchim` 하나로 고른다(「세인가」를 찍지 않는다).
  */
-export function reportLine(
-  style: ReportStyle, moment: 'brief' | 'crisis', names: { scout: string; hurt?: string },
-): string {
-  const vars: Record<string, string> = { scout: names.scout, hurt: names.hurt ?? '그' };
-  return REPORT_LINES[style][moment]
-    .replace(/\{(scout|hurt):([^/}]+)\/([^}]+)\}/g, (_, k: string, withB: string, noB: string) =>
+function fill(template: string, vars: Record<string, string>): string {
+  return template
+    .replace(/\{(\w+):([^/}]+)\/([^}]+)\}/g, (_, k: string, withB: string, noB: string) =>
       vars[k] + (hasBatchim(vars[k]) ? withB : noB))
-    .replace(/\{(scout|hurt)\}/g, (_, k: string) => vars[k]);
+    .replace(/\{(\w+)\}/g, (_, k: string) => vars[k]);
+}
+
+/** 위기 창 첫 줄 — `{scout:이/가}`·`{hurt:이/가}`·`{scout}`·`{hurt}` */
+export function reportLine(
+  style: ReportStyle, moment: 'crisis', names: { scout: string; hurt?: string },
+): string {
+  return fill(REPORT_LINES[style][moment], { scout: names.scout, hurt: names.hurt ?? '그' });
+}
+
+/** 종류별 수를 말로 — "잿빛 슬라임이 셋, 균열의 골렘이 하나" */
+export function forcesPhrase(forces: readonly ScoutForce[], enemies: Record<EnemyDefId, EnemyDef>): string {
+  return forces.map((f) => {
+    const name = enemies[f.defId].name;
+    const n = COUNT_WORDS[f.count] ?? `${f.count}기`;
+    return `${name}${hasBatchim(name) ? '이' : '가'} ${n}`;
+  }).join(', ');
+}
+
+/**
+ * 브리핑 보고 한 줄 — 정찰자의 **기질** 문장에 종류별 수와 접점 지형을 채운다.
+ * 말하는 정찰자는 **보고된** 접점의 지형을, 침묵하는 정찰자는 **참** 접점의 지형을 쓴다.
+ * 기질이 없는 옛 개체는 충직(정직)의 문장을 쓴다 — `reportStyleOf`와 같은 규칙.
+ */
+export function briefLine(
+  scout: Pick<HeroInstance, 'seed' | 'legendId'>,
+  report: ScoutReport,
+  map: FloorMap,
+  routeIndex: number,
+  enemies: Record<EnemyDefId, EnemyDef>,
+  scoutName: string,
+): string {
+  const temper = temperOf(scout);
+  const tag = report.style === 'silent' ? contactTerrain(map, routeIndex) : reportedTerrain(map, report, routeIndex);
+  return fill(REPORT_BRIEF_BY_TEMPER[temper?.id ?? 'loyal'], {
+    scout: scoutName,
+    forces: report.forces ? forcesPhrase(report.forces, enemies) : '',
+    terrain: tag ? TERRAIN[tag].name : UNKNOWN_TERRAIN_WORD,
+  });
 }
 
 /**

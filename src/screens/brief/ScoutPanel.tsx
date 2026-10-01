@@ -3,7 +3,8 @@ import { T } from '../../ui/tokens';
 import { gameData } from '../../game/data';
 import { displayName } from '../../game/identity';
 import { temperOf } from '../../game/temperament';
-import { reportLine, type ScoutReport } from '../../game/report';
+import { briefLine, type ScoutReport } from '../../game/report';
+import { clampRoute, type FloorMap } from '../../game/floormap';
 import type { HeroInstance, HeroInstId } from '../../game/types';
 
 export interface ScoutPanelProps {
@@ -15,6 +16,9 @@ export interface ScoutPanelProps {
   report: ScoutReport | null;
   /** 아군 전투력(참) — 보고된 적 전력과 비교하라고 옆에 둔다 */
   partyPower: number;
+  /** 층 맵과 지금 고른 경로 — 보고 문장의 접점 지형을 정한다 */
+  map: FloorMap;
+  route: number;
 }
 
 /**
@@ -34,7 +38,7 @@ function approx(n: number): string {
  * **성향 이름은 보여 주지 않는다.** 기질(상태창에 있다)과 말투, 그리고 전투에서 드러나는 참을 보고
  * 누구 말을 믿을지 마스터가 알아내야 한다. 그게 "보고를 의심했는가"다.
  */
-export function ScoutPanel({ members, scoutId, onSelect, report, partyPower }: ScoutPanelProps) {
+export function ScoutPanel({ members, scoutId, onSelect, report, partyPower, map, route }: ScoutPanelProps) {
   const scout = members.find((h) => h.instId === scoutId) ?? null;
   const scoutName = scout ? displayName(scout, gameData.heroes) : '';
 
@@ -71,7 +75,7 @@ export function ScoutPanel({ members, scoutId, onSelect, report, partyPower }: S
       {scout && report && (
         <>
           <div style={{ fontSize: 13, lineHeight: 1.9 }}>
-            {reportLine(report.style, 'brief', { scout: scoutName })}
+            {briefLine(scout, report, map, clampRoute(map, route), gameData.enemies, scoutName)}
           </div>
           {report.enemyCount !== null && report.enemyPower !== null ? (
             <div style={{ fontSize: 14, color: T.amber, letterSpacing: '.06em', lineHeight: 1.9, marginTop: 4 }}>

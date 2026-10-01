@@ -684,6 +684,9 @@ export default function App() {
               onSelect: setScout,
               report,
               partyPower: partyPowerOf(sortie, gameData),
+              // 문장 속 접점 지형은 지금 고른 경로의 것 — 경로를 바꾸면 보고 문장도 바뀐다
+              map: floorMap,
+              route,
             }}
             quests={pendingQuests(floor.id, claimedQuests)}
             // 이제 브리핑 앞에 층 선택(tower)이 낀다 — 돌아가기는 대기실이 아니라

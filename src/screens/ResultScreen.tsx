@@ -10,7 +10,7 @@ import { displayName } from '../game/identity';
 import { hasBatchim, lineFor, pickSpeaker, templateLastWords } from '../game/voice';
 import { chronicleOf } from '../game/chronicle';
 import { floorMapOf, contactTerrain, clampRoute } from '../game/floormap';
-import { reportedTerrain, type ScoutReport } from '../game/report';
+import { reportedTerrain, trueForces, type ScoutForce, type ScoutReport } from '../game/report';
 import { TERRAIN } from '../game/data/terrain';
 import { Quote } from '../ui/Quote';
 import { estimatePotential } from '../game/reveal';
@@ -139,6 +139,13 @@ export function ResultScreen({
   /** 「숲이라」·「강가라」 — 조사는 받침으로 고른다 */
   const said = (t: typeof realTag) => (t ? tagName(t) + (hasBatchim(tagName(t)) ? '이라' : '라') : '모른다고');
   const was = (t: typeof realTag) => tagName(t) + (hasBatchim(tagName(t)) ? '이었다' : '였다');
+  /** 「잿빛 슬라임 3기 · 균열의 골렘 1기」 — 종류별 대조. 종류는 늘 참이므로 순서가 같다 */
+  const forcesText = (fs: readonly ScoutForce[]) =>
+    fs.map((f) => `${gameData.enemies[f.defId].name} ${f.count}기`).join(' · ');
+  const realForces = trueForces(floor);
+  const sameForces = report?.forces
+    ? report.forces.every((f, i) => f.count === realForces[i]?.count)
+    : true;
 
   /** 엔딩은 최상층을 '이겼을 때'만. 최상층에서 져도 뜨면 안 된다. */
   const ending = towerCleared && win;
@@ -250,14 +257,18 @@ export function ResultScreen({
             <div style={{ fontSize: 13, color: T.dim, letterSpacing: '.2em', marginBottom: 10 }}>
               정찰 보고 — {nameOf(scoutHero)}
             </div>
-            {report.enemyCount === null ? (
+            {report.forces === null ? (
+              // 침묵 — 수는 말하지 않았고, 몸짓으로 가리킨 접점 지형은 참이다
               <div style={{ fontSize: 13, color: T.dim, lineHeight: 1.9 }}>
-                아무것도 말하지 않았다. 적은 {floor.enemyIds.length}기, 접점은 {was(realTag)}.
+                말 없이 {tagName(realTag)} 쪽을 가리켰다. 적은 {floor.enemyIds.length}기, 접점은 {was(realTag)}.
               </div>
             ) : (
               <div style={{ fontSize: 13, lineHeight: 1.9 }}>
-                <div style={{ color: report.enemyCount === floor.enemyIds.length ? T.text : T.amber }}>
-                  적 {report.enemyCount}기라 했다 → 실제 {floor.enemyIds.length}기
+                <div style={{ color: sameForces ? T.text : T.amber }}>
+                  {forcesText(report.forces)}라 했다
+                </div>
+                <div style={{ color: sameForces ? T.text : T.amber }}>
+                  → 실제 {forcesText(realForces)}
                 </div>
                 <div style={{ color: saidTag === realTag ? T.text : T.amber }}>
                   접점 {said(saidTag)} 했다 → 실제 {tagName(realTag)}

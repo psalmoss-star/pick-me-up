@@ -46,29 +46,43 @@ export const REPORT_STYLE_BY_TEMPER: Record<TemperId, ReportStyle> = {
 };
 
 /**
- * 보고 문장. 조사는 `{scout:이/가}`·`{hurt:이/가}`처럼 두 꼴을 적는다(CLAUDE.md 대사 규칙).
- * - `brief`: 브리핑에서 정찰자가 하는 한 마디. 성향을 **이름으로 말하지 않는다** —
- *   마스터가 말투와 결과를 보고 알아내야 "보고를 의심했는가"가 성립한다.
- * - `crisis`: 위기 창 첫 줄. `hurt` = 위기에 빠진 영웅.
+ * 위기 창 첫 줄. 조사는 `{scout:이/가}`·`{hurt:이/가}`처럼 두 꼴을 적는다(CLAUDE.md 대사 규칙).
+ * `hurt` = 위기에 빠진 영웅.
  */
-export const REPORT_LINES: Record<ReportStyle, { brief: string; crisis: string }> = {
-  honest: {
-    brief: '{scout:이/가} 본 대로 적어 올렸다.',
-    crisis: '{scout:이/가} 알린다 — {hurt}의 숨이 가빠졌다.',
-  },
-  bluff: {
-    brief: '{scout:이/가} 코웃음 쳤다. "별것 없습니다."',
-    crisis: '{scout:이/가} 그제야 입을 열었다 — {hurt:이/가} 쓰러지기 직전이다.',
-  },
-  coward: {
-    brief: '{scout:이/가} 목소리를 떨며 보고했다. "많습니다, 너무 많습니다."',
-    crisis: '{scout:이/가} 소리친다 — {hurt:이/가} 위험하다!',
-  },
-  silent: {
-    brief: '{scout:은/는} 돌아와서 아무 말도 하지 않았다.',
-    crisis: '',
-  },
+export const REPORT_LINES: Record<ReportStyle, { crisis: string }> = {
+  honest: { crisis: '{scout:이/가} 알린다 — {hurt}의 숨이 가빠졌다.' },
+  bluff: { crisis: '{scout:이/가} 그제야 입을 열었다 — {hurt:이/가} 쓰러지기 직전이다.' },
+  coward: { crisis: '{scout:이/가} 소리친다 — {hurt:이/가} 위험하다!' },
+  silent: { crisis: '' },
 };
+
+/**
+ * 브리핑 보고 — **기질마다** 한 줄(2026-10-01). 성향마다 한 줄이면 겁많음 셋이 같은 말을 해서
+ * 말투가 아니라 문장 자체로 성향이 드러났다(1차 셀프 테스트: "같은 성향이 겹쳐 나온다").
+ *
+ * 자리표시: `{scout}` 정찰자 · `{forces}` 종류별 수("잿빛 슬라임이 셋, 균열의 골렘이 하나") ·
+ * `{terrain}` 접점 지형 이름. 조사는 `{scout:이/가}`·`{terrain:을/를}`처럼 두 꼴을 적는다.
+ * - 말하는 기질은 **보고된** 접점 지형을 말한다(틀릴 수 있다).
+ * - 침묵 기질(과묵·체념)은 수를 말하지 않고 **참** 접점 지형을 몸짓으로 알린다 —
+ *   드물게 입을 열지 않지만 틀리지도 않는 보고자다(사용자 결정, 2026-10-01).
+ * 성향 이름("허세" 등)을 문장에 쓰지 않는다(테스트가 잠근다).
+ */
+export const REPORT_BRIEF_BY_TEMPER: Record<TemperId, string> = {
+  loyal: '{scout:이/가} 본 대로 적어 올렸다. "{forces}. {terrain}에서 마주칩니다."',
+  proud: '{scout:이/가} 코웃음 쳤다. "{forces}. {terrain}에서 끝내겠습니다. 별것 없습니다."',
+  fierce: '{scout:이/가} 이를 드러냈다. "{forces}뿐입니다. {terrain}에서 부숴 버리죠."',
+  timid: '{scout:이/가} 목소리를 떨며 보고했다. "{forces}… 너무 많습니다. {terrain}에서 기다리고 있어요."',
+  gentle: '{scout:이/가} 동료들을 돌아보며 말했다. "{forces}. {terrain}에서 부딪힙니다. 다들 무사해야 할 텐데요."',
+  cynic: '{scout:이/가} 한숨을 쉬었다. "{forces}. {terrain}에서요. 이번엔 다 돌아오진 못하겠군요."',
+  silent: '{scout:은/는} 아무 말도 하지 않았다. 땅에 {terrain:을/를} 그리고 두 번 두드렸다.',
+  resigned: '{scout:은/는} 대답 대신 {terrain} 쪽을 한 번 보고, 고개를 저었다.',
+};
+
+/** 종류별 수를 말로 — 1~10은 고유어, 그 위는 숫자 */
+export const COUNT_WORDS = ['', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉', '열'] as const;
+
+/** 접점을 모를 때(지도에 접점이 없는 경로) 지형 대신 쓰는 말 */
+export const UNKNOWN_TERRAIN_WORD = '길목';
 
 /**
  * 왜곡 폭. 허세는 줄이고 겁많음은 부풀린다.
