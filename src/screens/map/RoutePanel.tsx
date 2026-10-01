@@ -4,7 +4,7 @@ import { TERRAIN } from '../../game/data/terrain';
 import { STRATAGEM_BY_ID, type StratagemId } from '../../game/data/stratagems';
 import { contactTerrain, terrainModifier, type FloorMap } from '../../game/floormap';
 import { reportedTerrain, type ScoutReport } from '../../game/report';
-import { FloorMapView } from './FloorMapView';
+import { Minimap } from './Minimap';
 
 export interface RoutePanelProps {
   map: FloorMap;
@@ -33,7 +33,7 @@ export function RoutePanel({ map, route, onSelectRoute, loadout, report, scoutNa
       <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.3em', marginBottom: 8 }}>
         지도
       </div>
-      <FloorMapView map={map} route={route} onSelectRoute={onSelectRoute} contacts={report?.contacts} />
+      <Minimap map={map} route={route} width={340} labels onSelectRoute={onSelectRoute} contacts={report?.contacts} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
         {map.routes.map((r) => {
