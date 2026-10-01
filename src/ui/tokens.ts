@@ -2,6 +2,7 @@
  * 비주얼 언어의 단일 출처.
  * 색과 등급 표현을 여기 밖에서 하드코딩하지 말 것.
  */
+import type { TerrainTag } from '../game/data/terrain';
 
 export const T = {
   void: '#050508',
@@ -168,4 +169,19 @@ export const ELEMENT_TINT: Record<string, string> = {
 
 export const ELEMENT_KR: Record<string, string> = {
   fire: '화', water: '수', wind: '풍', earth: '지', thunder: '뇌',
+};
+
+/**
+ * 미니맵 지형 팔레트 — 층 지도 전용(2026-10-01).
+ *
+ * 왜 T와 따로 두는가: 마을 `V`와 같은 이유다 — 장면 전용 색을 T에 섞으면 카드·패널까지 물든다.
+ * 전부 명도를 낮췄다. 길(금색)과 점(보라·핏빛)이 그 위에 떠야 지도가 읽힌다.
+ */
+export const MM: Record<'ground' | TerrainTag, string> = {
+  ground: '#0B0A10',
+  forest: '#1D3324',
+  river: '#172A3D',
+  fort: '#36302A',
+  narrow: '#2A2530',
+  open: '#3A3322',
 };
