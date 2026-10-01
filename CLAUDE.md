@@ -130,6 +130,8 @@
   (사용자 결정, 2026-09-29), 경로가 정하는 것은 **접점 지형 하나**다. 지형은 책략 **성공률에만** 닿는다(유리 +15%p, 불리 −10%p).
   경로마다 접점 지형이 달라야 한다(테스트가 1~100층 전부를 잠근다).
   고른 경로(`route`)는 **준비처럼 저장하지 않고** `finish()`·`selectFloor()`·`hydrate()`에서 0으로 돌린다.
+  **미니맵(STEP 64)은 표시 전용이다** — 지형 면은 참, ✕만 보고를 따른다. 점은 `minimapDots`가 화면 상태(HP·이탈·단계)에서만 만든다.
+  엔진에 위치를 넣는 것은 사용자 결정으로 하지 않았다(2026-10-01) — 넣으면 1~100층 승률표를 다시 잰다.
 - **정찰 보고(STEP 60)는 전투 입력이 아니다.** 엔진은 보고를 모른다 — 보고가 바꾸는 것은 마스터가 보는 정보
   (적 수·전력·지도 ✕·위기 창 **시점**)뿐이다. 보고가 전투 수치·난수에 닿게 만들면 승률표를 다시 재야 한다.
   성향은 기질에서 파생한다(`REPORT_STYLE_BY_TEMPER`, 사용자 결정: 정직 1 · 허세 2 · 겁많음 3 · 침묵 2).
@@ -157,7 +159,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1134개 통과)
+npm test           # Vitest 1회 실행 (현재 1151개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -312,6 +314,8 @@ src/
 │  ├─ HeroCard.tsx    # 타로카드형
 │  ├─ OrnateCorner.tsx
 │  ├─ iso.ts          # 아이소메트릭 투영(순수). 그리기 순서 = depth(x+y)
+│  ├─ minimapLayout.ts # 층 미니맵 배치(순수) — 격자 지형 면(가까운 경로 노드)·ㄱ자 길. 지형은 언제나 참
+│  ├─ minimapDots.ts   # 미니맵 점 좌표(순수) — 재생 상태에서 파생. 엔진은 미니맵을 모른다
 │  ├─ IsoVillage.tsx  # 대기실 주 화면 — 섬 부감도. 건물과 라벨이 같은 좌표에서 나온다
 │  ├─ BaseHud.tsx     # 상단 HUD (층·영웅수·재화). 마을 위에 겹친다
 │  ├─ BaseMap.tsx     # 거점 부감 맵 — 시설 레벨을 건물 구조로 표현
@@ -328,6 +332,7 @@ src/
 │                     # / GraveScreen (무덤 — '기록/도감' 두 탭) + CodexPanel(도감)
 │                     # 하단 탭 3개는 각자 화면이다 (STEP 32에서 갈랐다):
 │                     # / HeroesScreen(목록) / StatusScreen(판독) / PartyScreen(편성)
+│                     # map/Minimap(브리핑·전투 공용 지도 — 지형 면·길·✕·점) / map/RoutePanel
 ├─ reference/
 │  └─ Prototype.jsx   # 동작하는 프로토타입 전체. 화면 추출의 원본
 └─ App.tsx            # 화면 전환(view state)만 담당. 게임 상태는 runStore
