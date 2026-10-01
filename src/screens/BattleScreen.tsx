@@ -14,7 +14,9 @@ import type { EncounterResult, RosterUnit } from '../game/encounter';
 import { STRATAGEM_BY_ID, type StratagemId } from '../game/data/stratagems';
 import { floorMapOf } from '../game/floormap';
 import { crisisFor, reportLine, type ScoutReport } from '../game/report';
-import { FloorMapView } from './map/FloorMapView';
+import { Minimap } from './map/Minimap';
+import { minimapLayout } from '../ui/minimapLayout';
+import { minimapDots, type DotUnit, type MinimapPhase } from '../ui/minimapDots';
 import type { FloorSpec } from '../game/data/floors';
 import type { StatusKind } from '../game/types';
 
@@ -31,6 +33,10 @@ const SIZE = {
   enemyScale: 0.92,   // 뒤쪽은 살짝 작게 — 원근
   heroScale: 1,
   logLines: 3,
+  /** 전장 왼쪽 위 미니맵 폭(px). 높이는 격자 비율 3/4 → 72 */
+  miniMap: 96,
+  /** 펼친 지도 폭(px) — 375에서 좌우 여백 포함해 들어간다 */
+  bigMap: 320,
 } as const;
 
 export interface BattleScreenProps {
@@ -69,6 +75,9 @@ export function BattleScreen({
   const [flash, setFlash] = useState(0);
   /** 위기 창을 이미 넘겼는가 — 신호를 보냈든 그대로 싸우기로 했든 */
   const [crisisHandled, setCrisisHandled] = useState(false);
+  /** 미니맵을 크게 펼쳤는가 — 재생은 멈추지 않는다. 위기 창이 뜨면 닫는다(위기 창이 우선) */
+  const [mapOpen, setMapOpen] = useState(false);
+  const mmLayout = useMemo(() => minimapLayout(floorMap), [floorMap]);
   const floaterId = useRef(0);
 
   const bossName = floor.isBoss ? gameData.enemies[floor.enemyIds[0]]?.name : undefined;
@@ -185,6 +194,21 @@ export function BattleScreen({
 
   const done = step >= result.events.length && !pending;
 
+  useEffect(() => { if (crisisOpen) setMapOpen(false); }, [crisisOpen]);
+
+  /** 미니맵 점 — 화면이 이미 가진 HP·이탈·단계만 읽는다(엔진은 미니맵을 모른다) */
+  const mapPhase: MinimapPhase = step === 0 ? 'approach' : done ? 'after' : 'engage';
+  const mapDots = useMemo(() => minimapDots(mmLayout, floorMap, route, {
+    phase: mapPhase,
+    outcome: result.outcome === 'victory' ? 'victory' : 'defeat',
+    units: result.roster.map((u): DotUnit => ({
+      uid: u.uid,
+      side: u.kind,
+      alive: (hp[u.uid] ?? u.maxHp) > 0,
+      withdrawn: u.kind === 'hero' && (withdrawnNow.has(u.uid) || retreatedNow.has(u.sourceId)),
+    })),
+  }), [mmLayout, floorMap, route, mapPhase, result, hp, withdrawnNow, retreatedNow]);
+
   /*
     ⚠️ `statusApplied`를 추가했다 — 디버프가 걸리는 순간이 안 보이면
     "왜 갑자기 녹지"가 설명되지 않는다. 엔진은 이벤트를 내고 있었고 화면이 버렸다.
@@ -244,7 +268,7 @@ export function BattleScreen({
 
   return (
     <div style={{ padding: '10px 12px calc(20px + env(safe-area-inset-bottom))' }}>
-      {/* 헤더 — 층 정보가 곧 탑 진행도다 (전투 중 미니맵을 두지 않는 이유) */}
+      {/* 헤더 — 층 정보가 곧 탑 진행도다 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, color: T.dim, letterSpacing: '.1em', marginBottom: 6 }}>
         <span>{floor.id}층 {floor.name} · {MISSION_LABEL[floor.mission.kind]}</span>
         <span style={{ color: turnCap ? T.amber : T.dim }}>
@@ -268,21 +292,23 @@ export function BattleScreen({
       )}
 
       {/*
-        지도 띠 — 영웅 점이 입구에서 접점(✕)으로 가서 싸우고, 이기면 계단으로 간다.
-        전투는 접점 한 곳에서 한 판이다(사용자 결정). 세로 예산이 빠듯해 46px 띠로 둔다.
+        전장 — 왼쪽 위에 미니맵(2026-10-01, 46px 띠를 대체). 적이 3기 이상이면 가운데 정렬된 적 줄이
+        미니맵 자리와 겹친다(375 실측) — 그래서 위 여백을 미니맵 높이만큼 늘렸다(14 → 84).
       */}
-      <div style={{ border: `1px solid ${T.panelHi}`, background: '#08070C', marginBottom: 8 }}>
-        <FloorMapView
-          map={floorMap}
-          route={route}
-          compact
-          heroAt={step === 0 ? 'entry' : done && result.outcome === 'victory' ? 'exit' : 'contact'}
-        />
-      </div>
-
-      {/* 전장 */}
-      <div style={{ position: 'relative', border: `1px solid ${T.panelHi}`, overflow: 'hidden', padding: '14px 8px 12px', marginBottom: 10 }}>
+      <div style={{ position: 'relative', border: `1px solid ${T.panelHi}`, overflow: 'hidden', padding: `${SIZE.miniMap * 0.75 + 12}px 8px 12px`, marginBottom: 10 }}>
         <Scene kind={floor.scene} />
+
+        <button
+          onClick={() => setMapOpen(true)}
+          aria-label="지도 펼치기"
+          style={{
+            position: 'absolute', top: 6, left: 6, zIndex: 2,
+            width: SIZE.miniMap, height: SIZE.miniMap * 0.75, padding: 0,
+            border: `1px solid ${T.panelHi}`, background: 'transparent', cursor: 'pointer',
+          }}
+        >
+          <Minimap map={floorMap} route={route} width={SIZE.miniMap} dots={mapDots} />
+        </button>
 
         <div style={{ position: 'relative', display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: guards.length ? 8 : 18 }}>
           {enemies.map((u) => renderUnit(u, SIZE.enemyArt, SIZE.enemyScale))}
@@ -431,6 +457,27 @@ export function BattleScreen({
             <div style={{ textAlign: 'center', marginTop: 22 }}>
               <Button tone={pending.tone} onClick={() => setBeatIdx((b) => b + 1)}>확 인</Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 펼친 지도 — 재생은 계속된다. 어디를 눌러도 닫힌다 */}
+      {mapOpen && (
+        <div
+          role="dialog"
+          aria-label="층 지도 크게 보기"
+          onClick={() => setMapOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50, padding: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `${T.void}E6`,
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: SIZE.bigMap + 40 }}>
+            <SystemPanel compact>
+              <Minimap map={floorMap} route={route} width={SIZE.bigMap} labels dots={mapDots} />
+              <div style={{ fontSize: 11, color: T.dim, marginTop: 8 }}>눌러서 닫기</div>
+            </SystemPanel>
           </div>
         </div>
       )}
