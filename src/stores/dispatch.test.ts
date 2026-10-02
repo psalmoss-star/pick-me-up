@@ -324,6 +324,17 @@ describe('파견 — 보상 지급', () => {
     return { s, before, outcome: s.getState().adventureOutcomes[0], ids };
   }
 
+  /** 장비 사다리 — 균열·상단은 성공하면 확률로 그 단계 정예를 준다 */
+  it('모험이 정예를 주면 창고에 들어온다', () => {
+    for (let seed = 1; seed < 80; seed++) {
+      const { s, outcome } = runToCompletion(seed, RIFT);
+      if (!outcome?.gearDefId) continue;
+      expect(s.getState().gear.some((g) => g.defId === outcome.gearDefId && g.equippedBy === null)).toBe(true);
+      return;
+    }
+    throw new Error('정예가 한 번도 안 나왔다');
+  });
+
   it('성공하면 재료가 실제로 지갑에 들어온다', () => {
     // 성공하는 시드를 찾는다
     let found = false;

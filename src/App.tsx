@@ -392,6 +392,7 @@ export default function App() {
       fought: new Set(result.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId)),
       casualties: new Set(result.casualties),
       cleared: result.outcome === 'victory',
+      tier: unlockedTierOf(FLOORS[maxFloorReached].id),
     });
   };
 

@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRunStore } from './runStore';
 import { settleOffTower } from '../game/offTower';
 import { ASSIGNABLE } from '../game/data/facilities';
+import { unlockedTierOf } from '../game/data/gear';
+import { FLOORS } from '../game/data/floors';
 import type { AdventureId } from '../game/data/adventures';
 
 class MemStorage {
@@ -47,6 +49,7 @@ describe('finish() = settleOffTower', () => {
         fought,
         casualties: new Set(),
         cleared: true,
+        tier: unlockedTierOf(FLOORS[st.maxFloorReached].id),
       });
       expect(expected.trainees.length + expected.returned.length).toBeGreaterThan(0);
 

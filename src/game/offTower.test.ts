@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { growthOf, settleOffTower, type OffTowerInput } from './offTower';
 import { ADVENTURE_BY_ID, type AdventureId, type Dispatch } from './data/adventures';
 import { idleExpWithAssign } from './data/facilities';
+import { GEAR_DEFS } from './data/gear';
 import { klassFor } from './stats';
 import { HERO } from './data/sample';
 import type { HeroInstId, HeroInstance } from './types';
@@ -46,6 +47,7 @@ function input(over: Partial<OffTowerInput> = {}): OffTowerInput {
     fought: new Set([id(0)]),
     casualties: new Set(),
     cleared: true,
+    tier: 1,
     ...over,
   };
 }
@@ -176,5 +178,19 @@ describe('growthOf — 결과 화면 "▲ 성장"', () => {
     const off = settleOffTower(inp);
     const g = growthOf({ roster: inp.roster, fought: inp.fought, casualties: inp.casualties, battleExp: 500, off });
     expect(g.map((x) => x.instId)).toEqual([id(0)]);
+  });
+});
+
+describe('settleOffTower — 모험 정예', () => {
+  it('모험 장비는 outcomes에 정의 id로만 실린다 — 발번은 스토어 몫', () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const d: Dispatch = { advId: RIFT, heroIds: [id(2), id(3)], startedAtBattle: 6 };
+      const r = settleOffTower(input({ seed, tier: 5, dispatches: [d], roster: [hero(0), hero(2, 40), hero(3, 40)] }));
+      const g = r.outcomes[0].gearDefId;
+      if (!g) continue;
+      expect(GEAR_DEFS[g].tier).toBe(5);
+      return;
+    }
+    throw new Error('정예가 한 번도 안 나왔다');
   });
 });

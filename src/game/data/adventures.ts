@@ -55,6 +55,11 @@ export interface AdventureReward {
    * (테스트 `모험 exp가 1층 참전 exp를 넘지 않는다`가 이 부등식을 잠근다).
    */
   exp: number;
+  /**
+   * 성공 시 그 단계 **정예** 장비를 줄 확률(장비 사다리, 2026-10-02).
+   * 판정은 각성석 **뒤에** 한다 — 앞에 끼우면 기존 모험 결과가 전부 바뀐다.
+   */
+  eliteChance: number;
 }
 
 export interface AdventureDef {
@@ -128,6 +133,7 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
       materials: mat([[MATERIAL.ore, 4]]),
       awakeningChance: 0,
       exp: 60, // 1층 6턴(120)의 절반
+      eliteChance: 0,
     },
   },
   {
@@ -148,6 +154,7 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
       materials: mat([[MATERIAL.ore, 3], [MATERIAL.hide, 3]]),
       awakeningChance: 0,
       exp: 90,
+      eliteChance: 0.15,
     },
   },
   {
@@ -176,6 +183,7 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
        */
       awakeningChance: 0.35,
       exp: 140,
+      eliteChance: 0.3,
     },
   },
 ];

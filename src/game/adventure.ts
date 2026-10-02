@@ -17,7 +17,8 @@ import {
   type AdventureDef, type AdventureId, type Dispatch,
 } from './data/adventures';
 import { STREAM, substream } from './rng';
-import type { HeroInstance, HeroInstId, MaterialBag, RNG } from './types';
+import { ladderSet } from './data/gear';
+import type { GearDefId, HeroInstance, HeroInstId, MaterialBag, RNG } from './types';
 
 /**
  * 모험 판정용 RNG.
@@ -95,6 +96,11 @@ export interface AdventureOutcome {
    * 실제 차감은 스토어가 한다.
    */
   injuryRatio: number;
+  /**
+   * 성공 시 받은 정예 장비(장비 사다리). 없으면 null.
+   * 정의 id만 — instId 발번은 스토어 몫이다.
+   */
+  gearDefId: GearDefId | null;
 }
 
 /**
@@ -114,8 +120,10 @@ export function resolveAdventure(args: {
   /** 명단 중 **실제로 로스터에 남아 있는** 영웅만 */
   heroes: readonly HeroInstance[];
   rng: RNG;
+  /** 정산 시점의 열린 단계 — 정예 장비의 단계 */
+  tier: number;
 }): AdventureOutcome {
-  const { dispatch, heroes, rng } = args;
+  const { dispatch, heroes, rng, tier } = args;
   const def = ADVENTURE_BY_ID[dispatch.advId];
 
   const empty: AdventureOutcome = {
@@ -126,6 +134,7 @@ export function resolveAdventure(args: {
     awakeningStones: 0,
     expEach: 0,
     injuryRatio: 0,
+    gearDefId: null,
   };
   // 정의가 사라졌거나(데이터 삭제) 인원이 전부 없어졌으면 빈손. RNG를 소비하지 않는다
   if (!def || heroes.length === 0) return empty;
@@ -138,6 +147,13 @@ export function resolveAdventure(args: {
     awakeningStones = 1;
   }
 
+  // 정예 — 각성석 **뒤**. 순서를 바꾸면 기존 모험 결과가 전부 바뀐다(`adventure.test.ts` 지문)
+  let gearDefId: GearDefId | null = null;
+  if (def.reward.eliteChance > 0 && rng() < def.reward.eliteChance) {
+    const pool = ladderSet(tier, 'elite');
+    if (pool.length > 0) gearDefId = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))].id;
+  }
+
   return {
     advId: dispatch.advId,
     heroIds: [...dispatch.heroIds],
@@ -146,6 +162,7 @@ export function resolveAdventure(args: {
     awakeningStones,
     expEach: def.reward.exp,
     injuryRatio: 0,
+    gearDefId,
   };
 }
 

@@ -1074,6 +1074,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         fought,
         casualties,
         cleared,
+        tier: unlockedTierOf(FLOORS[get().maxFloorReached].id),
       });
 
       /**
@@ -1107,6 +1108,11 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       const usedStratagems = scenes.map((c) => c.stratagemId);
 
       const questGear = grants.map((g) => g.gear).filter((g): g is GearInstance => g != null);
+      /** 모험 정예(장비 사다리) — 발번은 드롭·과제 다음 번호부터 */
+      const advGear = off.outcomes
+        .map((o) => o.gearDefId)
+        .filter((id): id is GearDefId => id != null)
+        .map((id, k) => makeGear(id, get().gearSeq + dropped.length + questGear.length + k + 1));
       const questGold = grants.reduce((sum, g) => sum + g.gold, 0);
       const questStones = grants.reduce((sum, g) => sum + g.promotionStones, 0);
       const questPotions = grants.reduce((sum, g) => sum + g.potions, 0);
@@ -1175,8 +1181,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
             .map((g) => (freedGear.has(g.instId) ? { ...g, equippedBy: null } : g)),
           ...dropped,
           ...questGear,
+          ...advGear,
         ],
-        gearSeq: s.gearSeq + dropped.length + questGear.length,
+        gearSeq: s.gearSeq + dropped.length + questGear.length + advGear.length,
         claimedQuests: [...s.claimedQuests, ...grants.map((g) => g.quest.id)],
         questGrants: grants,
         // 다음 전투의 전리품이 다른 난수를 받도록 한다

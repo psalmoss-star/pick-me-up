@@ -62,6 +62,8 @@ export interface OffTowerInput {
   fought: ReadonlySet<string>;
   casualties: ReadonlySet<string>;
   cleared: boolean;
+  /** 정산 시점의 열린 단계 — 모험 정예 장비의 단계(장비 사다리) */
+  tier: number;
 }
 
 export interface OffTowerResult {
@@ -100,6 +102,7 @@ export function settleOffTower(input: OffTowerInput): OffTowerResult {
     dispatch: d,
     heroes: roster.filter((h) => !h.isDead && d.heroIds.includes(h.instId)),
     rng: adventureRng(seed, d.advId, d.startedAtBattle),
+    tier: input.tier,
   }));
 
   const advExp = new Map<string, number>();

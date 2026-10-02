@@ -19,6 +19,7 @@ import {
 import { FLOORS, floorRewards } from './data/floors';
 import { klassFor } from './stats';
 import { HERO } from './data/sample';
+import { GEAR_DEFS } from './data/gear';
 import type { HeroInstId, HeroInstance } from './types';
 
 function hero(level: number, n = 0): HeroInstance {
@@ -49,6 +50,7 @@ const resolve = (advId: AdventureId, seed: number, level = 10, startedAtBattle =
     dispatch: dispatchOf(advId, startedAtBattle),
     heroes: [hero(level, 0), hero(level, 1)],
     rng: adventureRng(seed, advId, startedAtBattle),
+    tier: 1,
   });
 
 describe('모험 — 결정론', () => {
@@ -180,7 +182,7 @@ describe('모험 — 성공률', () => {
   it('인원이 아무도 없으면 RNG를 소비하지 않고 빈손이다', () => {
     let calls = 0;
     const counting = () => { calls++; return 0; };
-    const o = resolveAdventure({ dispatch: dispatchOf(RIFT), heroes: [], rng: counting });
+    const o = resolveAdventure({ dispatch: dispatchOf(RIFT), heroes: [], rng: counting, tier: 1 });
     expect(calls).toBe(0);
     expect(o.success).toBe(false);
     expect(o.injuryRatio).toBe(0); // 없는 사람을 다치게 할 수 없다
@@ -252,5 +254,48 @@ describe('원정 진행 문장', () => {
     expect(legLine(def, def.duration - 1)).toBe(def.legs[def.duration - 1]);
     expect(legLine(def, 99)).toBe(def.legs[def.duration - 1]);
     expect(legLine(def, -1)).toBe(def.legs[0]);
+  });
+});
+
+/** 모험 결과 지문 — 정예 판정을 기존 소비(성공 → 각성석) 뒤에 붙였는지 잠근다(장비 사다리) */
+function outcomesFingerprint(): string {
+  let h = 2166136261;
+  for (const advId of [MINE, 'adv_caravan' as AdventureId, RIFT]) {
+    for (let seed = 1; seed <= 80; seed++) {
+      const o = resolveAdventure({
+        dispatch: dispatchOf(advId, seed % 5),
+        heroes: [hero(10, 0), hero(10, 1)],
+        rng: adventureRng(seed, advId, seed % 5),
+        tier: 3,
+      });
+      const s = `${o.success ? 1 : 0}${o.awakeningStones}${o.expEach}${o.injuryRatio}`;
+      for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    }
+  }
+  return (h >>> 0).toString(16);
+}
+/** 정예 판정 도입 전(2026-10-02, bc1c479)에서 뜬 값. 깨지면 갱신하지 말고 판정 순서를 의심할 것 */
+const EXPECTED_OUTCOMES = 'b1142e9f';
+
+describe('모험 — 정예 장비', () => {
+  it('정예 판정을 넣어도 성공·각성석·exp·부상은 그대로다', () => {
+    expect(outcomesFingerprint()).toBe(EXPECTED_OUTCOMES);
+  });
+});
+
+describe('모험 — 정예 드롭', () => {
+  it('균열은 성공 시 확률로 그 단계 정예를, 폐광은 주지 않는다', () => {
+    let rift = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const r = resolveAdventure({ dispatch: dispatchOf(RIFT, 0), heroes: [hero(30, 0), hero(30, 1)], rng: adventureRng(seed, RIFT, 0), tier: 4 });
+      if (r.gearDefId) {
+        rift++;
+        expect(r.success).toBe(true);
+        expect([GEAR_DEFS[r.gearDefId].tier, GEAR_DEFS[r.gearDefId].line]).toEqual([4, 'elite']);
+      }
+      const m = resolveAdventure({ dispatch: dispatchOf(MINE, 0, 1), heroes: [hero(30, 0)], rng: adventureRng(seed, MINE, 0), tier: 4 });
+      expect(m.gearDefId).toBeNull();
+    }
+    expect(rift).toBeGreaterThan(0);
   });
 });

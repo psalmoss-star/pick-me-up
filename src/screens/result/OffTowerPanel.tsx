@@ -7,6 +7,7 @@ import { displayName } from '../../game/identity';
 import { expToNext } from '../../game/progression';
 import { legLine } from '../../game/adventure';
 import { ADVENTURE_BY_ID } from '../../game/data/adventures';
+import { GEAR_DEFS, gearTag } from '../../game/data/gear';
 import { MATERIAL_DEFS, MATERIAL_ORDER } from '../../game/data/materials';
 import { isEmptyBag } from '../../game/loot';
 import type { HeroGain, OffTowerResult } from '../../game/offTower';
@@ -99,6 +100,12 @@ export function OffTowerPanel({ off, cleared, trainingLevel }: {
               )}
               {o.awakeningStones > 0 && (
                 <div style={{ ...line, color: T.gold }}>각성석 +{o.awakeningStones}</div>
+              )}
+              {o.gearDefId && GEAR_DEFS[o.gearDefId] && (
+                <div style={{ ...line, color: T.gold }}>
+                  {GEAR_DEFS[o.gearDefId].name}
+                  <span style={{ color: T.dim }}> · {gearTag(GEAR_DEFS[o.gearDefId])}</span>
+                </div>
               )}
             </div>
           );
