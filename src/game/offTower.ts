@@ -9,7 +9,8 @@
  * 규칙은 이 분리 전 `finish()`와 비트 단위로 같다:
  *   - 훈련소: 미참전·생존·비파견·비배치, 돌파했을 때만(gdd-v3 §4.5)
  *   - 모험: 승패 무관, 로스터에 남은 인원만, exp → 부상(HP 하한 1)
- * 파견자는 출전하지 못하므로(`dispatch.test.ts`가 잠근다) 참전 영웅은 여기서 다루지 않는다.
+ * 파견자는 출전하지 못하므로(`start()`·`intervene()` 둘 다 — `dispatch.test.ts`가 잠근다)
+ * 참전 영웅은 여기서 다루지 않는다.
  */
 import {
   adventureRng, dispatchedHeroIds, isComplete, resolveAdventure,

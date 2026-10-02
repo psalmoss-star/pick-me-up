@@ -918,7 +918,12 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         snapshot, seed, floorIndex, facilities, carriedPotions, lastSortieSquad, prep,
       } = get();
       const party = squadMembers(get(), lastSortieSquad);
-      const members = snapshot.filter((h) => party.includes(h.instId) && !h.isDead);
+      /*
+        ⚠️ start()와 **같은 명단**이어야 한다 — 나가 있는 영웅을 빼지 않으면 후퇴 신호를 쓰는
+        순간 모험 중인 사람이 탑에 들어와 싸우고 죽을 수 있다(STEP 65 리뷰에서 발견).
+      */
+      const away = dispatchedHeroIds(get().dispatches);
+      const members = snapshot.filter((h) => party.includes(h.instId) && !h.isDead && !away.has(h.instId));
       if (members.length === 0) return;
 
       // start()와 **같은 변환**이어야 한다. 이 줄이 빠지면 개입하는 순간 준비가 증발한다.

@@ -241,6 +241,25 @@ describe('파견 — 편성·출전에서 빠진다', () => {
     expect(fought).not.toContain(id);
   });
 
+  /*
+    후퇴 신호(intervene)는 전투를 다시 돌린다. 그 명단이 start()와 다르면
+    신호를 쓰는 순간 모험 중인 영웅이 탑에 들어와 죽을 수 있다(STEP 65 리뷰에서 발견).
+  */
+  it('후퇴 신호로 다시 돌려도 나간 영웅은 출전에 끼지 않는다', () => {
+    const s = store();
+    unlockAll(s);
+    const id = s.getState().squads[0][0];
+    s.getState().dispatchAdventure(MINE, [id]);
+
+    s.getState().start();
+    s.getState().intervene([]);
+    const fought = s.getState().result!.roster
+      .filter((u) => u.side === 'ally' && u.kind === 'hero')
+      .map((u) => u.sourceId);
+    expect(fought.length).toBeGreaterThan(0);
+    expect(fought).not.toContain(id);
+  });
+
   it('1군 전원이 나가 있으면 그 군은 출전하지 못한다 — 다만 다른 군은 멀쩡하다', () => {
     const s = store();
     unlockAll(s);
