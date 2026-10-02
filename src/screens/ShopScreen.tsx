@@ -5,7 +5,9 @@ import { Button, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { bonusOf, makeGear } from '../game/gear';
-import { GEAR_SLOTS, SLOT_LABEL, RANK_LABEL, POTION_TUNING, shopStock } from '../game/data/gear';
+import {
+  GEAR_SLOTS, SLOT_LABEL, POTION_TUNING, gearTag, ladderSet, nextShopTier, shopStock,
+} from '../game/data/gear';
 import type { GearDef, GearDefId, GearSlot, Wallet } from '../game/types';
 import type { BuyGearResult, BuyPotionResult } from '../stores/runStore';
 
@@ -46,6 +48,8 @@ export function ShopScreen({
   const [boughtGear, setBoughtGear] = useState(false);
 
   const stock = shopStock(slot, unlockedTier);
+  const next = nextShopTier(unlockedTier);
+  const nextDef = next ? ladderSet(next.tier, 'supply').find((d) => d.slot === slot) : undefined;
 
   const doBuyPotion = () => {
     const r = onBuyPotion();
@@ -57,7 +61,11 @@ export function ShopScreen({
     const r = onBuy(def.id);
     if (!r.ok) {
       setBoughtGear(false);
-      setNotice(r.reason === 'not-enough-gold' ? '금이 부족합니다.' : '판매하지 않는 물건입니다.');
+      setNotice(
+        r.reason === 'not-enough-gold' ? '금이 부족합니다.'
+          : r.reason === 'locked' ? '아직 열리지 않은 단계입니다.'
+            : '판매하지 않는 물건입니다.',
+      );
       return;
     }
     // 사는 것으로 끝내지 않는다 — 채워야 효과가 난다
@@ -110,6 +118,21 @@ export function ShopScreen({
       <SectionLabel>{SLOT_LABEL[slot]}</SectionLabel>
 
       <div style={{ display: 'grid', gap: 12 }}>
+        {/*
+          다음 단계 잠금 카드 — 무엇을 향해 오르는지 보이게 한다(장비 사다리).
+          값까지 보여 줘야 "다음 층에서 이걸 산다"가 계획이 된다.
+        */}
+        {next && nextDef && (
+          <SystemPanel compact>
+            <div style={{ fontSize: 13, color: T.dim, letterSpacing: '.1em' }}>
+              🔒 {nextDef.name}
+            </div>
+            <div style={{ fontSize: 11, color: T.dim, marginTop: 4, lineHeight: 1.7 }}>
+              {next.floor}층 도달 시 · {gearTag(nextDef)} · 금 {nextDef.price}
+            </div>
+            <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>{bonusText(nextDef)}</div>
+          </SystemPanel>
+        )}
         {stock.map((def) => {
           const price = def.price!;
           const affordable = wallet.gold >= price;
@@ -124,7 +147,7 @@ export function ShopScreen({
                 )}
               </div>
               <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.1em', marginBottom: 8 }}>
-                {RANK_LABEL[def.rank]}
+                {gearTag(def)}
               </div>
               <div style={{ fontSize: 13, color: T.gold, marginBottom: def.lore ? 6 : 12 }}>
                 {bonusText(def)}
@@ -197,7 +220,8 @@ export function ShopScreen({
         전부 못 사는 상태에서 설명이 없으면 "아직 못 여는 곳"으로 읽힌다.
         시설 화면에서 같은 문제를 겪었다 (HANDOFF STEP 6).
       */}
-      {stock.every((d) => wallet.gold < d.price!) && (
+      {/* 최신 단계 기준 — 옛 단계를 못 사는 것은 경고할 일이 아니다 */}
+      {stock.length > 0 && wallet.gold < stock[0].price! && (
         <div style={{ marginTop: 16 }}>
           <SystemPanel compact tone="warning">
             <div style={{ fontSize: 12, lineHeight: 1.8, color: T.dim }}>
@@ -211,8 +235,8 @@ export function ShopScreen({
       <div style={{ marginTop: 16 }}>
         <SystemPanel compact>
           <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.8 }}>
-            가장 귀한 것들은 팔지 않습니다.<br />
-            유물은 탑에서만 나옵니다.
+            파는 것은 보급형뿐입니다.<br />
+            정예는 보스와 모험에서, 유물은 제작으로만 나옵니다.
           </div>
         </SystemPanel>
       </div>

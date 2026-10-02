@@ -34,7 +34,7 @@ import { prepForMission } from './game/data/preps';
 import { revisitMultiplier } from './game/data/revisit';
 import { expToNext } from './game/progression';
 import { rollFloorLoot } from './game/loot';
-import type { MaterialBag } from './game/types';
+import type { GearDefId, MaterialBag } from './game/types';
 import { displayName } from './game/identity';
 import type { LevelUp } from './screens/ResultScreen';
 import { growthOf, settleOffTower, type OffTowerResult } from './game/offTower';
@@ -355,9 +355,9 @@ export default function App() {
    * 같은 스트림을 소비한다. 여기서 재료만 먼저 뽑으면 값이 갈린다.
    * 그래서 앞의 두 단계를 **같은 횟수만큼 흘려보낸 뒤** 재료를 뽑는다.
    */
-  const previewMaterials = (): MaterialBag => {
-    if (!result || result.outcome !== 'victory') return {};
-    return rollFloorLoot({
+  const previewLoot = (): { materials: MaterialBag; gearDefId: GearDefId | null } => {
+    if (!result || result.outcome !== 'victory') return { materials: {}, gearDefId: null };
+    const loot = rollFloorLoot({
       seed,
       floorId: floor.id,
       isBoss: !!floor.isBoss,
@@ -367,7 +367,9 @@ export default function App() {
         .filter((h): h is NonNullable<typeof h> => !!h)
         .map((h) => h.gear),
       cleared: true,
-    }).materials;
+    });
+    // 층 드롭 장비도 같은 판정에서 — 보스 층이면 그 단계 정예(장비 사다리)
+    return { materials: loot.materials, gearDefId: loot.gearDefId };
   };
 
   /**
@@ -415,6 +417,7 @@ export default function App() {
   };
 
   const offTower = screen === 'result' ? previewOffTower() : null;
+  const loot = screen === 'result' ? previewLoot() : { materials: {}, gearDefId: null };
 
   return (
     <div
@@ -759,7 +762,8 @@ export default function App() {
             levelUps={previewLevelUps(offTower)}
             offTower={offTower}
             trainingLevel={facilities.training}
-            materials={previewMaterials()}
+            materials={loot.materials}
+            gearDrop={loot.gearDefId}
             onFinish={() => {
               /*
                 무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야

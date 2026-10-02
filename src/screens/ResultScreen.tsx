@@ -19,8 +19,8 @@ import { gameData } from '../game/data';
 import { floorRewards } from '../game/data/floors';
 import { MATERIAL_DEFS, MATERIAL_ORDER } from '../game/data/materials';
 import { isEmptyBag } from '../game/loot';
-import type { MaterialBag } from '../game/types';
-import { GEAR_DEFS } from '../game/data/gear';
+import type { GearDefId, MaterialBag } from '../game/types';
+import { GEAR_DEFS, gearTag } from '../game/data/gear';
 import type { FloorSpec } from '../game/data/floors';
 import type { EncounterResult } from '../game/encounter';
 import type { QuestGrant } from '../game/quest';
@@ -77,6 +77,8 @@ export interface ResultScreenProps {
   trainingLevel?: number;
   /** 이번 돌파로 얻은 제작 재료. 빈 주머니면 아무것도 그리지 않는다 */
   materials?: MaterialBag;
+  /** 층 드롭 장비(장비 사다리 — 일반 층 보급형, 보스 층 정예). 없으면 null */
+  gearDrop?: GearDefId | null;
   /**
    * 이번 전투의 정찰 보고와 고른 경로 — "보고와 실제"를 나란히 적는다(기획서 3단계).
    * 틀린 보고가 **틀렸다고 드러나야** 다음 층에서 그 사람의 말을 의심할 수 있다.
@@ -92,7 +94,7 @@ export interface ResultScreenProps {
  */
 export function ResultScreen({
   result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
-  rewardMult = 1, levelUps = [], materials = {}, report = null, route = 0,
+  rewardMult = 1, levelUps = [], materials = {}, gearDrop = null, report = null, route = 0,
   offTower = null, trainingLevel = 0, onFinish,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
@@ -324,6 +326,22 @@ export function ResultScreen({
           여기 쌓이는 것이 나중에 대장간에서 무기가 된다 —
           "왜 또 오르나"의 답이 결과 화면에 보여야 한다.
         */}
+        {/*
+          층 드롭 장비 — 보스 층이면 "그 보스의 전리품"으로 강조한다(장비 사다리).
+          보스가 확정으로 그 단계 정예를 준다는 것이 보여야 보스가 목표가 된다.
+        */}
+        {gearDrop && GEAR_DEFS[gearDrop] && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
+            <div style={{ fontSize: 12, color: floor.isBoss ? T.gold : T.rare, letterSpacing: '.2em', marginBottom: 6 }}>
+              {floor.isBoss ? `◆ ${floor.id}층 보스의 전리품` : '◇ 장비'}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+              {GEAR_DEFS[gearDrop].name}
+              <span style={{ color: T.dim }}> · {gearTag(GEAR_DEFS[gearDrop])}</span>
+            </div>
+          </div>
+        )}
+
         {!isEmptyBag(materials) && (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.panelHi}` }}>
             <div style={{ fontSize: 12, color: T.rare, letterSpacing: '.2em', marginBottom: 6 }}>

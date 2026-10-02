@@ -10,7 +10,7 @@ import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { applyBonus, heroBonus, bonusOf } from '../game/gear';
 import { bestFreeGear, gearDelta, type GearDelta } from '../game/gearCompare';
-import { GEAR_DEFS, GEAR_SLOTS, SLOT_LABEL, RANK_LABEL } from '../game/data/gear';
+import { GEAR_DEFS, GEAR_SLOTS, SLOT_LABEL, gearTag } from '../game/data/gear';
 import { gameData } from '../game/data';
 import type {
   Attribute, GearInstId, GearInstance, GearSlot, HeroInstance,
@@ -203,7 +203,7 @@ export function DetailModal({
                       </div>
                       {wornDef && (
                         <div style={{ fontSize: 11, color: T.gold, textAlign: 'left', marginTop: 4 }}>
-                          {RANK_LABEL[wornDef.rank]} · {bonusText(worn!)}
+                          {gearTag(wornDef)} · {bonusText(worn!)}
                         </div>
                       )}
 
@@ -225,7 +225,7 @@ export function DetailModal({
                                 <div style={{ fontSize: 12, textAlign: 'left' }}>
                                   {recommended && <span style={{ color: T.gold, fontSize: 10, marginRight: 4 }}>추천</span>}
                                   {d.name}{g.enhance > 0 ? ` +${g.enhance}` : ''}
-                                  <span style={{ color: T.dim, fontSize: 10 }}> · {RANK_LABEL[d.rank]}</span>
+                                  <span style={{ color: T.dim, fontSize: 10 }}> · {gearTag(d)}</span>
                                 </div>
                                 <DeltaLine delta={delta} />
                                 {holder && (

@@ -7,7 +7,7 @@ import { SectionLabel } from './SectionLabel';
 import { bonusOf } from '../game/gear';
 import { displayName } from '../game/identity';
 import {
-  GEAR_DEFS, GEAR_TUNING, SLOT_LABEL, RANK_LABEL,
+  GEAR_DEFS, GEAR_SLOTS, GEAR_TUNING, SLOT_LABEL, gearTag,
   enhanceCostOf, enhanceChanceOf,
 } from '../game/data/gear';
 import { RECIPES } from '../game/data/recipes';
@@ -50,6 +50,20 @@ export function SmithScreen({
   const [mode, setMode] = useState<Mode>('enhance');
   const [selected, setSelected] = useState<GearInstId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * 단계 내림차순 → 슬롯 순(장비 사다리). 장비가 60종이 되면 정렬 없는 목록이 가장 먼저 무너진다.
+   * 유물(tier 0)은 보통 가장 강하므로 맨 위로 올린다.
+   */
+  const rankKey = (id: GearInstance['defId']) => {
+    const d = GEAR_DEFS[id];
+    return d ? (d.line === 'relic' ? 99 : d.tier) : -1;
+  };
+  const sorted = [...gear].sort((a, b) => {
+    const da = GEAR_DEFS[a.defId];
+    const db = GEAR_DEFS[b.defId];
+    if (!da || !db) return 0;
+    return (rankKey(b.defId) - rankKey(a.defId)) || (GEAR_SLOTS.indexOf(da.slot) - GEAR_SLOTS.indexOf(db.slot));
+  });
 
   const target = gear.find((g) => g.instId === selected) ?? null;
   const targetDef = target ? GEAR_DEFS[target.defId] : null;
@@ -162,7 +176,7 @@ export function SmithScreen({
         <>
           <SectionLabel>벼릴 것</SectionLabel>
           <div style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
-            {gear.map((g) => {
+            {sorted.map((g) => {
               const d = GEAR_DEFS[g.defId];
               if (!d) return null;
               const on = g.instId === selected;
@@ -187,7 +201,7 @@ export function SmithScreen({
                     {d.name}
                     {g.enhance > 0 && <span style={{ color: T.gold }}> +{g.enhance}</span>}
                     <span style={{ fontSize: 11, color: T.dim }}>
-                      {' · '}{SLOT_LABEL[d.slot]} · {RANK_LABEL[d.rank]}
+                      {' · '}{SLOT_LABEL[d.slot]} · {gearTag(d)}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, color: T.dim, marginTop: 3 }}>
@@ -332,7 +346,7 @@ function CraftPanel({
               <div style={{ fontSize: 14, marginBottom: 4, opacity: locked ? 0.5 : 1 }}>
                 {def.name}
                 <span style={{ fontSize: 11, color: T.dim }}>
-                  {' · '}{SLOT_LABEL[def.slot]} · {RANK_LABEL[def.rank]}
+                  {' · '}{SLOT_LABEL[def.slot]} · {gearTag(def)}
                 </span>
               </div>
               <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, opacity: locked ? 0.5 : 1 }}>
