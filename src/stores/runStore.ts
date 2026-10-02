@@ -34,7 +34,7 @@ import {
   armoryAtkMult, restHealRate, upgradeCost, ASSIGN_SLOTS, ASSIGNABLE,
   REST_COST_PER_HP, REST_COST_MIN, type FacilityKind, type AssignableFacility,
 } from '../game/data/facilities';
-import { GEAR_DEFS, POTION_TUNING } from '../game/data/gear';
+import { GEAR_DEFS, POTION_TUNING, unlockedTierOf } from '../game/data/gear';
 import {
   equip as equipGearPure, unequip as unequipGearPure, enhance as enhanceGearPure,
   makeGear,
@@ -501,7 +501,7 @@ export type AssignResult =
 
 export type BuyGearResult =
   | { ok: true; gear: GearInstance; spent: number }
-  | { ok: false; reason: 'not-sold' | 'not-enough-gold' };
+  | { ok: false; reason: 'not-sold' | 'not-enough-gold' | 'locked' };
 
 export type TakeGearResult =
   | { ok: true; from: HeroInstId | null; unequipped: GearInstId | null }
@@ -1714,8 +1714,10 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
 
     buyGear: (defId) => {
       const def = GEAR_DEFS[defId];
-      // 유물은 price가 없다 — 금으로 최상급을 살 수 있으면 지갑이 강함을 정한다.
-      if (!def || def.price == null) return { ok: false, reason: 'not-sold' };
+      // 보급형만 판다 — 정예·유물은 price가 없다. 금으로 상위 장비를 살 수 있으면 지갑이 강함을 정한다.
+      if (!def || def.price == null || def.line !== 'supply') return { ok: false, reason: 'not-sold' };
+      // 화면이 숨겨도 여기서 막는다 — 다음 단계는 그 단계 첫 층에 닿아야 열린다(장비 사다리)
+      if (def.tier > unlockedTierOf(FLOORS[get().maxFloorReached].id)) return { ok: false, reason: 'locked' };
       if (get().wallet.gold < def.price) return { ok: false, reason: 'not-enough-gold' };
 
       const seq = get().gearSeq + 1;

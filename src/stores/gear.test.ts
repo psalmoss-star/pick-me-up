@@ -40,24 +40,24 @@ describe('상점 구매', () => {
   it('금이 빠지고 창고에 들어온다', () => {
     const s = store();
     rich(s, 5000);
-    const r = s.getState().buyGear(gd('w_soldier'));
+    const r = s.getState().buyGear(gd('w_chipped'));
 
     expect(r.ok).toBe(true);
     expect(s.getState().gear).toHaveLength(1);
-    expect(s.getState().wallet.gold).toBe(5000 - priceOf('w_soldier'));
+    expect(s.getState().wallet.gold).toBe(5000 - priceOf('w_chipped'));
   });
 
   it('산 장비는 아무도 안 낀 상태다', () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     expect(s.getState().gear[0].equippedBy).toBeNull();
   });
 
   it('금이 부족하면 아무 일도 없다', () => {
     const s = store();
     s.setState({ wallet: { ...s.getState().wallet, gold: 0 } });
-    expect(s.getState().buyGear(gd('w_soldier')))
+    expect(s.getState().buyGear(gd('w_chipped')))
       .toEqual({ ok: false, reason: 'not-enough-gold' });
     expect(s.getState().gear).toHaveLength(0);
   });
@@ -73,8 +73,8 @@ describe('상점 구매', () => {
   it('같은 종류를 여러 개 사면 id가 겹치지 않는다', () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
+    s.getState().buyGear(gd('w_chipped'));
     const ids = s.getState().gear.map((g) => g.instId);
     expect(new Set(ids).size).toBe(2);
   });
@@ -82,7 +82,7 @@ describe('상점 구매', () => {
   it('구매는 즉시 저장된다', () => {
     const s = store();
     rich(s, 5000);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     expect(loadRun()?.gear).toHaveLength(1);
   });
 });
@@ -91,7 +91,7 @@ describe('착용 / 해제', () => {
   const setup = () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     const heroId = s.getState().roster[0].instId;
     const gearId = s.getState().gear[0].instId;
     return { s, heroId, gearId };
@@ -111,7 +111,7 @@ describe('착용 / 해제', () => {
     const { s, heroId, gearId } = setup();
     s.getState().equipGear(heroId, gearId);
     s.getState().buyGear(gd('w_chipped'));
-    const second = s.getState().gear.find((g) => g.defId === gd('w_chipped'))!.instId;
+    const second = s.getState().gear[1].instId; // 같은 종류 두 번째 — 사다리 뒤로 1단계 보급 무기는 하나뿐이다
 
     const r = s.getState().equipGear(heroId, second);
     expect(r.ok).toBe(true);
@@ -190,7 +190,7 @@ describe('강화', () => {
   const setup = () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     return { s, gearId: s.getState().gear[0].instId };
   };
 
@@ -264,7 +264,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
     rich(s);
     // 파티 전원에게 무기를 하나씩
     for (const id of s.getState().squads[0]) {
-      s.getState().buyGear(gd('w_soldier'));
+      s.getState().buyGear(gd('w_chipped'));
       const free = s.getState().gear.find((g) => !g.equippedBy)!;
       s.getState().equipGear(id, free.instId);
     }
@@ -280,7 +280,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
     const s = store();
     rich(s);
     for (const id of s.getState().squads[0]) {
-      s.getState().buyGear(gd('a_guard'));
+      s.getState().buyGear(gd('a_tatter'));
       const free = s.getState().gear.find((g) => !g.equippedBy)!;
       s.getState().equipGear(id, free.instId);
     }
@@ -297,7 +297,7 @@ describe('사망 시 회수 — 인벤토리 반영', () => {
     const s = store();
     rich(s);
     const first = s.getState().squads[0][0];
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     const gearId = s.getState().gear[0].instId;
     s.getState().equipGear(first, gearId);
 
@@ -355,7 +355,7 @@ describe('합성 — 제물의 장비', () => {
   it('제물이 끼고 있던 장비는 창고로 돌아온다', () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     const gearId = s.getState().gear[0].instId;
 
     const target = s.getState().roster[0].instId;
@@ -376,7 +376,7 @@ describe('저장 / 복원', () => {
   it('장비와 착용 관계가 왕복해도 유지된다', () => {
     const s = store();
     rich(s);
-    s.getState().buyGear(gd('w_soldier'));
+    s.getState().buyGear(gd('w_chipped'));
     const heroId = s.getState().roster[0].instId;
     const gearId = s.getState().gear[0].instId;
     s.getState().equipGear(heroId, gearId);
@@ -470,8 +470,30 @@ describe('저장 / 복원', () => {
 
 describe('gearIndex', () => {
   it('배열을 id로 조회할 수 있는 Map으로 바꾼다', () => {
-    const a = makeGear(gd('w_soldier'), 1);
+    const a = makeGear(gd('w_chipped'), 1);
     const idx = gearIndex([a]);
     expect(idx.get(a.instId)).toEqual(a);
+  });
+});
+
+describe('상점 잠금 — 장비 사다리', () => {
+  it('아직 안 열린 단계의 보급형은 금이 있어도 못 산다', () => {
+    const s = store();
+    s.setState({ wallet: { ...s.getState().wallet, gold: 999999 } });
+    const r = s.getState().buyGear('g_t2_supply_weapon' as GearDefId);
+    expect(r).toEqual({ ok: false, reason: 'locked' });
+  });
+
+  it('최전선이 11층이면 2단계 보급형을 산다', () => {
+    const s = store();
+    // maxFloorReached는 층 **인덱스**다 — 10이면 11층
+    s.setState({ maxFloorReached: 10, wallet: { ...s.getState().wallet, gold: 999999 } });
+    expect(s.getState().buyGear('g_t2_supply_weapon' as GearDefId).ok).toBe(true);
+  });
+
+  it('정예는 상점에서 팔지 않는다 — 옛 정교 장비도', () => {
+    const s = store();
+    s.setState({ maxFloorReached: 99, wallet: { ...s.getState().wallet, gold: 999999 } });
+    expect(s.getState().buyGear('w_soldier' as GearDefId)).toEqual({ ok: false, reason: 'not-sold' });
   });
 });

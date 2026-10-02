@@ -4,7 +4,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  GEAR_DEFS, GEAR_SLOTS, LADDER_TARGET, gearTag, ladderSet, tierOf, tierFirstFloor, TIER_COUNT,
+  GEAR_DEFS, GEAR_SLOTS, LADDER_TARGET, gearTag, ladderSet, nextShopTier, shopStock, tierOf,
+  tierFirstFloor, TIER_COUNT, unlockedTierOf,
 } from './data/gear';
 import { refPartyAt, tierRefFloor } from './data/refParty';
 import { bonusOf, makeGear } from './gear';
@@ -133,6 +134,32 @@ describe('사다리 — 단계마다 보급 한 벌·정예 한 벌', () => {
         const cur = ladderSet(t, 'supply').find((d) => d.slot === slot)!;
         expect(cur.price!, `${t}단계 ${slot}`).toBeGreaterThan(prev.price!);
       }
+    }
+  });
+});
+
+describe('상점', () => {
+  it('열린 단계까지의 보급형만, 최신 단계 먼저 — 정예·유물은 없다', () => {
+    const stock = shopStock('weapon', 3);
+    expect(stock.map((d) => d.tier)).toEqual([3, 2, 1]);
+    for (const d of stock) expect(d.line).toBe('supply');
+  });
+
+  it('다음 단계 해금 층 — 마지막 단계면 없다', () => {
+    expect(nextShopTier(1)).toEqual({ tier: 2, floor: 11 });
+    expect(nextShopTier(3)).toEqual({ tier: 4, floor: 31 });
+    expect(nextShopTier(TIER_COUNT)).toBeNull();
+  });
+
+  it('최전선 층으로 단계가 열린다', () => {
+    expect(unlockedTierOf(1)).toBe(1);
+    expect(unlockedTierOf(21)).toBe(3);
+  });
+
+  it('보급형만 가격이 있다 — 정예·유물은 상점에 없다(옛 정교·희귀도)', () => {
+    for (const d of Object.values(GEAR_DEFS)) {
+      if (d.line === 'supply') expect(d.price, d.id).toBeGreaterThan(0);
+      else expect(d.price, d.id).toBeUndefined();
     }
   });
 });

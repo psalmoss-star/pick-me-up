@@ -27,6 +27,7 @@ import { useRunStore, isSquadLocked, restQuote } from './stores/runStore';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt, gameData } from './game/data';
+import { unlockedTierOf } from './game/data/gear';
 import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
 import { ASSIGNABLE } from './game/data/facilities';
 import { prepForMission } from './game/data/preps';
@@ -611,6 +612,7 @@ export default function App() {
             }, {})}
             potions={potions}
             onBuy={buyGear}
+            unlockedTier={unlockedTierOf(FLOORS[maxFloorReached].id)}
             onBuyPotion={buyPotion}
             onBack={() => setScreen('base')}
             /*

@@ -18,6 +18,8 @@ export interface ShopScreenProps {
   onBuy: (defId: GearDefId) => BuyGearResult;
   onBuyPotion: () => BuyPotionResult;
   onBack: () => void;
+  /** 열린 단계 — 최전선 층에서(장비 사다리). 이 단계까지의 보급형만 판다 */
+  unlockedTier: number;
   /**
    * 산 장비를 바로 채우러 간다.
    *
@@ -36,14 +38,14 @@ export interface ShopScreenProps {
  * 강함을 정하기 때문이다 (data/gear.ts 주석 참조).
  */
 export function ShopScreen({
-  wallet, ownedCount, potions, onBuy, onBuyPotion, onBack, onGoEquip,
+  wallet, ownedCount, potions, onBuy, onBuyPotion, onBack, onGoEquip, unlockedTier,
 }: ShopScreenProps) {
   const [slot, setSlot] = useState<GearSlot>('weapon');
   const [notice, setNotice] = useState<string | null>(null);
   /** 방금 장비를 샀는가 — 착용 안내를 띄울지 정한다 */
   const [boughtGear, setBoughtGear] = useState(false);
 
-  const stock = shopStock(slot);
+  const stock = shopStock(slot, unlockedTier);
 
   const doBuyPotion = () => {
     const r = onBuyPotion();

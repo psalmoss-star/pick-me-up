@@ -5,7 +5,7 @@ import {
 } from './gear';
 import {
   GEAR_DEFS, GEAR_TUNING, enhanceMult, enhanceCostOf, enhanceChanceOf,
-  shopStock, dropWeights, RANK_ORDER,
+  shopStock, dropWeights,
 } from './data/gear';
 import { simulateBattle } from './battle';
 import { createRng } from './rng';
@@ -53,22 +53,21 @@ describe('장비 도감', () => {
     }
   });
 
-  it('상점 재고는 등급 오름차순이고 전부 가격이 있다', () => {
+  it('상점 재고는 전부 가격이 있는 보급형이다', () => {
     for (const slot of ['weapon', 'armor', 'trinket'] as GearSlot[]) {
-      const stock = shopStock(slot);
-      expect(stock.length).toBeGreaterThan(0);
-      for (const d of stock) expect(d.price).toBeGreaterThan(0);
-      for (let i = 1; i < stock.length; i++) {
-        expect(RANK_ORDER[stock[i].rank]).toBeGreaterThanOrEqual(RANK_ORDER[stock[i - 1].rank]);
+      const stock = shopStock(slot, 10);
+      expect(stock.length).toBe(10);
+      for (const d of stock) {
+        expect(d.price).toBeGreaterThan(0);
+        expect(d.line).toBe('supply');
       }
     }
   });
 
-  it('등급이 높을수록 비싸다', () => {
-    const w = shopStock('weapon');
-    for (let i = 1; i < w.length; i++) {
-      expect(w[i].price!).toBeGreaterThan(w[i - 1].price!);
-    }
+  /** 장비 사다리(2026-10-02) — 등급이 아니라 단계로 오른다 */
+  it('위 단계일수록 비싸다', () => {
+    const w = shopStock('weapon', 10); // 최신 단계 먼저
+    for (let i = 1; i < w.length; i++) expect(w[i - 1].price!).toBeGreaterThan(w[i].price!);
   });
 
   /** 저층에서 유물이 나오면 이후 등반이 무의미해진다 */
