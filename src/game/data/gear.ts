@@ -147,21 +147,21 @@ const LEGACY_DEFS: GearDef[] = ([
     // ── 무기 ──
     { id: 'w_chipped', name: '이 빠진 검', slot: 'weapon', rank: 'common', tier: 1, line: 'supply', base: { atk: 12 }, price: 220,
       lore: '누군가 끝까지 쥐고 있었던 자국이 남았다.' },
-    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'fine', tier: 1, line: 'elite', base: { atk: 22, crit: 0.02 } },
+    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'rare', tier: 1, line: 'elite', base: { atk: 22, crit: 0.02 } },
     { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', tier: 2, line: 'elite', base: { atk: 91, crit: 0.04 } }, // 사다리 2단계 정예에 맞춤(38 → 91, 2026-10-02)
     { id: 'w_towerbane', name: '탑을 베는 것', slot: 'weapon', rank: 'relic', tier: 0, line: 'relic', base: { atk: 56, crit: 0.07, spd: 4 },
       lore: '이름만 남고 주인은 남지 않았다.' },
 
     // ── 방어구 ──
     { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', tier: 1, line: 'supply', base: { hp: 70, def: 6 }, price: 220 },
-    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'fine', tier: 1, line: 'elite', base: { hp: 130, def: 12 } },
+    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'rare', tier: 1, line: 'elite', base: { hp: 130, def: 12 } },
     { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', tier: 2, line: 'elite', base: { hp: 230, def: 22, spd: -3 },
       lore: '무겁다. 그만큼 오래 버틴다.' },
     { id: 'a_ashshroud', name: '재의 장막', slot: 'armor', rank: 'relic', tier: 0, line: 'relic', base: { hp: 330, def: 34 } },
 
     // ── 장신구 ──
     { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', tier: 1, line: 'supply', base: { spd: 4, crit: 0.02 }, price: 220 },
-    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'fine', tier: 1, line: 'elite', base: { spd: 9, crit: 0.03 } },
+    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'rare', tier: 1, line: 'elite', base: { spd: 9, crit: 0.03 } },
     { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', tier: 2, line: 'elite', base: { atk: 36, crit: 0.06 } }, // 사다리 2단계 정예에 맞춤(18 → 36, 2026-10-02)
     { id: 't_lastlight', name: '마지막 불빛', slot: 'trinket', rank: 'relic', tier: 0, line: 'relic', base: { hp: 150, spd: 12, crit: 0.08 },
       lore: '꺼지기 직전이 가장 밝다.' },
@@ -260,11 +260,6 @@ export const POTION_TUNING = {
   /** 한 전투에 파티 전체가 들고 갈 수 있는 최대 개수 */
   maxPerBattle: 3,
 } as const;
-
-/** 드롭 후보 — 상점에 없는 유물까지 포함한다 */
-export function dropTable(): GearDef[] {
-  return Object.values(GEAR_DEFS);
-}
 
 /*
   층 드롭 등급 가중치(dropWeights)는 장비 사다리(2026-10-02)에서 없앴다 — 층 드롭은 이제

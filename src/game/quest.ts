@@ -10,7 +10,7 @@
 import type { BattleEvent, GearInstance, RNG } from './types';
 import type { EncounterResult } from './encounter';
 import type { FloorSpec } from './data/floors';
-import { dropTable } from './data/gear';
+import { ladderSet, tierOf } from './data/gear';
 import { makeGear } from './gear';
 import { STREAM, substream } from './rng';
 import {
@@ -130,7 +130,7 @@ export function evaluateQuests(args: {
     if (done.has(quest.id)) continue;
     if (!quest.check(ctx)) continue;
 
-    const gear = rollQuestGear(quest.reward, rng, seq + 1);
+    const gear = rollQuestGear(quest.reward, rng, seq + 1, quest.floorId);
     if (gear) seq += 1;
 
     grants.push({
@@ -154,11 +154,16 @@ export function rollQuestGear(
   reward: QuestReward,
   rng: RNG,
   n: number,
+  floorId: number,
 ): GearInstance | null {
   if (reward.gear) return makeGear(reward.gear, n);
   if (!reward.gearRank) return null;
 
-  const pool = dropTable().filter((d) => d.rank === reward.gearRank);
+  /*
+    등급 → 그 과제 층의 단계 사다리(2026-10-02). common은 보급형, 그 위는 정예.
+    유물 과제는 `gear`(종류 확정)로만 준다 — gearRank 'relic'은 쓰지 않는다.
+  */
+  const pool = ladderSet(tierOf(floorId), reward.gearRank === 'common' ? 'supply' : 'elite');
   if (pool.length === 0) return null;
   const pick = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
   return makeGear(pick.id, n);

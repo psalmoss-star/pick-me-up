@@ -163,3 +163,10 @@ describe('상점', () => {
     }
   });
 });
+
+describe('rank 정리', () => {
+  it('rank는 line에서 정해진다 — supply=common, elite=rare, relic=relic', () => {
+    const want = { supply: 'common', elite: 'rare', relic: 'relic' } as const;
+    for (const d of Object.values(GEAR_DEFS)) expect(d.rank, d.id).toBe(want[d.line]);
+  });
+});

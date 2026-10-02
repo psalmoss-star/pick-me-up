@@ -338,7 +338,7 @@ describe('층 드롭', () => {
   });
 
   /** 저층에서 유물이 나오면 이후 등반이 무의미해진다 */
-  it('1층에서는 희귀·유물이 안 나온다', () => {
+  it('1층에서는 1단계 보급형만 나온다 — 정예·유물이 없다', () => {
     const s = store();
     for (let i = 0; i < 40; i++) {
       s.setState({ floorIndex: 0 });
@@ -346,7 +346,7 @@ describe('층 드롭', () => {
       s.getState().finish();
     }
     for (const g of s.getState().gear) {
-      expect(['common', 'fine']).toContain(GEAR_DEFS[g.defId].rank);
+      expect([GEAR_DEFS[g.defId].tier, GEAR_DEFS[g.defId].line]).toEqual([1, 'supply']);
     }
   });
 });

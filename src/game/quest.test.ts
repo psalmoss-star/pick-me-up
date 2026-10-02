@@ -130,6 +130,17 @@ describe('달성 판정', () => {
     expect(grants).toHaveLength(0);
   });
 
+  /** 장비 사다리 — 판정이 과제 층을 넘겨야 단계가 맞는다(11층 과제는 2단계 정예) */
+  it('과제 장비는 그 과제 층의 단계에서 나온다', () => {
+    const grants = evaluateQuests({
+      ctx: ctx({ floorId: 11, turnsElapsed: 3 }),
+      cleared: true, claimed: [], rng: rng(), gearSeq: 0,
+    });
+    const gear = grants.find((g) => g.quest.id === questById('f11_seize' as QuestId)?.id)?.gear;
+    expect(gear).toBeTruthy();
+    expect([GEAR_DEFS[gear!.defId].tier, GEAR_DEFS[gear!.defId].line]).toEqual([2, 'elite']);
+  });
+
   it('조건을 만족하면 달성된다', () => {
     const grants = evaluateQuests({
       ctx: ctx({ floorId: 1, turnsElapsed: 3 }),
@@ -208,23 +219,36 @@ describe('달성 판정', () => {
 
 describe('보상 장비 추첨', () => {
   it('종류가 확정된 보상은 그대로 나온다', () => {
-    const g = rollQuestGear({ gear: 'w_towerbane' as never }, rng(), 1);
+    const g = rollQuestGear({ gear: 'w_towerbane' as never }, rng(), 1, 100);
     expect(g!.defId).toBe('w_towerbane');
   });
 
-  it('등급만 정해진 보상은 그 등급에서 나온다', () => {
-    for (let s = 0; s < 20; s++) {
-      const g = rollQuestGear({ gearRank: 'fine' }, createRng(s), 1);
-      expect(GEAR_DEFS[g!.defId].rank).toBe('fine');
+  /** 장비 사다리(2026-10-02) — 등급이 아니라 그 과제 층의 단계에서 나온다 */
+  it('gearRank common은 그 과제 층 단계의 보급형, fine·rare는 정예', () => {
+    for (let s = 1; s < 30; s++) {
+      const a = rollQuestGear({ gearRank: 'common' }, createRng(s), 1, 15)!;
+      expect([GEAR_DEFS[a.defId].tier, GEAR_DEFS[a.defId].line]).toEqual([2, 'supply']);
+      const b = rollQuestGear({ gearRank: 'fine' }, createRng(s), 1, 7)!;
+      expect([GEAR_DEFS[b.defId].tier, GEAR_DEFS[b.defId].line]).toEqual([1, 'elite']);
+      const c = rollQuestGear({ gearRank: 'rare' }, createRng(s), 1, 18)!;
+      expect([GEAR_DEFS[c.defId].tier, GEAR_DEFS[c.defId].line]).toEqual([2, 'elite']);
     }
   });
 
+  it('난수는 한 번만 쓴다 — 과제 보상이 뒤의 판정을 밀지 않는다', () => {
+    const r1 = createRng(9);
+    rollQuestGear({ gearRank: 'rare' }, r1, 1, 18);
+    const r2 = createRng(9);
+    r2();
+    expect(r1()).toBe(r2());
+  });
+
   it('장비 보상이 없으면 null', () => {
-    expect(rollQuestGear({ gold: 100 }, rng(), 1)).toBeNull();
+    expect(rollQuestGear({ gold: 100 }, rng(), 1, 1)).toBeNull();
   });
 
   it('새 장비는 강화 0 / 미착용 상태로 나온다', () => {
-    const g = rollQuestGear({ gearRank: 'rare' }, rng(), 7)!;
+    const g = rollQuestGear({ gearRank: 'rare' }, rng(), 7, 12)!;
     expect(g.enhance).toBe(0);
     expect(g.equippedBy).toBeNull();
   });
