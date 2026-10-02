@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { SystemPanel } from '../ui/SystemPanel';
 import { tabSafePadding } from '../ui/TabBar';
-import { Button, TOUCH_MIN } from '../ui/Button';
+import { Button, HpBar, TOUCH_MIN } from '../ui/Button';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { adventuresFor, type AdventureDef, type AdventureId, type Dispatch } from '../game/data/adventures';
 import { MATERIAL_DEFS } from '../game/data/materials';
-import { battlesRemaining, successChance } from '../game/adventure';
+import { battlesRemaining, legLine, successChance } from '../game/adventure';
 import type { HeroInstId, MaterialBag, MaterialId } from '../game/types';
 import type { DispatchResult } from '../stores/runStore';
 
@@ -111,6 +111,7 @@ export function AdventureScreen({
             {dispatches.map((d, i) => {
               const def = adventuresFor(999).find((x) => x.id === d.advId);
               const left = battlesRemaining(d, battleCount);
+              const done = def ? def.duration - left : 0;
               const names = d.heroIds
                 .map((id) => heroes.find((h) => h.instId === id)?.name ?? '???')
                 .join(', ');
@@ -124,9 +125,24 @@ export function AdventureScreen({
                     ⚠️ **시간이 아니라 전투다.** "탑을 올라야 줄어든다"가 여기서 읽혀야
                     플레이어가 앱을 켜둔 채 기다리지 않는다.
                   */}
-                  <div style={{ fontSize: 13, color: T.gold, letterSpacing: '.1em', marginBottom: 10 }}>
-                    {left > 0 ? `탑 ${left}전투 남음` : '귀환 대기 — 다음 전투에 정산'}
+                  {/*
+                    "귀환 대기" 분기는 없다 — 완료된 파견은 `finish()`에서 바로 빠지므로
+                    이 목록에 있는 원정은 늘 남은 전투가 1 이상이다.
+                  */}
+                  <div style={{ fontSize: 13, color: T.gold, letterSpacing: '.1em', marginBottom: 6 }}>
+                    탑 {left}전투 남음
                   </div>
+                  {def && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                        <HpBar cur={done} max={def.duration} color={T.amber} w={140} h={4} />
+                      </div>
+                      {/* 진행 문장 — 결과를 암시하지 않는다(data/adventures.ts `legs`) */}
+                      <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.8, marginBottom: 10 }}>
+                        {legLine(def, done)}
+                      </div>
+                    </>
+                  )}
                   <Button small onClick={() => onRecall(i)}>
                     즉시 복귀 (보상 포기)
                   </Button>
