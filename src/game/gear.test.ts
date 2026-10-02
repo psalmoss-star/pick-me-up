@@ -5,7 +5,7 @@ import {
 } from './gear';
 import {
   GEAR_DEFS, GEAR_TUNING, enhanceMult, enhanceCostOf, enhanceChanceOf,
-  shopStock, dropWeights,
+  shopStock,
 } from './data/gear';
 import { simulateBattle } from './battle';
 import { createRng } from './rng';
@@ -70,24 +70,10 @@ describe('장비 도감', () => {
     for (let i = 1; i < w.length; i++) expect(w[i - 1].price!).toBeGreaterThan(w[i].price!);
   });
 
-  /** 저층에서 유물이 나오면 이후 등반이 무의미해진다 */
-  it('저층 드롭 표에는 희귀·유물이 없다', () => {
-    const w = dropWeights(1);
-    expect(w.rare).toBe(0);
-    expect(w.relic).toBe(0);
-  });
-
-  it('깊어질수록 유물 확률이 오른다', () => {
-    expect(dropWeights(12).relic).toBeGreaterThan(dropWeights(7).relic);
-    expect(dropWeights(7).relic).toBeGreaterThan(dropWeights(4).relic);
-  });
-
-  it('모든 깊이에서 가중치 합이 0보다 크다', () => {
-    for (const f of [1, 3, 6, 9, 12, 99]) {
-      const total = Object.values(dropWeights(f)).reduce((a, b) => a + b, 0);
-      expect(total).toBeGreaterThan(0);
-    }
-  });
+  /*
+    드롭 등급 가중치(dropWeights) 테스트 셋은 장비 사다리(2026-10-02)에서 지웠다 —
+    "저층에 상위 장비 없음·깊이로 잠금"은 `loot.test.ts`의 단계 드롭 테스트가 맡는다.
+  */
 });
 
 describe('보정 계산', () => {

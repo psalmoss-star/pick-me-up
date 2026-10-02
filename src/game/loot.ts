@@ -9,8 +9,8 @@ import {
   MATERIAL_BOSS_DROP_CHANCE, MATERIAL_DROP_AMOUNT, MATERIAL_DROP_CHANCE,
   materialOfTier, materialWeights,
 } from './data/materials';
-import { GEAR_TUNING, dropTable, dropWeights } from './data/gear';
-import { rollRecovery, weightedPick } from './gear';
+import { GEAR_TUNING, ladderSet, tierOf } from './data/gear';
+import { rollRecovery } from './gear';
 import { STREAM, substream } from './rng';
 import type {
   GearDefId, GearInstId, GearSlot, MaterialBag, MaterialTier, RNG,
@@ -128,16 +128,18 @@ export function rollFloorLoot(args: FloorLootArgs): FloorLoot {
   // 패배하면 여기서 끝 — 드롭도 재료도 없다. RNG를 더 소비하지 않는다
   if (!cleared) return { recovered, lost, gearDefId: null, materials: {} };
 
-  // ② 층 드롭 장비
+  // ② 층 드롭 장비 — 그 층 단계의 보급형, 보스 층이면 정예(장비 사다리, 2026-10-02)
   let gearDefId: GearDefId | null = null;
   const gearChance = isBoss ? GEAR_TUNING.bossDropChance : GEAR_TUNING.dropChance;
   if (rng() < gearChance) {
-    const rank = weightedPick(dropWeights(floorId), rng);
-    if (rank) {
-      const pool = dropTable().filter((d) => d.rank === rank);
-      if (pool.length > 0) {
-        gearDefId = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))].id;
-      }
+    /*
+      ⚠️ 옛 "등급 추첨" 자리 — 값은 쓰지 않지만 **소비는 지킨다.**
+      이 한 번을 빼면 뒤의 재료 판정이 전 층에서 한 칸씩 밀린다(`loot.test.ts` 재료 지문이 잠근다).
+    */
+    rng();
+    const pool = ladderSet(tierOf(floorId), isBoss ? 'elite' : 'supply');
+    if (pool.length > 0) {
+      gearDefId = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))].id;
     }
   }
 

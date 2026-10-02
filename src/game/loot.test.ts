@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { rollMaterials, mergeMaterials, isEmptyBag, rollFloorLoot } from './loot';
 import { createRng } from './rng';
 import { MATERIAL, MATERIAL_DEFS, MATERIAL_DROP_AMOUNT } from './data/materials';
+import { GEAR_DEFS, tierOf } from './data/gear';
 import type { MaterialBag } from './types';
 
 const bagTotal = (b: MaterialBag) =>
@@ -40,7 +41,7 @@ describe('재료 드롭', () => {
   });
 
   /**
-   * 깊이 잠금. `data/gear.ts`의 `dropWeights`와 같은 이유다 —
+   * 깊이 잠금. `data/gear.ts`의 장비 단계(`tierOf`)와 같은 이유다 —
    * 저층에서 상위 재료가 나오면 이후 등반이 무의미해진다.
    */
   it('저층(1~6)에서는 정수(rare)가 나오지 않는다', () => {
@@ -121,5 +122,40 @@ const EXPECTED_MATERIALS = '4bf1febb';
 describe('장비 사다리 — 재료 드롭 불변', () => {
   it('재료와 장비 드롭 유무가 사다리 도입 전과 같다', () => {
     expect(materialsFingerprint()).toBe(EXPECTED_MATERIALS);
+  });
+});
+
+describe('장비 사다리 — 층 드롭', () => {
+  const drop = (floorId: number, isBoss: boolean) => {
+    for (let seed = 1; seed < 400; seed++) {
+      const r = rollFloorLoot({ seed, floorId, isBoss, battleCount: 0, casualties: [], cleared: true });
+      if (r.gearDefId) return GEAR_DEFS[r.gearDefId];
+    }
+    throw new Error('드롭이 안 나왔다');
+  };
+
+  it('일반 층은 그 층 단계의 보급형', () => {
+    for (const f of [1, 9, 15, 33, 77, 99]) {
+      const d = drop(f, false);
+      expect([d.tier, d.line], `${f}층`).toEqual([tierOf(f), 'supply']);
+    }
+  });
+
+  it('보스 층은 그 층 단계의 정예(확정)', () => {
+    for (const f of [6, 12, 20, 30, 100]) {
+      const r = rollFloorLoot({ seed: 3, floorId: f, isBoss: true, battleCount: 0, casualties: [], cleared: true });
+      expect(r.gearDefId, `${f}층`).not.toBeNull();
+      const d = GEAR_DEFS[r.gearDefId!];
+      expect([d.tier, d.line], `${f}층`).toEqual([tierOf(f), 'elite']);
+    }
+  });
+
+  it('일반 드롭에서 유물은 나오지 않는다', () => {
+    for (let seed = 1; seed < 300; seed++) {
+      for (const f of [10, 50, 100]) {
+        const r = rollFloorLoot({ seed, floorId: f, isBoss: f === 50, battleCount: 1, casualties: [], cleared: true });
+        if (r.gearDefId) expect(GEAR_DEFS[r.gearDefId].line).not.toBe('relic');
+      }
+    }
   });
 });

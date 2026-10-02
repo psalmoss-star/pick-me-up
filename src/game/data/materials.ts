@@ -40,7 +40,7 @@ export const MATERIAL = {
 /**
  * 재료 3종.
  *
- * 등급(tier)은 **드롭되는 층 깊이**를 가른다 — `dropWeights`와 같은 원리다.
+ * 등급(tier)은 **드롭되는 층 깊이**를 가른다 — 장비 사다리의 단계(`tierOf`)와 같은 원리다.
  * 저층에서 정수가 쏟아지면 이후 등반이 무의미해진다.
  */
 export const MATERIAL_DEFS: Record<MaterialId, MaterialDef> = Object.fromEntries(
@@ -89,7 +89,7 @@ export const MATERIAL_DROP_AMOUNT: readonly [number, number] = [1, 3];
 /**
  * 층 깊이에 따른 재료 등급 가중치.
  *
- * `data/gear.ts`의 `dropWeights`와 같은 구조·같은 이유다 —
+ * `data/gear.ts`의 장비 단계(`tierOf`)와 같은 이유다 —
  * 저층에서 상위 재료가 나오면 이후 등반이 무의미해진다.
  */
 export function materialWeights(floorId: number): Record<MaterialTier, number> {

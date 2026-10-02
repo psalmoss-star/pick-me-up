@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRunStore } from './runStore';
 import { rollFloorLoot, isEmptyBag } from '../game/loot';
 import { FLOORS } from '../game/data/floors';
+import { GEAR_DEFS, tierOf } from '../game/data/gear';
 
 class MemStorage {
   private m = new Map<string, string>();
@@ -103,23 +104,32 @@ describe('재료 드롭 — 스토어', () => {
    *
    * 이 테스트가 깨지면 = 전리품 소비 순서가 바뀌었다 = 기존 세이브의 드롭 운이
    * 통째로 달라졌다는 뜻이다.
+   *
+   * 장비 사다리(STEP 66, 2026-10-02)에서 드롭 **종류**는 의도대로 바뀌었다(등급 추첨 → 층의 단계).
+   * 그래서 고정값은 **드롭 유무**만 지키고, 종류는 단계 규칙(일반=보급, 보스=정예)으로 본다.
+   * 옛 종류 기록: 1층 w_soldier·w_chipped·w_chipped·a_tatter, 6·12층 보스 w_emberfang.
+   * 재료까지 포함한 소비 순서는 `game/loot.test.ts`의 재료 지문이 잠근다.
    */
-  it('장비 드롭이 재료 도입 이전과 완전히 같다 — 소비 순서 회귀 고정', () => {
-    const LEGACY: [number, number, boolean, number, string | null][] = [
-      [11, 1, false, 0, 'w_soldier'],
-      [23, 1, false, 0, 'w_chipped'],
-      [47, 1, false, 0, 'w_chipped'],
-      [88, 1, false, 0, 'a_tatter'],
-      [11, 6, true, 3, 'w_emberfang'],
-      [42, 12, true, 7, 'w_emberfang'],
-      [7, 20, false, 12, null],
-      [99, 40, false, 25, null],
+  it('장비 드롭 유무가 재료 도입 이전과 같다 — 소비 순서 회귀 고정', () => {
+    const LEGACY: [number, number, boolean, number, boolean][] = [
+      [11, 1, false, 0, true],
+      [23, 1, false, 0, true],
+      [47, 1, false, 0, true],
+      [88, 1, false, 0, true],
+      [11, 6, true, 3, true],
+      [42, 12, true, 7, true],
+      [7, 20, false, 12, false],
+      [99, 40, false, 25, false],
     ];
-    for (const [seed, floorId, isBoss, battleCount, expected] of LEGACY) {
+    for (const [seed, floorId, isBoss, battleCount, dropped] of LEGACY) {
       const loot = rollFloorLoot({
         seed, floorId, isBoss, battleCount, casualties: [], cleared: true,
       });
-      expect(loot.gearDefId, `seed ${seed} / ${floorId}층`).toBe(expected);
+      expect(loot.gearDefId != null, `seed ${seed} / ${floorId}층`).toBe(dropped);
+      if (loot.gearDefId) {
+        const d = GEAR_DEFS[loot.gearDefId];
+        expect([d.tier, d.line], `seed ${seed} / ${floorId}층`).toEqual([tierOf(floorId), isBoss ? 'elite' : 'supply']);
+      }
     }
   });
 

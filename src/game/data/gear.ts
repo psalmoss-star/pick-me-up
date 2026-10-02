@@ -266,13 +266,7 @@ export function dropTable(): GearDef[] {
   return Object.values(GEAR_DEFS);
 }
 
-/**
- * 층 깊이에 따른 드롭 등급 가중치.
- * 저층에서 유물이 나오면 이후 등반이 무의미해지므로 깊이로 잠근다.
- */
-export function dropWeights(floorId: number): Record<GearRank, number> {
-  if (floorId <= 3) return { common: 70, fine: 30, rare: 0, relic: 0 };
-  if (floorId <= 6) return { common: 40, fine: 45, rare: 15, relic: 0 };
-  if (floorId <= 9) return { common: 15, fine: 40, rare: 40, relic: 5 };
-  return { common: 5, fine: 25, rare: 50, relic: 20 };
-}
+/*
+  층 드롭 등급 가중치(dropWeights)는 장비 사다리(2026-10-02)에서 없앴다 — 층 드롭은 이제
+  그 층 단계의 보급형(보스면 정예)이다(`loot.ts`). 깊이 잠금은 단계(`tierOf`)가 맡는다.
+*/
