@@ -7,7 +7,7 @@
  *   3. 보스는 확정
  */
 import { describe, it, expect } from 'vitest';
-import { rollMaterials, mergeMaterials, isEmptyBag } from './loot';
+import { rollMaterials, mergeMaterials, isEmptyBag, rollFloorLoot } from './loot';
 import { createRng } from './rng';
 import { MATERIAL, MATERIAL_DEFS, MATERIAL_DROP_AMOUNT } from './data/materials';
 import type { MaterialBag } from './types';
@@ -95,5 +95,31 @@ describe('재료 주머니', () => {
     expect(isEmptyBag({})).toBe(true);
     expect(isEmptyBag({ [MATERIAL.ore]: 0 })).toBe(true);
     expect(isEmptyBag({ [MATERIAL.ore]: 1 })).toBe(false);
+  });
+});
+
+/**
+ * 재료 지문 — 장비 사다리(STEP 66)가 장비 판정의 난수 소비를 바꾸면 재료가 통째로 바뀐다.
+ * 장비의 **종류**는 의도대로 바뀌므로 넣지 않고, 드롭 **유무**와 재료만 넣는다.
+ */
+function materialsFingerprint(): string {
+  let h = 2166136261;
+  for (let seed = 1; seed <= 60; seed++) {
+    for (const floorId of [1, 3, 6, 9, 12, 20, 30, 55, 90, 100]) {
+      const isBoss = floorId === 6 || floorId === 12 || floorId === 20 || (floorId > 20 && floorId % 10 === 0);
+      const r = rollFloorLoot({ seed, floorId, isBoss, battleCount: seed % 7, casualties: [], cleared: true });
+      const s = JSON.stringify(r.materials) + (r.gearDefId ? 'G' : '-');
+      for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    }
+  }
+  return (h >>> 0).toString(16);
+}
+
+/** 사다리 도입 전(2026-10-02, 8b32462 기준 드롭 코드)에서 뜬 값. 깨지면 갱신하지 말고 난수 소비를 의심할 것 */
+const EXPECTED_MATERIALS = '4bf1febb';
+
+describe('장비 사다리 — 재료 드롭 불변', () => {
+  it('재료와 장비 드롭 유무가 사다리 도입 전과 같다', () => {
+    expect(materialsFingerprint()).toBe(EXPECTED_MATERIALS);
   });
 });

@@ -15,7 +15,7 @@
  * 영웅이 주인공으로 남고 장비는 거들기만 한다.
  * 그래서 등급별로 저층용/중층용을 나눠 두고, 한 등급이 전 구간을 덮지 않게 했다.
  */
-import type { GearDef, GearDefId, GearRank, GearSlot } from '../types';
+import type { GearDef, GearDefId, GearLine, GearRank, GearSlot } from '../types';
 
 export const GEAR_SLOTS: readonly GearSlot[] = ['weapon', 'armor', 'trinket'];
 
@@ -25,10 +25,14 @@ export const SLOT_LABEL: Record<GearSlot, string> = {
   trinket: '장신구',
 };
 
+/**
+ * 등급 라벨 — 장비 사다리(2026-10-02) 뒤로 rank는 계열에서 정해진다
+ * (보급=common, 정예=rare, 유물=relic). `fine`은 더 쓰지 않지만 타입이 요구해 남긴다.
+ */
 export const RANK_LABEL: Record<GearRank, string> = {
-  common: '평범',
+  common: '보급',
   fine: '정교',
-  rare: '희귀',
+  rare: '정예',
   relic: '유물',
 };
 
@@ -36,6 +40,30 @@ export const RANK_LABEL: Record<GearRank, string> = {
 export const RANK_ORDER: Record<GearRank, number> = {
   common: 0, fine: 1, rare: 2, relic: 3,
 };
+
+/** 단계 수 — 10층마다 하나, 100층까지 */
+export const TIER_COUNT = 10;
+export const TIER_SPAN = 10;
+
+/** 층 → 단계(1~10). 범위 밖은 양 끝으로 접는다 */
+export function tierOf(floorId: number): number {
+  return Math.min(TIER_COUNT, Math.max(1, Math.ceil(floorId / TIER_SPAN)));
+}
+
+export function tierFirstFloor(tier: number): number {
+  return (tier - 1) * TIER_SPAN + 1;
+}
+
+export const LINE_LABEL: Record<GearLine, string> = {
+  supply: '보급',
+  elite: '정예',
+  relic: '유물',
+};
+
+/** 화면 꼬리표 — "3단계 · 보급". 유물은 단계가 없다 */
+export function gearTag(def: GearDef): string {
+  return def.line === 'relic' ? LINE_LABEL.relic : `${def.tier}단계 · ${LINE_LABEL[def.line]}`;
+}
 
 export const GEAR_TUNING = {
   /**
@@ -109,29 +137,33 @@ const g = (id: string) => id as GearDefId;
  *
  * relic은 **상점에 없다**(price 없음) — 제작·드롭·과제로만 나온다.
  * 금으로 최상급을 살 수 있으면 등반이 아니라 지갑이 강함을 정한다.
+ *
+ * 장비 사다리(2026-10-02): 기존 12종은 1·2단계와 유물이다 — common = 1단계 보급,
+ * fine = 1단계 정예, rare = 2단계 정예. 2단계 이상의 나머지는 `gearLadder.ts`(생성)에서 온다.
+ * id는 세이브에 남으므로 바꾸지 않는다.
  */
 export const GEAR_DEFS: Record<GearDefId, GearDef> = Object.fromEntries(
   ([
     // ── 무기 ──
-    { id: 'w_chipped', name: '이 빠진 검', slot: 'weapon', rank: 'common', base: { atk: 12 }, price: 220,
+    { id: 'w_chipped', name: '이 빠진 검', slot: 'weapon', rank: 'common', tier: 1, line: 'supply', base: { atk: 12 }, price: 220,
       lore: '누군가 끝까지 쥐고 있었던 자국이 남았다.' },
-    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'fine', base: { atk: 22, crit: 0.02 }, price: 640 },
-    { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', base: { atk: 38, crit: 0.04 }, price: 1800 },
-    { id: 'w_towerbane', name: '탑을 베는 것', slot: 'weapon', rank: 'relic', base: { atk: 56, crit: 0.07, spd: 4 },
+    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'fine', tier: 1, line: 'elite', base: { atk: 22, crit: 0.02 }, price: 640 },
+    { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', tier: 2, line: 'elite', base: { atk: 38, crit: 0.04 }, price: 1800 },
+    { id: 'w_towerbane', name: '탑을 베는 것', slot: 'weapon', rank: 'relic', tier: 0, line: 'relic', base: { atk: 56, crit: 0.07, spd: 4 },
       lore: '이름만 남고 주인은 남지 않았다.' },
 
     // ── 방어구 ──
-    { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', base: { hp: 70, def: 6 }, price: 220 },
-    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'fine', base: { hp: 130, def: 12 }, price: 640 },
-    { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', base: { hp: 230, def: 22, spd: -3 }, price: 1800,
+    { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', tier: 1, line: 'supply', base: { hp: 70, def: 6 }, price: 220 },
+    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'fine', tier: 1, line: 'elite', base: { hp: 130, def: 12 }, price: 640 },
+    { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', tier: 2, line: 'elite', base: { hp: 230, def: 22, spd: -3 }, price: 1800,
       lore: '무겁다. 그만큼 오래 버틴다.' },
-    { id: 'a_ashshroud', name: '재의 장막', slot: 'armor', rank: 'relic', base: { hp: 330, def: 34 } },
+    { id: 'a_ashshroud', name: '재의 장막', slot: 'armor', rank: 'relic', tier: 0, line: 'relic', base: { hp: 330, def: 34 } },
 
     // ── 장신구 ──
-    { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', base: { spd: 4, crit: 0.02 }, price: 220 },
-    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'fine', base: { spd: 9, crit: 0.03 }, price: 640 },
-    { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', base: { atk: 18, crit: 0.06 }, price: 1800 },
-    { id: 't_lastlight', name: '마지막 불빛', slot: 'trinket', rank: 'relic', base: { hp: 150, spd: 12, crit: 0.08 },
+    { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', tier: 1, line: 'supply', base: { spd: 4, crit: 0.02 }, price: 220 },
+    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'fine', tier: 1, line: 'elite', base: { spd: 9, crit: 0.03 }, price: 640 },
+    { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', tier: 2, line: 'elite', base: { atk: 18, crit: 0.06 }, price: 1800 },
+    { id: 't_lastlight', name: '마지막 불빛', slot: 'trinket', rank: 'relic', tier: 0, line: 'relic', base: { hp: 150, spd: 12, crit: 0.08 },
       lore: '꺼지기 직전이 가장 밝다.' },
   ] satisfies Array<Omit<GearDef, 'id'> & { id: string }>)
     .map((d) => [g(d.id), { ...d, id: g(d.id) } as GearDef]),

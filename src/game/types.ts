@@ -267,6 +267,14 @@ export type GearSlot = 'weapon' | 'armor' | 'trinket';
 export type GearRank = 'common' | 'fine' | 'rare' | 'relic';
 
 /**
+ * 장비 계열(2026-10-02 장비 성장 사다리).
+ *   supply — 보급형. 그 단계에 들어서면 상점에 열리고 일반 층에서도 떨어진다
+ *   elite  — 정예. 그 단계 보스가 확정으로, 모험이 확률로 준다. 상점에 없다
+ *   relic  — 유물. 제작·최종 과제로만. 단계 사다리 밖이다
+ */
+export type GearLine = 'supply' | 'elite' | 'relic';
+
+/**
  * 장비가 주는 보정.
  *
  * Stats에 직접 더하지 않고 배수/가산을 분리해 들고 있는 이유는
@@ -291,6 +299,9 @@ export interface GearDef {
   name: string;
   slot: GearSlot;
   rank: GearRank;
+  /** 단계 1~10 — 10층마다 하나(`tierOf`). 유물은 정해진 단계가 없어 0 */
+  tier: number;
+  line: GearLine;
   /** 강화 0단계 기준 보정치 */
   base: GearBonus;
   /** 상점 판매가(금). 상점에 안 파는 물건이면 생략 */
