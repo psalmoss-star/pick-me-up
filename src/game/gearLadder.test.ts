@@ -4,13 +4,14 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  GEAR_DEFS, GEAR_SLOTS, LADDER_TARGET, gearTag, ladderSet, nextShopTier, shopStock, tierOf,
+  GEAR_DEFS, GEAR_SLOTS, ladderTarget, gearTag, ladderSet, nextShopTier, shopStock, tierOf,
   tierFirstFloor, TIER_COUNT, unlockedTierOf,
 } from './data/gear';
 import { refPartyAt, tierRefFloor } from './data/refParty';
 import { bonusOf, makeGear } from './gear';
 import { setPowerRatio } from './gearLadder';
-import type { GearDefId } from './types';
+import type { GearBonus, GearDefId } from './types';
+import { POWER_WEIGHTS as W } from './data/power';
 
 const LEGACY = [
   'w_chipped', 'a_tatter', 't_charm',
@@ -37,11 +38,12 @@ describe('단계', () => {
     expect(tierFirstFloor(10)).toBe(91);
   });
 
-  it('기준 파티 — 저층 3인 · 생성 구간 5인, 단계 가운데 층', () => {
+  it('기준 파티 — 저층 3인 · 생성 구간 5인, 단계 첫 층(그 단계에서 가장 약한 파티)', () => {
     expect(refPartyAt(5)).toHaveLength(3);
     expect(refPartyAt(25)).toHaveLength(5);
-    expect(tierRefFloor(1)).toBe(5);
-    expect(tierRefFloor(10)).toBe(95);
+    expect(tierRefFloor(1)).toBe(1);
+    expect(tierRefFloor(2)).toBe(11);
+    expect(tierRefFloor(10)).toBe(91);
   });
 });
 
@@ -83,15 +85,32 @@ describe('사다리 — 단계마다 보급 한 벌·정예 한 벌', () => {
   /**
    * 여유분 — 그 단계 기준 파티가 한 벌을 입으면 파티 전투력이 일정하게 오른다(사용자 결정).
    * 층 난이도는 장비 없음 기준이므로 이 비율이 곧 "장비를 맞춘 만큼의 여유"다.
+   * 수치는 `LADDER_TARGET`이 정하고, 그 값은 `climb-check --gear` 완주율 실측으로 골랐다.
    */
-  it('보급 한 벌 12~18%, 정예 한 벌 21~29% — 1~10단계 전부', () => {
+  it('단계 기준 파티(첫 층)에서 보급·정예 비율이 목표 범위 안 — 1~10단계 전부', () => {
     for (let t = 1; t <= TIER_COUNT; t++) {
       const party = refPartyAt(tierRefFloor(t));
       for (const line of ['supply', 'elite'] as const) {
         const r = setPowerRatio(party, ladderSet(t, line).map((d) => bonusOf(makeGear(d.id, 1))));
-        const { lo, hi } = LADDER_TARGET[line];
+        const { lo, hi } = ladderTarget(t, line);
         expect(r, `${t}단계 ${line} ${(r * 100).toFixed(1)}%`).toBeGreaterThanOrEqual(lo);
         expect(r, `${t}단계 ${line} ${(r * 100).toFixed(1)}%`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+
+  /**
+   * 단계 안 **어느 층**에서도 상한을 넘지 않는다 — 단계 가운데 층 파티로만 맞췄더니
+   * 11층(더 약한 파티)에서 보급 +22.7%·정예 +38.9%로 넘었다(STEP 66 리뷰).
+   */
+  it('단계 안 모든 층의 기준 파티에 대해 상한을 넘지 않는다', () => {
+    for (let t = 1; t <= TIER_COUNT; t++) {
+      for (let f = tierFirstFloor(t); f <= tierFirstFloor(t) + 9; f++) {
+        const party = refPartyAt(f);
+        for (const line of ['supply', 'elite'] as const) {
+          const r = setPowerRatio(party, ladderSet(t, line).map((d) => bonusOf(makeGear(d.id, 1))));
+          expect(r, `${f}층 ${line} ${(r * 100).toFixed(1)}%`).toBeLessThanOrEqual(ladderTarget(t, line).hi);
+        }
       }
     }
   });
@@ -101,9 +120,15 @@ describe('사다리 — 단계마다 보급 한 벌·정예 한 벌', () => {
    * 같은 파티로 풀리면 수치가 똑같아진다(첫 생성에서 실제로 3=4·5=6·7=8·9=10단계였다).
    * 같은 계열·같은 슬롯이면 위 단계가 반드시 더 강해야 한다.
    */
+  /**
+   * 장비 한 개의 전력 — 전투력 가중합을 **반올림 전**으로 잰다.
+   * `combatPower`는 ÷10 반올림이라 공격력 1~2 차이를 같은 값으로 뭉갰다(단조 비교가 거짓 실패).
+   */
+  const rawPower = (b: GearBonus) =>
+    (b.hp ?? 0) * W.hp + (b.atk ?? 0) * W.atk + (b.def ?? 0) * W.def + (b.spd ?? 0) * W.spd + (b.crit ?? 0) * W.crit;
+
   it('같은 계열·슬롯이면 위 단계가 더 강하다 — 1~10단계', () => {
-    const party = refPartyAt(95);
-    const power = (id: string) => setPowerRatio(party, [bonusOf(makeGear(id as GearDefId, 1))]);
+    const power = (id: string) => rawPower(bonusOf(makeGear(id as GearDefId, 1)));
     for (const line of ['supply', 'elite'] as const) {
       for (const slot of GEAR_SLOTS) {
         for (let t = 2; t <= TIER_COUNT; t++) {
@@ -116,8 +141,7 @@ describe('사다리 — 단계마다 보급 한 벌·정예 한 벌', () => {
   });
 
   it('같은 단계면 정예가 보급보다 강하다', () => {
-    const party = refPartyAt(95);
-    const power = (id: string) => setPowerRatio(party, [bonusOf(makeGear(id as GearDefId, 1))]);
+    const power = (id: string) => rawPower(bonusOf(makeGear(id as GearDefId, 1)));
     for (let t = 1; t <= TIER_COUNT; t++) {
       for (const slot of GEAR_SLOTS) {
         const s = ladderSet(t, 'supply').find((d) => d.slot === slot)!;

@@ -145,34 +145,65 @@ const g = (id: string) => id as GearDefId;
  */
 const LEGACY_DEFS: GearDef[] = ([
     // ── 무기 ──
-    { id: 'w_chipped', name: '이 빠진 검', slot: 'weapon', rank: 'common', tier: 1, line: 'supply', base: { atk: 12 }, price: 220,
+    { id: 'w_chipped', name: '이 빠진 검', slot: 'weapon', rank: 'common', tier: 1, line: 'supply', base: { atk: 13 }, price: 220,
       lore: '누군가 끝까지 쥐고 있었던 자국이 남았다.' },
-    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'rare', tier: 1, line: 'elite', base: { atk: 22, crit: 0.02 } },
-    { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', tier: 2, line: 'elite', base: { atk: 91, crit: 0.04 } }, // 사다리 2단계 정예에 맞춤(38 → 91, 2026-10-02)
+    { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'rare', tier: 1, line: 'elite', base: { atk: 14, crit: 0.02 } },
+    { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', tier: 2, line: 'elite', base: { atk: 16, crit: 0.02 } }, // 사다리 2단계 정예에 맞춤(atk 38 → 16·치명 4 → 2%, 2026-10-02)
     { id: 'w_towerbane', name: '탑을 베는 것', slot: 'weapon', rank: 'relic', tier: 0, line: 'relic', base: { atk: 56, crit: 0.07, spd: 4 },
       lore: '이름만 남고 주인은 남지 않았다.' },
 
     // ── 방어구 ──
-    { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', tier: 1, line: 'supply', base: { hp: 70, def: 6 }, price: 220 },
-    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'rare', tier: 1, line: 'elite', base: { hp: 130, def: 12 } },
-    { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', tier: 2, line: 'elite', base: { hp: 230, def: 22, spd: -3 },
+    { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', tier: 1, line: 'supply', base: { hp: 26, def: 2 }, price: 220 },
+    { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'rare', tier: 1, line: 'elite', base: { hp: 45, def: 4 } },
+    { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', tier: 2, line: 'elite', base: { hp: 60, def: 6, spd: -3 },
       lore: '무겁다. 그만큼 오래 버틴다.' },
     { id: 'a_ashshroud', name: '재의 장막', slot: 'armor', rank: 'relic', tier: 0, line: 'relic', base: { hp: 330, def: 34 } },
 
     // ── 장신구 ──
-    { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', tier: 1, line: 'supply', base: { spd: 4, crit: 0.02 }, price: 220 },
-    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'rare', tier: 1, line: 'elite', base: { spd: 9, crit: 0.03 } },
-    { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', tier: 2, line: 'elite', base: { atk: 36, crit: 0.06 } }, // 사다리 2단계 정예에 맞춤(18 → 36, 2026-10-02)
+    { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', tier: 1, line: 'supply', base: { spd: 2, crit: 0.01 }, price: 220 },
+    { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'rare', tier: 1, line: 'elite', base: { spd: 3, crit: 0.02 } },
+    { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', tier: 2, line: 'elite', base: { atk: 8, crit: 0.02 } }, // 사다리 2단계 정예에 맞춤(atk 18 → 8·치명 6 → 2%, 2026-10-02)
     { id: 't_lastlight', name: '마지막 불빛', slot: 'trinket', rank: 'relic', tier: 0, line: 'relic', base: { hp: 150, spd: 12, crit: 0.08 },
       lore: '꺼지기 직전이 가장 밝다.' },
   ] satisfies Array<Omit<GearDef, 'id'> & { id: string }>)
   .map((d) => ({ ...d, id: g(d.id) } as GearDef));
 
-/** 사다리 비율 목표 — 단계 기준 파티가 한 벌을 입었을 때 파티 전투력 증가율 */
+/**
+ * 사다리 비율 목표 — 단계 기준 파티가 한 벌을 입었을 때 파티 전투력 증가율.
+ *
+ * ⚠️ **전투력 %가 아니라 완주율로 골랐다**(2026-10-02, 사용자 결정). 처음 15%/25%는
+ * 21층 이후 구간 완주율을 20~40%대 → 94~99%로 올려 탑을 산책로로 만들었다 — 전투력은
+ * 선형 요약값이고 승률은 비선형이다. 목표는 `climb-check --gear`로
+ * **보급 한 벌 = 완주율 +15~20%p, 정예 한 벌 = +25~30%p**이고, 그 실측값이 아래다.
+ * 이 값을 바꿨으면 `scripts/gear-ladder.mts --write` 후 climb-check --gear로 다시 잴 것.
+ */
 export const LADDER_TARGET = {
-  supply: { goal: 0.15, lo: 0.12, hi: 0.18 },
-  elite: { goal: 0.25, lo: 0.21, hi: 0.29 },
+  supply: { goal: 0.03, lo: 0.02, hi: 0.04 },
+  elite: { goal: 0.05, lo: 0.04, hi: 0.065 },
 } as const;
+
+/**
+ * 1·2단계(손으로 짠 1~20층, 3인 파티)용 목표.
+ *
+ * 기준 파티가 단계마다 크게 달라서(★2 Lv.15 → ★3 Lv.30 → 21층부터 ★5 Lv.60 5인) 같은 %를 쓰면
+ * 1단계 무기가 "공격 +1"이 되고, 반대로 앞 단계를 크게 잡으면 **3단계가 2단계보다 약해진다**.
+ * 그래서 파티가 강해질수록 %를 낮추고, 절대 수치는 생성기의 단조 하한(MIN_STEP)이 늘 오르게 지킨다.
+ * 2단계 상한은 "3단계(3%·5%)가 2단계보다 강하다"가 성립하는 값에서 나왔다.
+ */
+export const LADDER_TARGET_TIER1 = {
+  supply: { goal: 0.075, lo: 0.06, hi: 0.09 },
+  elite: { goal: 0.13, lo: 0.11, hi: 0.15 },
+} as const;
+export const LADDER_TARGET_TIER2 = {
+  supply: { goal: 0.05, lo: 0.04, hi: 0.06 },
+  elite: { goal: 0.09, lo: 0.075, hi: 0.105 },
+} as const;
+
+/** 단계·계열의 비율 목표 — 생성기와 테스트가 같이 쓴다 */
+export function ladderTarget(tier: number, line: 'supply' | 'elite') {
+  const t = tier <= 1 ? LADDER_TARGET_TIER1 : tier === 2 ? LADDER_TARGET_TIER2 : LADDER_TARGET;
+  return t[line];
+}
 
 /**
  * 단계 이름 어휘 — 2단계부터. 1단계와 2단계 정예는 기존 장비가 차지했다.

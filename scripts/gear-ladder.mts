@@ -12,7 +12,7 @@
 import { writeFileSync } from 'node:fs';
 import { POWER_WEIGHTS as W, POWER_SCALE } from '../src/game/data/power';
 import { refPartyAt, tierRefFloor } from '../src/game/data/refParty';
-import { TIER_COUNT, LADDER_TARGET, GEAR_DEFS } from '../src/game/data/gear';
+import { TIER_COUNT, GEAR_DEFS, ladderTarget } from '../src/game/data/gear';
 import { setPowerRatio } from '../src/game/gearLadder';
 import { combatPower } from '../src/game/power';
 import { statsOfInstance } from '../src/game/stats';
@@ -55,9 +55,23 @@ function avgRaw(tier: number): number {
   return here * Math.sqrt(here / partyRaw(tier - 2));
 }
 
+/**
+ * 고정 부분(치명·속도)이 슬롯 몫을 다 먹지 않게 줄인다.
+ * 목표가 작은 저단계에서는 치명 0.02만으로 몫을 넘어 공격력이 1로 나왔다 — 고정 부분은 몫의 40%까지만.
+ */
+function scaledFixed(fixed: GearBonus, want: number): GearBonus {
+  const r = raw(fixed);
+  if (r <= 0 || r <= want * 0.4) return fixed;
+  const k = (want * 0.4) / r;
+  const out: GearBonus = {};
+  if (fixed.crit) out.crit = Math.max(0.01, Math.round(fixed.crit * k * 100) / 100);
+  if (fixed.spd) out.spd = Math.max(1, Math.round(fixed.spd * k));
+  return out;
+}
+
 function solve(tier: number, line: Line, slot: GearSlot): GearBonus {
-  const want = LADDER_TARGET[line].goal * SHARE[slot] * avgRaw(tier);
-  const fixed = FIXED[line][slot];
+  const want = ladderTarget(tier, line).goal * SHARE[slot] * avgRaw(tier);
+  const fixed = scaledFixed(FIXED[line][slot], want);
   const rest = Math.max(0, want - raw(fixed));
   if (slot === 'armor') {
     // 방어구: hp:def = 11:1
@@ -73,6 +87,30 @@ function price(tier: number): number {
   return Math.round(floorRewards(f, 8).gold / 10) * 10;
 }
 
+/**
+ * 이전 단계보다 최소 MIN_STEP배 강하게 — 단계 단조 증가의 하한.
+ *
+ * ⚠️ 1~2단계와 3단계 이후는 목표 %가 다르고(구간마다 장비 반응이 달라 따로 실측) 기준 파티도
+ * 20층에서 크게 바뀐다. 그대로 풀었더니 **3단계 보급 무기가 2단계보다 약했다.** 값만 오르고
+ * 성능이 떨어지는 상점이 된다. 그래서 풀이값이 이전 단계 × MIN_STEP보다 작으면 그만큼 키운다.
+ */
+const MIN_STEP = 1.05;
+const prevBase = new Map<string, GearBonus>();
+const scalable = (b: GearBonus) => raw({ atk: b.atk, hp: b.hp, def: b.def });
+
+function atLeastPrev(base: GearBonus, prev: GearBonus | undefined): GearBonus {
+  if (!prev) return base;
+  const need = raw(prev) * MIN_STEP;
+  if (raw(base) >= need) return base;
+  const fixedRaw = raw(base) - scalable(base);
+  const k = (need - fixedRaw) / Math.max(1e-9, scalable(base));
+  const out: GearBonus = { ...base };
+  if (base.atk) out.atk = Math.ceil(base.atk * k);
+  if (base.hp) out.hp = Math.ceil(base.hp * k);
+  if (base.def) out.def = Math.ceil(base.def * k);
+  return out;
+}
+
 const rows: string[] = [];
 console.log('\n  단계 | 계열   | 비율');
 for (let t = 1; t <= TIER_COUNT; t++) {
@@ -82,14 +120,16 @@ for (let t = 1; t <= TIER_COUNT; t++) {
     const set = SLOTS.map((slot) => {
       if (legacy) {
         const d = Object.values(GEAR_DEFS).find((x) => x.tier === t && x.line === line && x.slot === slot)!;
+        prevBase.set(`${line}:${slot}`, d.base);
         return d.base;
       }
-      const base = solve(t, line, slot);
+      const base = atLeastPrev(solve(t, line, slot), prevBase.get(`${line}:${slot}`));
+      prevBase.set(`${line}:${slot}`, base);
       rows.push(`  { tier: ${t}, line: '${line}', slot: '${slot}', base: ${JSON.stringify(base)}${line === 'supply' ? `, price: ${price(t)}` : ''} },`);
       return base;
     });
     const r = setPowerRatio(refPartyAt(tierRefFloor(t)), set);
-    const { lo, hi } = LADDER_TARGET[line];
+    const { lo, hi } = ladderTarget(t, line);
     const out = r < lo || r > hi;
     console.log(`  ${String(t).padStart(2)}   | ${line.padEnd(6)} | ${(r * 100).toFixed(1)}%${out ? '  ← 범위 밖' : ''}${legacy ? ' (기존)' : ''}`);
     // 기존 자리가 범위 밖이면 같은 풀이로 맞춘 값을 제안한다 — data/gear.ts의 기존 항목에 손으로 옮긴다(id·이름 유지)

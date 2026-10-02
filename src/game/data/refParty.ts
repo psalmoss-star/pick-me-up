@@ -28,7 +28,13 @@ export function refPartyAt(floorId: number): HeroInstance[] {
   return g(6, 95, 99);
 }
 
-/** 단계의 비율을 잴 층 — 단계 가운데(10k − 5). 단계 첫 층은 저층 파티에 치우친다 */
+/**
+ * 단계의 비율을 잴 층 — **단계 첫 층**(10k − 9). 그 단계에서 가장 약한 기준 파티다.
+ *
+ * ⚠️ 처음엔 단계 가운데(10k − 5)로 맞췄는데, 11층 파티(★3 Lv.30)가 15층 파티(★4 Lv.50)보다
+ * 훨씬 약해 11~12층에서 상한을 넘었다(보급 +22.7%·정예 +38.9%, STEP 66 리뷰).
+ * 가장 약한 파티로 맞추면 단계 안 어느 층에서도 상한을 넘지 않는다.
+ */
 export function tierRefFloor(tier: number): number {
-  return tier * 10 - 5;
+  return tier * 10 - 9;
 }
