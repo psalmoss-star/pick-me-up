@@ -3,8 +3,12 @@
  * 10층마다 한 단계. 보급형은 상점·일반 드롭, 정예는 보스·모험, 유물은 제작.
  */
 import { describe, it, expect } from 'vitest';
-import { GEAR_DEFS, gearTag, tierOf, tierFirstFloor, TIER_COUNT } from './data/gear';
+import {
+  GEAR_DEFS, GEAR_SLOTS, LADDER_TARGET, gearTag, ladderSet, tierOf, tierFirstFloor, TIER_COUNT,
+} from './data/gear';
 import { refPartyAt, tierRefFloor } from './data/refParty';
+import { bonusOf, makeGear } from './gear';
+import { setPowerRatio } from './gearLadder';
 import type { GearDefId } from './types';
 
 const LEGACY = [
@@ -57,5 +61,78 @@ describe('기존 장비 재배치', () => {
     expect(gearTag(GEAR_DEFS['w_chipped' as GearDefId])).toBe('1단계 · 보급');
     expect(gearTag(GEAR_DEFS['w_emberfang' as GearDefId])).toBe('2단계 · 정예');
     expect(gearTag(GEAR_DEFS['w_towerbane' as GearDefId])).toBe('유물');
+  });
+});
+
+describe('사다리 — 단계마다 보급 한 벌·정예 한 벌', () => {
+  it('1~10단계 전부 슬롯 3 × (보급 + 정예)가 있고 새 id는 규칙을 따른다', () => {
+    for (let t = 1; t <= TIER_COUNT; t++) {
+      for (const line of ['supply', 'elite'] as const) {
+        const set = ladderSet(t, line);
+        expect(set.map((d) => d.slot), `${t}단계 ${line}`).toEqual(['weapon', 'armor', 'trinket']);
+        for (const d of set) {
+          expect(d.tier).toBe(t);
+          expect(d.line).toBe(line);
+          if (!LEGACY.includes(d.id as never)) expect(d.id).toBe(`g_t${t}_${line}_${d.slot}`);
+        }
+      }
+    }
+  });
+
+  /**
+   * 여유분 — 그 단계 기준 파티가 한 벌을 입으면 파티 전투력이 일정하게 오른다(사용자 결정).
+   * 층 난이도는 장비 없음 기준이므로 이 비율이 곧 "장비를 맞춘 만큼의 여유"다.
+   */
+  it('보급 한 벌 12~18%, 정예 한 벌 21~29% — 1~10단계 전부', () => {
+    for (let t = 1; t <= TIER_COUNT; t++) {
+      const party = refPartyAt(tierRefFloor(t));
+      for (const line of ['supply', 'elite'] as const) {
+        const r = setPowerRatio(party, ladderSet(t, line).map((d) => bonusOf(makeGear(d.id, 1))));
+        const { lo, hi } = LADDER_TARGET[line];
+        expect(r, `${t}단계 ${line} ${(r * 100).toFixed(1)}%`).toBeGreaterThanOrEqual(lo);
+        expect(r, `${t}단계 ${line} ${(r * 100).toFixed(1)}%`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+
+  /**
+   * "한 단계씩 업그레이드" — 기준 파티는 20층 구간마다 바뀌므로, 구간 안의 두 단계가
+   * 같은 파티로 풀리면 수치가 똑같아진다(첫 생성에서 실제로 3=4·5=6·7=8·9=10단계였다).
+   * 같은 계열·같은 슬롯이면 위 단계가 반드시 더 강해야 한다.
+   */
+  it('같은 계열·슬롯이면 위 단계가 더 강하다 — 1~10단계', () => {
+    const party = refPartyAt(95);
+    const power = (id: string) => setPowerRatio(party, [bonusOf(makeGear(id as GearDefId, 1))]);
+    for (const line of ['supply', 'elite'] as const) {
+      for (const slot of GEAR_SLOTS) {
+        for (let t = 2; t <= TIER_COUNT; t++) {
+          const prev = ladderSet(t - 1, line).find((d) => d.slot === slot)!;
+          const cur = ladderSet(t, line).find((d) => d.slot === slot)!;
+          expect(power(cur.id), `${line} ${slot} ${t - 1}→${t}단계`).toBeGreaterThan(power(prev.id));
+        }
+      }
+    }
+  });
+
+  it('같은 단계면 정예가 보급보다 강하다', () => {
+    const party = refPartyAt(95);
+    const power = (id: string) => setPowerRatio(party, [bonusOf(makeGear(id as GearDefId, 1))]);
+    for (let t = 1; t <= TIER_COUNT; t++) {
+      for (const slot of GEAR_SLOTS) {
+        const s = ladderSet(t, 'supply').find((d) => d.slot === slot)!;
+        const e = ladderSet(t, 'elite').find((d) => d.slot === slot)!;
+        expect(power(e.id), `${t}단계 ${slot}`).toBeGreaterThan(power(s.id));
+      }
+    }
+  });
+
+  it('보급형 가격은 단계가 오를수록 비싸다', () => {
+    for (const slot of GEAR_SLOTS) {
+      for (let t = 2; t <= TIER_COUNT; t++) {
+        const prev = ladderSet(t - 1, 'supply').find((d) => d.slot === slot)!;
+        const cur = ladderSet(t, 'supply').find((d) => d.slot === slot)!;
+        expect(cur.price!, `${t}단계 ${slot}`).toBeGreaterThan(prev.price!);
+      }
+    }
   });
 });
