@@ -31,7 +31,7 @@ import { partyLimitAt, squadsOpen, SQUAD_COUNT } from '../game/data/party';
 import { livingHeroes } from '../game/roster';
 import { revisitMultiplier } from '../game/data/revisit';
 import {
-  armoryAtkMult, idleExpWithAssign, restHealRate, upgradeCost, ASSIGN_SLOTS, ASSIGNABLE,
+  armoryAtkMult, restHealRate, upgradeCost, ASSIGN_SLOTS, ASSIGNABLE,
   REST_COST_PER_HP, REST_COST_MIN, type FacilityKind, type AssignableFacility,
 } from '../game/data/facilities';
 import { GEAR_DEFS, POTION_TUNING } from '../game/data/gear';
@@ -52,8 +52,9 @@ import {
 } from '../game/progression';
 import { displayName, displayTitle } from '../game/identity';
 import { mergeMaterials, rollFloorLoot } from '../game/loot';
+import { settleOffTower } from '../game/offTower';
 import {
-  adventureRng, dispatchedHeroIds, isComplete, resolveAdventure,
+  dispatchedHeroIds,
   type AdventureOutcome,
 } from '../game/adventure';
 import { ADVENTURE_BY_ID, type AdventureId, type Dispatch } from '../game/data/adventures';
@@ -1052,54 +1053,23 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       );
 
       /**
-       * 이번 층에 **실제로 일한** 배치 인원.
-       *
-       * ⚠️ 출전한 배치자는 빠진다 — "전투력과 생산의 제로섬"(설계 §5-2).
-       * 배치를 해제하는 것이 아니라 이번 층만 안 센다.
+       * 훈련소 유휴 exp·모험 정산 — **`settleOffTower` 하나**가 맡는다.
+       * 결과 화면이 같은 함수로 미리 보여주므로 규칙을 여기에 다시 적지 말 것.
+       * 출전한 배치자 제외·완료 판정(battleCount + 1)·승패 무관 정산·파견자/배치자의
+       * 유휴 exp 제외와 그 이유는 전부 `game/offTower.ts`에 있다.
        */
-      const workingTrainees = get().assignments.training
-        .filter((id) => !fought.has(id) && !casualties.has(id)).length;
-
-      const idleExp = cleared
-        ? idleExpWithAssign(get().facilities.training, workingTrainees)
-        : 0;
-
-      /**
-       * 모험 정산.
-       *
-       * ⚠️ **`battleCount`가 아직 증가하기 전이라 여기서는 이번 전투를 세지 않는다.**
-       * 아래 set()에서 `battleCount + 1`이 되므로, 완료 판정도 그 값을 써야
-       * "5전투짜리 모험이 5번째 전투 직후에 끝난다"가 성립한다.
-       *
-       * 정산 대상은 **로스터에 남아 있는 인원만**이다. 명단에 있지만 사라진 영웅은
-       * 걸러진다 — 파견 상태를 영웅 플래그가 아니라 레코드로 둔 이유가 이것이다.
-       *
-       * 승패와 무관하게 정산한다. 모험은 탑 밖의 일이라 이번 층을 졌다고
-       * 돌아오던 사람이 안 돌아올 이유가 없다.
-       */
-      const nextBattleCount = get().battleCount + 1;
-      const settled = get().dispatches.filter((d) => isComplete(d, nextBattleCount));
-      const stillAway = get().dispatches.filter((d) => !isComplete(d, nextBattleCount));
-      const outcomes = settled.map((d) => resolveAdventure({
-        dispatch: d,
-        heroes: get().roster.filter((h) => !h.isDead && d.heroIds.includes(h.instId)),
-        rng: adventureRng(get().seed, d.advId, d.startedAtBattle),
-      }));
-
-      /** 정산으로 exp를 받을 영웅 → 받을 양 */
-      const advExp = new Map<string, number>();
-      /** 정산으로 다칠 영웅 → 잃을 최대 HP 비율 */
-      const advInjury = new Map<string, number>();
-      for (const o of outcomes) {
-        for (const id of o.heroIds) {
-          if (o.expEach > 0) advExp.set(id, (advExp.get(id) ?? 0) + o.expEach);
-          if (o.injuryRatio > 0) advInjury.set(id, Math.max(advInjury.get(id) ?? 0, o.injuryRatio));
-        }
-      }
-      const advMaterials = outcomes.reduce<MaterialBag>((bag, o) => mergeMaterials(bag, o.materials), {});
-      const advStones = outcomes.reduce((n, o) => n + o.awakeningStones, 0);
-      /** 이번 전투 시점에 아직 나가 있던 인원 — 훈련소 유휴 exp에서 제외한다 */
-      const awayNow = dispatchedHeroIds(get().dispatches);
+      const off = settleOffTower({
+        roster: get().roster,
+        dispatches: get().dispatches,
+        assignedIds: assignedNow,
+        trainingAssigned: get().assignments.training,
+        trainingLevel: get().facilities.training,
+        battleCount: get().battleCount,
+        seed: get().seed,
+        fought,
+        casualties,
+        cleared,
+      });
 
       /**
        * 과제 판정.
@@ -1169,43 +1139,13 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
               const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
               next = { ...next, currentHp: Math.min(max, hp + Math.round(max * healRate)) };
             }
-          } else if (
-            idleExp > 0 && !h.isDead && !awayNow.has(h.instId) && !assignedNow.has(h.instId)
-          ) {
+          } else {
             /**
-             * 훈련소 — 전투에 나가지 않은 영웅만 받는다.
-             * 참전 영웅과 경쟁시키면 "안 내보내는 게 이득"이 되어 퍼머데스의 긴장이 사라진다.
-             *
-             * ⚠️ **파견 중인 영웅은 제외한다(`awayNow`).** 유휴 exp와 모험 exp를 둘 다 받으면
-             * 파견이 순이득이 되어 같은 함정에 정면으로 걸린다 — 대기실에 두는 것보다
-             * 항상 나으므로 "일단 다 내보내기"가 유일한 최적해가 된다.
-             *
-             * ⚠️ **배치된 영웅도 같은 이유로 제외한다(`assignedNow`).** 배치는 exp 대신
-             * 시설 산출을 주는 거래인데, 둘 다 받으면 거래가 아니라 공짜가 된다.
-             * 이 제외 덕분에 "배치 이득 < 출전 성장"이 튜닝이 아니라 **구조로** 성립한다
-             * (배치자의 exp가 0이므로 부등식이 자동으로 참이다).
+             * 탑 밖 — 훈련소 유휴 exp와 모험 귀환(exp·부상).
+             * 파견자·배치자를 유휴 exp에서 빼는 이유("배치 이득 < 출전 성장"을 구조로 지킨다),
+             * HP 하한 1(모험에서는 죽지 않는다)은 `game/offTower.ts`에 있다.
              */
-            next = gainExp(next, idleExp, gameData.starScaling).hero;
-          }
-
-          /**
-           * 모험 정산 — 참전·유휴와 **별개로** 얹는다.
-           *
-           * 파견 인원은 이번 전투에 나가지 않았으므로 위 `fought` 분기에 안 걸리고,
-           * `awayNow`에 걸려 유휴 exp도 못 받았다. 여기서만 받는다.
-           */
-          if (!h.isDead) {
-            const gained = advExp.get(h.instId);
-            if (gained) next = gainExp(next, gained, gameData.starScaling).hero;
-
-            const ratio = advInjury.get(h.instId);
-            if (ratio) {
-              const max = statsOfInstance(next, gameData.heroes[next.defId], gameData.starScaling).hp;
-              // ⚠️ currentHp === 0은 "만피"라는 뜻이지 빈사가 아니다(freshHero 주석)
-              const cur = next.currentHp === 0 ? max : next.currentHp;
-              // 최소 1은 남긴다 — 모험에서는 죽지 않는다(사용자 결정)
-              next = { ...next, currentHp: Math.max(1, cur - Math.round(max * ratio)) };
-            }
+            next = off.after.get(h.instId) ?? next;
           }
 
           const gainedDeeds = newDeeds.get(h.instId);
@@ -1241,9 +1181,9 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 들고 나간 수를 그냥 빼면 안 쓰고 이긴 전투에서도 사라진다.
          */
         potions: Math.max(0, s.potions - potionsUsed) + questPotions,
-        materials: mergeMaterials(mergeMaterials(s.materials, droppedMaterials), advMaterials),
+        materials: mergeMaterials(mergeMaterials(s.materials, droppedMaterials), off.materials),
         // 완료된 파견은 명단에서 빠진다 — 남겨두면 영영 나가 있는 유령이 된다
-        dispatches: stillAway,
+        dispatches: off.stillAway,
         /**
          * 사망자는 배치에서 빠진다.
          *
@@ -1251,7 +1191,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 플레이어가 해제할 방법이 없다. 파견이 유령 레코드를 버리는 것과 같은 이유다.
          */
         assignments: pruneAssignments(s.assignments, (id) => !casualties.has(id)),
-        adventureOutcomes: outcomes,
+        adventureOutcomes: off.outcomes,
         carriedPotions: 0,
         /**
          * 준비는 그 층에서만 유효하다 — **승패와 무관하게** 비운다(사용자 결정).
@@ -1277,7 +1217,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
            * 여기 말고 다른 경로를 열면 ★6의 희소성이 사라진다
            * (`data/adventures.ts`의 `awakeningChance` 주석 참조).
            */
-          awakeningStones: s.wallet.awakeningStones + advStones,
+          awakeningStones: s.wallet.awakeningStones + off.awakeningStones,
         },
         /**
          * ⚠️ 클리어했을 때만 올린다. 져도 올리면 "실패로 보상을 깎는"
