@@ -16,7 +16,38 @@ import { restHealRate, FACILITY_MAX_LEVEL } from './src/game/data/facilities';
 import { floorRewards } from './src/game/data/floors';
 import { partyLimitAt } from './src/game/data/party';
 import { gainExp } from './src/game/progression';
-import type { HeroDefId, HeroInstId, HeroInstance, Star } from './src/game/types';
+import type {
+  GearInstance, GearInstId, GearSlot, HeroDefId, HeroInstId, HeroInstance, Star,
+} from './src/game/types';
+import { ladderSet, tierOf } from './src/game/data/gear';
+import { makeGear } from './src/game/gear';
+
+/**
+ * --gear supply|elite — 기준 파티가 **층의 단계에 맞는 한 벌**을 입고 오른다(장비 사다리 측정).
+ * 옵션이 없으면 지금과 같다(장비 없음 = 층 난이도 기준선). 기준선을 바꾸지 말 것.
+ */
+const GEAR_ARG = process.argv.includes('--gear')
+  ? (process.argv[process.argv.indexOf('--gear') + 1] as 'supply' | 'elite')
+  : null;
+
+/** 단계별 한 벌 인벤토리 — 영웅마다 같은 장비를 따로 입힌 것으로 친다(인스턴스 id만 다르게) */
+function gearUp(
+  roster: HeroInstance[], floorId: number,
+): { party: HeroInstance[]; inventory?: Map<GearInstId, GearInstance> } {
+  if (!GEAR_ARG) return { party: roster };
+  const set = ladderSet(tierOf(floorId), GEAR_ARG);
+  const inventory = new Map<GearInstId, GearInstance>();
+  const party = roster.map((h, i) => {
+    const gear: Partial<Record<GearSlot, GearInstId>> = {};
+    set.forEach((d, k) => {
+      const g = { ...makeGear(d.id, i * 3 + k + 1), equippedBy: h.instId };
+      inventory.set(g.instId, g);
+      gear[d.slot] = g.instId;
+    });
+    return { ...h, gear };
+  });
+  return { party, inventory };
+}
 
 const hero = (
   defId: HeroDefId, star: Star, level: number, n: number,
@@ -150,9 +181,11 @@ function climb(
     });
     const sortie = sorted.slice(0, partyLimitAt(FLOORS[i].id));
 
+    const geared = gearUp(sortie, FLOORS[i].id);
     const r = runEncounter({
-      party: sortie, floor: FLOORS[i], data: gameData,
+      party: geared.party, floor: FLOORS[i], data: gameData,
       rng: createRng(seed * 1000 + i),
+      inventory: geared.inventory,
     });
     if (r.outcome !== 'victory') return n;
 
@@ -179,6 +212,7 @@ const MAX = 6; // 저층 파티이므로 6층까지
  * 1. 실제 숙소 레벨별 등반 — 시설 투자가 등반에 얼마나 기여하는가.
  *    수치는 data/facilities.ts에서 읽는다. 여기서 다시 적으면 튜닝이 갈라진다.
  */
+if (GEAR_ARG) console.log(`\n  ⚙ 장비: 층 단계에 맞는 ${GEAR_ARG === 'supply' ? '보급형' : '정예'} 한 벌을 입고 오른다`);
 console.log('\n  숙소 레벨별 연속 등반 (저층 파티, 300회)\n');
 console.log('  숙소      | 회복률 | 평균 도달 | 6층 완주');
 for (let lv = 0; lv <= FACILITY_MAX_LEVEL; lv++) {
