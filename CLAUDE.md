@@ -155,6 +155,11 @@
   `src/stores/offTower.test.ts`가 둘이 같음을 잠근다. 모험 기간은 계속 **전투 수**다(사용자 결정, 2026-10-02 — 실제 시계 금지).
   원정 진행 문장(`legs`)은 **결과를 암시하지 않는다** — 파견 순간 결과가 정해지므로 흘리면 "즉시 복귀"로 부상을 피한다(금지어 테스트).
 - SVG 글자 테두리에 **`paint-order`를 쓰지 말 것** — 폰 브라우저가 무시해 테두리가 글자를 덮었다. 테두리 층과 글자 층을 따로 그린다.
+- **장비 사다리(STEP 66).** 10층마다 1단계(`tierOf`), 단계마다 **보급형**(상점·일반 드롭)·**정예**(보스 확정·모험 확률). 유물은 제작·최종 과제만.
+  장비는 **여유분**이다 — 층 난이도·`sim`·`climb-check` 기본값은 장비 없음. 2단계 이상 수치는 `data/gearLadder.ts`(**생성 파일** —
+  `npx tsx scripts/gear-ladder.mts --write`)에만 있고 손으로 고치지 않는다. 비율(보급 12~18%·정예 21~29%)·단계 단조 증가를 테스트가 잠근다.
+  **장비 판정의 난수 소비를 바꾸지 말 것**(재료 지문 `loot.test.ts`), **모험 정예 판정은 각성석 뒤**(모험 지문 `adventure.test.ts`) — 깨지면 지문을 갱신하지 말 것.
+  장비 id는 세이브에 남으므로 추가만. 정예는 상점에서 팔지 않고 `buyGear`가 다음 단계를 `locked`로 막는다.
 - **준비는 층당 1개, 저장하지 않는다.** 저장하면 새로고침으로 되살아나거나 다음 층에 샌다.
   사라지는 지점은 `finish()`(승패 무관) · `selectFloor()` · `hydrate()` **셋 다**이다.
 
@@ -164,7 +169,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1168개 통과)
+npm test           # Vitest 1회 실행 (현재 1194개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -178,6 +183,8 @@ npx tsx scripts/floor-tune.mts          # 생성 층(21~100) 승률 점검
 npx tsx scripts/floor-tune.mts --write  # → data/floorVariants.ts 갱신
 npx tsx scripts/stratagem-check.mts     # 책략 카드별 승률·사망·발동률·성공률 (STEP 58)
 npx tsx scripts/orders-check.mts        # 방침 카드(공격·보호·퇴각) — 퇴각만 쓰인다
+npx tsx scripts/gear-ladder.mts [--write]  # 장비 사다리 수치 풀이 → data/gearLadder.ts (STEP 66)
+npx tsx climb-check.mts --gear supply|elite  # 단계에 맞는 한 벌을 입고 연속 등반
 ```
 
 ⚠️ **`sim`·`climb-check`·`floor-tune`은 책략·지형을 쓰지 않는다.** 층 난이도는 "책략 없음" 기준이다.
@@ -279,6 +286,7 @@ src/
 │  ├─ chronicle.ts    # 책략 장면 문장·영웅 연대기 — 비트·결과·연대기가 같은 함수를 쓴다
 │  ├─ floormap.ts     # 층 맵(경로 2~3·노드 6~10·접점 지형). 층 번호에서 결정적, 저장 안 함
 │  ├─ report.ts       # 정찰 보고(기질→성향→적 수·전력·접점·위기 단계 왜곡). 전투 입력 아님
+│  ├─ gearLadder.ts   # 장비 사다리 비율(setPowerRatio) — 한 벌을 입힌 파티 전투력 증가율
 │  ├─ offTower.ts     # 탑 밖 정산(훈련소 유휴 exp·모험 귀환·원정 진행) + "▲ 성장". finish()와 결과 화면이 같이 쓴다
 │  ├─ beats.ts        # 이벤트 비트 (확인 창 트리거)
 │  ├─ sim.ts          # 밸런싱용 CLI
@@ -292,7 +300,9 @@ src/
 │     ├─ floorgen.ts  # 층 생성기(21~) + 적 깊이 배수. 결정적이어야 한다
 │     ├─ potential.ts # 잠재치/발굴 튜닝 상수 단일 출처
 │     ├─ facilities.ts # 시설 4종 튜닝 (회복률·공격력·유휴 exp·비용)
-│     ├─ gear.ts      # 장비 도감 12종 + 튜닝 (회수율·강화·드롭)
+│     ├─ gear.ts      # 장비 도감(기존 12종 + 사다리) + 튜닝 + 단계(tierOf·ladderSet·shopStock). 2단계 이상 수치는 gearLadder.ts
+│     ├─ gearLadder.ts # 장비 사다리 수치 — **생성 파일**(scripts/gear-ladder.mts --write). 손으로 고치지 말 것
+│     ├─ refParty.ts  # 단계별 기준 파티 — sim과 같아야 한다(CLI라 복제)
 │     ├─ quests.ts    # 과제 18종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
 │     ├─ party.ts     # 파티 정원 규칙 — 층 구간별 정원, 2군 개방 조건. 상수가 아니라 함수다
 │     ├─ revisit.ts   # 기존 층 재도전 — 재도전 횟수별 보상 체감
