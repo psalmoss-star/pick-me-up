@@ -754,6 +754,8 @@ export default function App() {
             /* 표시와 지급이 같은 배수를 쓰도록 — 재도전에서 어긋나고 있었다 */
             rewardMult={revisitMult()}
             levelUps={previewLevelUps(offTower)}
+            offTower={offTower}
+            trainingLevel={facilities.training}
             materials={previewMaterials()}
             onFinish={() => {
               /*

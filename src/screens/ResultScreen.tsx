@@ -25,6 +25,8 @@ import type { FloorSpec } from '../game/data/floors';
 import type { EncounterResult } from '../game/encounter';
 import type { QuestGrant } from '../game/quest';
 import type { HeroInstance } from '../game/types';
+import type { OffTowerResult } from '../game/offTower';
+import { OffTowerPanel } from './result/OffTowerPanel';
 
 /** 과제 보상 한 줄. 지급된 것만 나열한다. */
 function rewardText(g: QuestGrant): string {
@@ -67,8 +69,12 @@ export interface ResultScreenProps {
    * (재도전에서 실제로 어긋나고 있었다).
    */
   rewardMult?: number;
-  /** 이번 전투로 레벨이 오른 개체들. 훈련소 유휴 exp로 오른 것도 포함한다 */
+  /** 이번 전투로 레벨이 오른 개체들 — 참전·훈련소·모험으로 오른 것 전부 */
   levelUps?: LevelUp[];
+  /** 탑 밖 정산 미리보기 — `settleOffTower`. 없으면 패널을 그리지 않는다 */
+  offTower?: OffTowerResult | null;
+  /** 훈련소 레벨 — 층 미돌파 시 "훈련 성과 없음" 줄을 띄울지 */
+  trainingLevel?: number;
   /** 이번 돌파로 얻은 제작 재료. 빈 주머니면 아무것도 그리지 않는다 */
   materials?: MaterialBag;
   /**
@@ -86,7 +92,8 @@ export interface ResultScreenProps {
  */
 export function ResultScreen({
   result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
-  rewardMult = 1, levelUps = [], materials = {}, report = null, route = 0, onFinish,
+  rewardMult = 1, levelUps = [], materials = {}, report = null, route = 0,
+  offTower = null, trainingLevel = 0, onFinish,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
   const find = (id: string) => roster.find((h) => h.instId === id);
@@ -410,6 +417,9 @@ export function ResultScreen({
           </>
         )}
       </SystemPanel>
+
+      {/* 탑 밖 — 획득·손실 다음, 버튼 위. 탑에 간 사이 남은 이들에게 있었던 일 */}
+      {offTower && <OffTowerPanel off={offTower} cleared={win} trainingLevel={trainingLevel} />}
 
       <div style={{ textAlign: 'center', marginTop: 30 }}>
         <Button tone={win ? 'rare' : 'normal'} onClick={onFinish}>
