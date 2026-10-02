@@ -56,16 +56,17 @@ export interface OffTowerInput {
   cleared: boolean;
 }
 
-export interface TraineeGain {
-  instId: string;
-  exp: number;                // 이번에 받은 유휴 exp
+export interface HeroGain {
+  instId: HeroInstId;
+  exp: number;                // 이번에 받은 exp(훈련소 유휴 또는 모험 1인당)
   before: HeroInstance;       // 표시용 — 레벨·exp 바의 시작점
-  after: HeroInstance;        // gainExp 결과
+  after: HeroInstance;        // 정산 뒤(exp·부상 반영)
 }
 
 export interface AdventureReturn {
   dispatch: Dispatch;
   outcome: AdventureOutcome;
+  heroes: HeroGain[];         // 로스터에 남아 있던 인원
 }
 
 export interface AdventureProgress {
@@ -76,14 +77,15 @@ export interface AdventureProgress {
 
 export interface OffTowerResult {
   idleExp: number;
-  trainees: TraineeGain[];
+  trainees: HeroGain[];
   returned: AdventureReturn[];
   away: AdventureProgress[];  // 이번 전투 뒤에도 나가 있는 원정
   stillAway: Dispatch[];
-  advExp: Map<string, number>;
-  advInjury: Map<string, number>;
-  advMaterials: MaterialBag;
-  advStones: number;
+  outcomes: AdventureOutcome[];
+  materials: MaterialBag;
+  awakeningStones: number;
+  /** 정산 뒤 영웅(훈련생·귀환자만). finish()가 그대로 끼운다 */
+  after: Map<HeroInstId, HeroInstance>;
 }
 
 export function settleOffTower(input: OffTowerInput): OffTowerResult;
@@ -108,7 +110,8 @@ export function settleOffTower(input: OffTowerInput): OffTowerResult;
 
 ## 3. 원정 진행 문장 — `data/adventures.ts`의 `legs`
 
-- 모험마다 `legs: string[]`, 길이 = `duration`. `legs[done - 1]`이 "지금까지 온 곳"이다(출발 직후 `done = 0`은 "출발했다" 공통 문장).
+- 모험마다 `legs: string[]`, 길이 = `duration`. `legs[done]`이 "지금 있는 곳"이다(`done = 0` 출발 직후 ~ `done = duration − 1` 돌아오는 길).
+  `done = duration`이면 이미 귀환해 결과로 바뀌므로 진행 문장이 필요 없다.
   - 폐광(2): 입구 → 갱도 깊은 곳 / 상단(3) / 균열(5) — 문장은 구현 때 쓰고 사람이 검수한다.
 - ⚠️ **결과를 암시하지 않는다.** 파견 중인 영웅은 exp를 안 받아 레벨이 고정되므로, 결과는 **파견하는 순간 사실상 정해진다**
   (`adventureRng(seed, advId, startedAtBattle)` + 고정 레벨). 문장이 실패를 흘리면 "즉시 복귀"로 실패할 원정만 빼내
