@@ -168,3 +168,36 @@ export function settleOffTower(input: OffTowerInput): OffTowerResult {
     after,
   };
 }
+
+/** 이번 전투 뒤 레벨이 오른 개체. 표시 전용 — 지급은 `finish()`가 한다 */
+export interface Growth {
+  instId: HeroInstId;
+  from: number;
+  to: number;
+}
+
+/**
+ * 결과 화면 "▲ 성장" 목록 — 참전 exp + 탑 밖(훈련소·모험).
+ *
+ * ⚠️ 탑 밖 몫은 `settleOffTower`의 `after`를 그대로 읽는다. 예전 화면 사본은
+ * 파견자를 빼지 않았고 모험 exp를 몰라서 "오른다던 영웅이 안 오르고, 오른 영웅이 안 보였다".
+ * `battleExp`는 참전 생존자 1인당(승리가 아니면 0) — `finish()`의 `scaledExp`와 같은 값.
+ */
+export function growthOf(args: {
+  roster: readonly HeroInstance[];
+  fought: ReadonlySet<string>;
+  casualties: ReadonlySet<string>;
+  battleExp: number;
+  off: OffTowerResult;
+}): Growth[] {
+  const { roster, fought, casualties, battleExp, off } = args;
+  const out: Growth[] = [];
+  for (const h of roster) {
+    if (h.isDead || casualties.has(h.instId)) continue;
+    const after = fought.has(h.instId)
+      ? (battleExp > 0 ? gainExp(h, battleExp, gameData.starScaling).hero : h)
+      : (off.after.get(h.instId) ?? h);
+    if (after.level > h.level) out.push({ instId: h.instId, from: h.level, to: after.level });
+  }
+  return out;
+}

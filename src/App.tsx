@@ -28,14 +28,15 @@ import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt, gameData } from './game/data';
 import { FLOORS, floorRewards, isFinalFloor } from './game/data/floors';
-import { idleExpWithAssign, ASSIGNABLE } from './game/data/facilities';
+import { ASSIGNABLE } from './game/data/facilities';
 import { prepForMission } from './game/data/preps';
 import { revisitMultiplier } from './game/data/revisit';
-import { expToNext, gainExp } from './game/progression';
+import { expToNext } from './game/progression';
 import { rollFloorLoot } from './game/loot';
 import type { MaterialBag } from './game/types';
 import { displayName } from './game/identity';
 import type { LevelUp } from './screens/ResultScreen';
+import { growthOf, settleOffTower, type OffTowerResult } from './game/offTower';
 import { partyLimitAt, squadsOpen } from './game/data/party';
 import { livingHeroes } from './game/roster';
 import {
@@ -369,50 +370,49 @@ export default function App() {
   };
 
   /**
-   * 이번 전투로 **레벨이 오른 영웅**을 미리 계산한다.
+   * 탑 밖 정산 미리보기 — `finish()`와 **같은 함수·같은 입력**(`game/offTower.ts`).
+   * 결과 화면은 `finish()`보다 먼저 뜨므로 스토어 결과를 읽을 수 없다(§5-17).
+   * 입력: 전투 직전 로스터(snapshot)·지금의 파견·배치 — finish() 전까지 바뀌지 않는다.
    *
-   * 과제 미리보기(`previewQuests`)와 같은 사정이다 — 결과 화면은 `finish()`보다
-   * 먼저 뜨므로 스토어에서 읽을 수 없다. 그래서 `finish()`와 **같은 식**을
-   * 순수 계산으로 다시 돌려 표시만 만든다. 상태를 안 건드리므로 이중 지급이 없다.
-   *
-   * ⚠️ `finish()`의 규칙을 그대로 따라야 한다(`runStore.ts:735-755`):
-   *   - 참전 & 생존자 → 층 보상 exp(재도전 배수 적용)
-   *   - 미출전 & 생존자 → 훈련소 유휴 exp
-   *   - 둘은 **배타적**이다 (`else if`)
-   * 규칙이 갈리면 "화면엔 올랐다는데 실제로는 안 오른" 상태가 된다.
+   * 예전에는 여기서 정산식을 따로 다시 적었고, 그 사본이 파견자를 빼지 않고 모험 exp를
+   * 몰라서 "오른다던 영웅이 안 오르고, 오른 영웅이 안 보였다"(STEP 65).
    */
-  const previewLevelUps = (): LevelUp[] => {
-    if (!result || result.outcome !== 'victory') return [];
-
-    // ⚠️ `finish()`와 **같은 판정**이어야 한다 (`runStore.ts:594-596`) — side 기준이다
-    const fought = new Set<string>(
-      result.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId),
-    );
-    const casualties = new Set<string>(result.casualties);
-    const gained = Math.round(floorRewards(floor, result.turnsElapsed).exp * revisitMult());
-    /*
-      ⚠️ 배치 인원이 반영된 유휴 exp여야 한다 — `finish()`가 그 값을 쓴다.
-      출전한 배치자는 그 층 산출에서 빠지는 것까지 같은 규칙으로 센다.
-    */
-    const workingTrainees = assignments.training
-      .filter((id) => !fought.has(id) && !casualties.has(id)).length;
-    const idle = idleExpWithAssign(facilities.training, workingTrainees);
-
-    const out: LevelUp[] = [];
-    for (const h of snapshot) {
-      if (h.isDead || casualties.has(h.instId)) continue;
-      // 배치자는 유휴 exp를 받지 않는다 — `finish()`의 `assignedNow` 제외와 같다
-      const exp = fought.has(h.instId)
-        ? gained
-        : (assignedHeroIds.has(h.instId) ? 0 : idle);
-      if (exp <= 0) continue;
-      const r = gainExp(h, exp, gameData.starScaling);
-      if (r.levelsGained > 0) {
-        out.push({ instId: h.instId, name: displayName(h, gameData.heroes), from: h.level, to: r.hero.level });
-      }
-    }
-    return out;
+  const previewOffTower = (): OffTowerResult | null => {
+    if (!result) return null;
+    return settleOffTower({
+      roster: snapshot,
+      dispatches,
+      assignedIds: assignedHeroIds,
+      trainingAssigned: assignments.training,
+      trainingLevel: facilities.training,
+      battleCount,
+      seed,
+      // ⚠️ `finish()`와 같은 판정 — side 기준이다
+      fought: new Set(result.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId)),
+      casualties: new Set(result.casualties),
+      cleared: result.outcome === 'victory',
+    });
   };
+
+  /** "▲ 성장" — 참전 exp(재도전 배수 적용) + 탑 밖. 승리가 아니어도 모험 귀환으로 오를 수 있다 */
+  const previewLevelUps = (off: OffTowerResult | null): LevelUp[] => {
+    if (!result || !off) return [];
+    const battleExp = result.outcome === 'victory'
+      ? Math.round(floorRewards(floor, result.turnsElapsed).exp * revisitMult())
+      : 0;
+    return growthOf({
+      roster: snapshot,
+      fought: new Set(result.roster.filter((u) => u.side === 'ally').map((u) => u.sourceId)),
+      casualties: new Set(result.casualties),
+      battleExp,
+      off,
+    }).map((g) => ({
+      ...g,
+      name: displayName(snapshot.find((h) => h.instId === g.instId)!, gameData.heroes),
+    }));
+  };
+
+  const offTower = screen === 'result' ? previewOffTower() : null;
 
   return (
     <div
@@ -753,7 +753,7 @@ export default function App() {
             questGrants={previewQuests()}
             /* 표시와 지급이 같은 배수를 쓰도록 — 재도전에서 어긋나고 있었다 */
             rewardMult={revisitMult()}
-            levelUps={previewLevelUps()}
+            levelUps={previewLevelUps(offTower)}
             materials={previewMaterials()}
             onFinish={() => {
               /*

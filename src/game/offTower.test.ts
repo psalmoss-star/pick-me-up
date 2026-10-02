@@ -8,7 +8,7 @@
  *   3. 진행 중 원정의 `done`이 `battleCount + 1 − startedAtBattle`
  */
 import { describe, it, expect } from 'vitest';
-import { settleOffTower, type OffTowerInput } from './offTower';
+import { growthOf, settleOffTower, type OffTowerInput } from './offTower';
 import { ADVENTURE_BY_ID, type AdventureId, type Dispatch } from './data/adventures';
 import { idleExpWithAssign } from './data/facilities';
 import { klassFor } from './stats';
@@ -145,5 +145,36 @@ describe('settleOffTower — 모험', () => {
       return;
     }
     throw new Error('성공 시드를 못 찾았다');
+  });
+});
+
+describe('growthOf — 결과 화면 "▲ 성장"', () => {
+  it('파견 중인 영웅은 훈련으로 오른 것처럼 나오지 않는다', () => {
+    const d: Dispatch = { advId: RIFT, heroIds: [id(2)], startedAtBattle: 10 };
+    const inp = input({ dispatches: [d], trainingLevel: 3, roster: [hero(0), hero(1, 1), hero(2, 1)] });
+    const off = settleOffTower(inp);
+    const g = growthOf({ roster: inp.roster, fought: inp.fought, casualties: inp.casualties, battleExp: 0, off });
+    expect(g.map((x) => x.instId)).toContain(id(1));
+    expect(g.map((x) => x.instId)).not.toContain(id(2));
+  });
+
+  it('모험 exp로 오른 레벨이 나온다 — 패배한 전투에서도', () => {
+    for (let seed = 1; seed < 60; seed++) {
+      const d: Dispatch = { advId: RIFT, heroIds: [id(2)], startedAtBattle: 6 };
+      const inp = input({ seed, cleared: false, dispatches: [d], roster: [hero(0), hero(2, 1)] });
+      const off = settleOffTower(inp);
+      if (!off.outcomes[0].success) continue;
+      const g = growthOf({ roster: inp.roster, fought: inp.fought, casualties: inp.casualties, battleExp: 0, off });
+      expect(g).toEqual([{ instId: id(2), from: 1, to: off.after.get(id(2))!.level }]);
+      return;
+    }
+    throw new Error('성공 시드를 못 찾았다');
+  });
+
+  it('참전 생존자는 battleExp로, 사망자는 나오지 않는다', () => {
+    const inp = input({ roster: [hero(0, 1), hero(1, 1)], fought: new Set([id(0), id(1)]), casualties: new Set([id(1)]) });
+    const off = settleOffTower(inp);
+    const g = growthOf({ roster: inp.roster, fought: inp.fought, casualties: inp.casualties, battleExp: 500, off });
+    expect(g.map((x) => x.instId)).toEqual([id(0)]);
   });
 });
