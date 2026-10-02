@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  adventureRng, battlesRemaining, dispatchedHeroIds, isComplete,
+  adventureRng, battlesRemaining, dispatchedHeroIds, isComplete, legLine,
   resolveAdventure, successChance,
 } from './adventure';
 import {
@@ -223,5 +223,34 @@ describe('모험 — 파견 명단', () => {
     const ids = dispatchedHeroIds([dispatchOf(MINE, 0, 2), dispatchOf(RIFT, 1, 3)]);
     expect(ids.size).toBe(3); // h#0..h#2 — 겹치는 것은 한 번만
     expect(ids.has('h#2' as HeroInstId)).toBe(true);
+  });
+});
+
+describe('원정 진행 문장', () => {
+  it('모든 모험의 구간 문장 수가 소요 전투 수와 같다', () => {
+    for (const def of ADVENTURE_DEFS) {
+      expect(def.legs.length, def.name).toBe(def.duration);
+    }
+  });
+
+  /**
+   * ⚠️ 결과는 파견 순간 사실상 정해진다(파견자는 레벨이 안 오른다).
+   * 진행 문장이 결과를 흘리면 "즉시 복귀"로 실패할 원정만 빼내 부상을 피할 수 있다.
+   */
+  it('진행 문장은 결과를 암시하지 않는다', () => {
+    const banned = ['성공', '실패', '다쳤', '다친', '부상', '피를', '쓰러', '얻었', '손에 넣', '빈손', '품고', '무사'];
+    for (const def of ADVENTURE_DEFS) {
+      for (const line of def.legs) {
+        for (const w of banned) expect(line, `${def.name}: ${line}`).not.toContain(w);
+      }
+    }
+  });
+
+  it('legLine은 범위를 벗어나도 마지막·첫 구간으로 접는다', () => {
+    const def = ADVENTURE_BY_ID[MINE];
+    expect(legLine(def, 0)).toBe(def.legs[0]);
+    expect(legLine(def, def.duration - 1)).toBe(def.legs[def.duration - 1]);
+    expect(legLine(def, 99)).toBe(def.legs[def.duration - 1]);
+    expect(legLine(def, -1)).toBe(def.legs[0]);
   });
 });

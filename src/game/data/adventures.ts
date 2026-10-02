@@ -83,6 +83,15 @@ export interface AdventureDef {
    * 작게 잡아 **한 층 쉬면 복구되는** 수준으로 둔다.
    */
   injury: number;
+  /**
+   * 원정 진행 문장 — **길이 = `duration`.** `legs[done]`이 "지금 있는 곳"이다
+   * (0 = 출발 직후, duration − 1 = 돌아오는 길). 결과 화면·모험 관문에 나간다.
+   *
+   * ⚠️ **결과를 암시하지 않는다.** 파견자는 exp를 안 받아 레벨이 고정되므로 결과는
+   * 파견 순간 사실상 정해진다. 문장이 실패를 흘리면 "즉시 복귀"로 실패할 원정만 빼내
+   * 부상을 피하는 길이 생긴다. 위치·풍경만 쓴다(`adventure.test.ts`가 금지어로 잠근다).
+   */
+  legs: readonly string[];
   reward: AdventureReward;
 }
 
@@ -111,6 +120,10 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
     unlockFloor: 1,
     baseSuccess: 0.75,
     injury: 0.2,
+    legs: [
+      '폐광 입구의 버팀목 사이로 내려갔다.',
+      '무너진 갱도를 돌아 막장 쪽으로 가고 있다.',
+    ],
     reward: {
       materials: mat([[MATERIAL.ore, 4]]),
       awakeningChance: 0,
@@ -126,6 +139,11 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
     unlockFloor: 5,
     baseSuccess: 0.65,
     injury: 0.3,
+    legs: [
+      '행상의 수레와 함께 첫 고개를 넘고 있다.',
+      '탑 그늘의 장터 사이를 돌고 있다.',
+      '마지막 장터를 떠나 돌아오는 길이다.',
+    ],
     reward: {
       materials: mat([[MATERIAL.ore, 3], [MATERIAL.hide, 3]]),
       awakeningChance: 0,
@@ -141,6 +159,13 @@ export const ADVENTURE_DEFS: readonly AdventureDef[] = [
     unlockFloor: 10,
     baseSuccess: 0.5,
     injury: 0.4,
+    legs: [
+      '균열이 보이는 언덕으로 향했다.',
+      '빛이 새는 틈의 가장자리에 닿았다.',
+      '균열 안쪽, 소리가 사라지는 곳을 지나고 있다.',
+      '가장 깊은 곳을 살피고 있다.',
+      '균열을 빠져나와 돌아오는 길이다.',
+    ],
     reward: {
       materials: mat([[MATERIAL.hide, 2], [MATERIAL.essence, 2]]),
       /**

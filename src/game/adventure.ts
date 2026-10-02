@@ -71,6 +71,15 @@ export function isComplete(d: Dispatch, battleCount: number): boolean {
   return battlesRemaining(d, battleCount) === 0;
 }
 
+/**
+ * 원정 진행 문장. `done`은 지난 전투 수 — 범위 밖이면 양 끝으로 접는다
+ * (정의가 바뀌어 duration이 줄어도 화면이 빈 줄을 내지 않게).
+ */
+export function legLine(def: AdventureDef, done: number): string {
+  const i = Math.min(def.legs.length - 1, Math.max(0, done));
+  return def.legs[i] ?? '';
+}
+
 export interface AdventureOutcome {
   advId: AdventureId;
   heroIds: HeroInstId[];
