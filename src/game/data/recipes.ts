@@ -35,8 +35,9 @@
  * 정수 요구량을 낮추면 유물이 저층 목표가 되고, 그러면 이후 등반의
  * 장비 드롭이 통째로 무의미해진다 (장비 사다리 뒤로 유물은 일반 드롭에서 나오지 않는다 — 제작·최종 과제가 유일한 길이다).
  */
-import type { GearDefId, MaterialBag } from '../types';
+import type { GearDefId, GearSlot, MaterialBag } from '../types';
 import { MATERIAL } from './materials';
+import { ladderSet } from './gear';
 
 export interface RecipeDef {
   /** 만들어지는 장비. `GEAR_DEFS`에 있어야 한다 (테스트가 잠근다) */
@@ -90,3 +91,46 @@ export const RECIPES: readonly RecipeDef[] = [
 export const RECIPE_BY_GEAR: Record<string, RecipeDef> = Object.fromEntries(
   RECIPES.map((r) => [r.gearDefId, r]),
 );
+
+/**
+ * 재련 비용 — 유물을 한 단계 올리는 데 드는 재료(슬롯별, 단계와 무관하게 같다).
+ *
+ * ── 기준 ──────────────────────────────────────────────
+ * **한 영웅의 유물 한 벌(3종)을 한 단계 올리는 비용 ≈ 등반 한 구간(10층)에서 쌓이는 재료.**
+ * 한 벌은 등반만으로 따라가고, 두 번째 영웅부터는 모험·재도전이 있어야 한다.
+ * 수급 실측은 `scripts/mat-probe.mts`. 수급(드롭 확률·가중치)을 바꿨으면 다시 잴 것.
+ *
+ *   구간(10층)당 수급, 층당 1회 돌파 200시드 평균 — 한 벌 비용(무쇠 1 · 가죽 3 · 정수 4)의 비율
+ *     3단계  무쇠 2.7 · 가죽 5.3 · 정수 5.0   →  37% · 56% · 80%
+ *     6단계  무쇠 2.5 · 가죽 5.0 · 정수 5.3   →  40% · 60% · 75%
+ *    10단계  무쇠 2.6 · 가죽 5.2 · 정수 5.1   →  38% · 58% · 78%
+ *
+ * ⚠️ **구간 비율만 보면 안 된다 — 유물 3종 제작이 먼저 재료를 먹는다**(무쇠 26 · 가죽 26 · 정수 10).
+ * 100층까지 누적 수급과 "제작 3종 + 재련 8회"를 나란히 놓아야 "한 벌은 등반만으로"가 참이 된다:
+ *
+ *            누적 수급   제작   재련 8회   합계
+ *     무쇠     35.1      26      8        34
+ *     가죽     50.2      26     24        50
+ *     정수     44.2      10     32        42
+ *
+ * 처음 값(무쇠 2 · 가죽 4 · 정수 5)은 구간 비율로는 합격이었지만 누적으로는 셋 다 모자랐다
+ * (정수 50/44, 가죽 58/50, 무쇠 42/35 — 등반만으로는 한 벌도 끝까지 못 따라갔다).
+ * 두 번째 영웅부터는 모험·재도전이 있어야 한다.
+ *
+ * 단계가 올라도 재료 수량이 같은 이유: 21층 이후 재료 가중치가 고정이라(`materialWeights`)
+ * 구간당 수급이 같다. 수량을 키우면 깊이 갈수록 재련이 밀린다.
+ */
+export const REFINE_MATERIALS: Record<GearSlot, MaterialBag> = {
+  weapon: bag([[MATERIAL.essence, 2]]),
+  armor: bag([[MATERIAL.essence, 1], [MATERIAL.hide, 2], [MATERIAL.ore, 1]]),
+  trinket: bag([[MATERIAL.essence, 1], [MATERIAL.hide, 1]]),
+};
+
+/**
+ * 재련 비용 — 재료 + 금. 금은 **곁들이**다(제작과 같은 원칙): 올라갈 단계의 보급형 한 개 값.
+ * 재료가 문지기이고 금은 문턱이 아니다.
+ */
+export function refineCostOf(slot: GearSlot, toTier: number): { cost: MaterialBag; gold: number } {
+  const supply = ladderSet(toTier, 'supply').find((d) => d.slot === slot);
+  return { cost: REFINE_MATERIALS[slot], gold: supply?.price ?? 0 };
+}

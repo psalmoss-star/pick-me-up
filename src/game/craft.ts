@@ -13,9 +13,9 @@
  * 그래서 이 모듈은 **RNG를 받지 않는다.** 인자에 RNG가 등장하면 그 순간
  * 위 결정이 뒤집힌 것이다.
  */
-import type { GearDefId, GearInstance, MaterialBag } from './types';
-import { GEAR_DEFS } from './data/gear';
-import { RECIPE_BY_GEAR, type RecipeDef } from './data/recipes';
+import type { GearDef, GearDefId, GearInstance, MaterialBag } from './types';
+import { GEAR_DEFS, relicNext, tierFirstFloor } from './data/gear';
+import { RECIPE_BY_GEAR, refineCostOf, type RecipeDef } from './data/recipes';
 import { makeGear } from './gear';
 
 export type CraftFailReason =
@@ -39,7 +39,7 @@ export function amountOf(bag: MaterialBag, id: keyof MaterialBag): number {
  * 화면이 "무엇이 얼마나 모자란가"를 그대로 쓸 수 있어야 한다 —
  * `ForgeScreen`의 승급 실패 문구가 `missing`을 그렇게 쓰고 있다.
  */
-export function missingFor(recipe: RecipeDef, have: MaterialBag): MaterialBag {
+export function missingFor(recipe: Pick<RecipeDef, 'cost'>, have: MaterialBag): MaterialBag {
   const missing: MaterialBag = {};
   for (const [id, need] of Object.entries(recipe.cost) as [keyof MaterialBag, number][]) {
     const short = need - amountOf(have, id);
@@ -113,5 +113,90 @@ export function craft(args: CraftArgs & { seq: number }): CraftResult {
     gear: makeGear(args.gearDefId, args.seq),
     spentMaterials: r.recipe.cost,
     spentGold: r.recipe.gold,
+  };
+}
+
+// ------------------------------------------------------------
+// 재련 — 유물의 단계를 하나 올린다
+// ------------------------------------------------------------
+
+export type RefineFailReason =
+  | 'not-relic'
+  | 'max-tier'
+  | 'locked'
+  | 'not-enough-materials'
+  | 'not-enough-gold';
+
+export interface RefineArgs {
+  gear: GearInstance;
+  have: MaterialBag;
+  gold: number;
+  /** 도달한 최고 층 — 지금 고른 층이 아니다(제작과 같다) */
+  highestFloor: number;
+}
+
+export type RefineCheck =
+  | { ok: true; next: GearDef; cost: MaterialBag; gold: number }
+  | {
+    ok: false;
+    reason: RefineFailReason;
+    /** 다음 단계가 있으면 실패해도 싣는다 — 화면이 "무엇이 되는가"를 그린다 */
+    next?: GearDef;
+    /** locked일 때 그 단계가 열리는 층 */
+    unlockFloor?: number;
+    missing?: MaterialBag;
+    missingGold?: number;
+  };
+
+export type RefineResult =
+  | { ok: true; gear: GearInstance; spentMaterials: MaterialBag; spentGold: number }
+  | Extract<RefineCheck, { ok: false }>;
+
+/**
+ * 재련할 수 있는가.
+ *
+ * 판정 순서: 유물인가 → 다음 단계가 있는가 → 층이 열렸는가 → 재료 → 금.
+ * 잠금이 재료보다 먼저다 — 못 여는 단계의 부족분을 띄우면 모아도 못 올리는 것을 모으게 된다.
+ *
+ * ⚠️ 제작과 같은 이유로 **RNG를 받지 않는다**(파일 머리 주석).
+ */
+export function canRefine(args: RefineArgs): RefineCheck {
+  const { gear, have, gold, highestFloor } = args;
+
+  const def = GEAR_DEFS[gear.defId];
+  if (!def || def.line !== 'relic') return { ok: false, reason: 'not-relic' };
+
+  const nextId = relicNext(gear.defId);
+  const next = nextId ? GEAR_DEFS[nextId] : undefined;
+  if (!next) return { ok: false, reason: 'max-tier' };
+
+  const unlockFloor = tierFirstFloor(next.tier);
+  if (highestFloor < unlockFloor) return { ok: false, reason: 'locked', next, unlockFloor };
+
+  const price = refineCostOf(next.slot, next.tier);
+  const missing = missingFor(price, have);
+  if (Object.keys(missing).length > 0) {
+    return { ok: false, reason: 'not-enough-materials', next, missing };
+  }
+  if (gold < price.gold) {
+    return { ok: false, reason: 'not-enough-gold', next, missingGold: price.gold - gold };
+  }
+  return { ok: true, next, cost: price.cost, gold: price.gold };
+}
+
+/**
+ * 재련. 상태를 바꾸지 않고 **결과만 돌려준다**(`craft`와 같다).
+ *
+ * 바뀌는 것은 `defId` 하나다 — 같은 물건이므로 instId·강화·착용자는 그대로다.
+ * 그래서 착용 중에도 재련할 수 있고, 영웅이 들고 있는 참조(instId)는 손댈 필요가 없다.
+ */
+export function refine(args: RefineArgs): RefineResult {
+  const r = canRefine(args);
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    gear: { ...args.gear, defId: r.next.id },
+    spentMaterials: r.cost,
+    spentGold: r.gold,
   };
 }

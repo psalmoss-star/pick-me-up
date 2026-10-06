@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { canCraft, craft, missingFor, spendMaterials, amountOf } from './craft';
-import { RECIPES, RECIPE_BY_GEAR } from './data/recipes';
-import { GEAR_DEFS } from './data/gear';
+import { canCraft, craft, missingFor, spendMaterials, amountOf, canRefine, refine } from './craft';
+import { RECIPES, RECIPE_BY_GEAR, REFINE_MATERIALS, refineCostOf } from './data/recipes';
+import { GEAR_DEFS, GEAR_SLOTS, RELIC_FIRST_TIER, TIER_COUNT, ladderSet, tierFirstFloor } from './data/gear';
+import { bonusOf, makeGear } from './gear';
 import { MATERIAL, MATERIAL_DEFS, materialWeights } from './data/materials';
 import { TOWER_HEIGHT } from './data/floorgen';
-import type { GearDefId, MaterialBag } from './types';
+import type { GearDefId, GearInstance, HeroInstId, MaterialBag } from './types';
 
 /** 레시피 비용을 그대로 가진 주머니 — "딱 맞게 있다" 상태 */
 const exactly = (gearDefId: GearDefId): MaterialBag => ({ ...RECIPE_BY_GEAR[gearDefId].cost });
@@ -201,5 +202,121 @@ describe('missingFor', () => {
     const have: MaterialBag = {};
     for (const [id, n] of Object.entries(r.cost) as [keyof MaterialBag, number][]) have[id] = n * 2;
     expect(missingFor(r, have)).toEqual({});
+  });
+});
+
+/**
+ * 재련(2026-10-06) — 같은 유물의 단계를 하나 올린다. 제작과 같은 원칙이다:
+ * 확률이 없고, 조건이 안 되면 아무것도 바뀌지 않는다.
+ */
+describe('재련', () => {
+  const relic = (id: string, over: Partial<GearInstance> = {}): GearInstance =>
+    ({ ...makeGear(id as GearDefId, 7), ...over });
+  /** 그 유물을 다음 단계로 올릴 재료를 딱 맞게 */
+  const exact = (g: GearInstance) => {
+    const d = GEAR_DEFS[g.defId];
+    return refineCostOf(d.slot, d.tier + 1);
+  };
+
+  it('비용 데이터 — 슬롯마다 실재하는 재료만, 금은 단계가 오를수록 비싸다', () => {
+    for (const slot of GEAR_SLOTS) {
+      for (const id of Object.keys(REFINE_MATERIALS[slot]) as (keyof MaterialBag)[]) {
+        expect(MATERIAL_DEFS[id], `${String(id)}는 없는 재료다`).toBeDefined();
+      }
+      for (let t = RELIC_FIRST_TIER + 2; t <= TIER_COUNT; t++) {
+        expect(refineCostOf(slot, t).gold, `${slot} ${t}단계`).toBeGreaterThan(refineCostOf(slot, t - 1).gold);
+      }
+    }
+  });
+
+  it('성공 — defId만 다음 단계로 바뀌고 instId·강화·착용자는 그대로다', () => {
+    const g = relic('w_towerbane', { enhance: 3, equippedBy: 'h#1' as HeroInstId });
+    const c = exact(g);
+    const r = refine({ gear: g, have: c.cost, gold: c.gold, highestFloor: tierFirstFloor(3) });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.gear).toEqual({ ...g, defId: 'w_towerbane_t3' });
+    expect(r.spentMaterials).toEqual(c.cost);
+    expect(r.spentGold).toBe(c.gold);
+    // 원본을 바꾸지 않는다
+    expect(g.defId).toBe('w_towerbane');
+  });
+
+  it('강화 +5 유물 — 재련 뒤 보정은 새 단계 base × 강화 배수다', () => {
+    const g = relic('a_ashshroud', { enhance: 5 });
+    const c = exact(g);
+    const r = refine({ gear: g, have: c.cost, gold: c.gold, highestFloor: 100 });
+    if (!r.ok) throw new Error(r.reason);
+    const fresh = { ...makeGear('a_ashshroud_t3' as GearDefId, 1), enhance: 5 };
+    expect(bonusOf(r.gear)).toEqual(bonusOf(fresh));
+    expect(bonusOf(r.gear).hp!).toBeGreaterThan(bonusOf(g).hp!);
+  });
+
+  it('한 번에 한 단계 — 100층에 닿아 있어도 2단계는 3단계가 된다', () => {
+    const g = relic('t_lastlight');
+    const c = exact(g);
+    const r = refine({ gear: g, have: { ...c.cost, [MATERIAL.essence]: 99 }, gold: RICH, highestFloor: 100 });
+    if (!r.ok) throw new Error(r.reason);
+    expect(GEAR_DEFS[r.gear.defId].tier).toBe(3);
+  });
+
+  it('잠금 — 다음 단계의 첫 층에 닿아야 한다. 경계 층에서 갈린다', () => {
+    const g = relic('w_towerbane');
+    const c = exact(g);
+    const before = canRefine({ gear: g, have: c.cost, gold: c.gold, highestFloor: tierFirstFloor(3) - 1 });
+    expect(before).toMatchObject({ ok: false, reason: 'locked', unlockFloor: 21 });
+    expect(canRefine({ gear: g, have: c.cost, gold: c.gold, highestFloor: tierFirstFloor(3) }).ok).toBe(true);
+  });
+
+  it('잠금이 재료 부족보다 먼저다 — 못 여는 단계의 부족분을 띄우지 않는다', () => {
+    const r = canRefine({ gear: relic('w_towerbane'), have: {}, gold: 0, highestFloor: 20 });
+    expect(r).toMatchObject({ ok: false, reason: 'locked' });
+  });
+
+  it('재료 부족 — 모자란 것만 돌려준다', () => {
+    const g = relic('a_ashshroud');
+    const c = exact(g);
+    const [firstId] = Object.keys(c.cost) as (keyof MaterialBag)[];
+    const have = { ...c.cost, [firstId]: c.cost[firstId]! - 1 };
+    const r = canRefine({ gear: g, have, gold: RICH, highestFloor: 100 });
+    expect(r).toMatchObject({ ok: false, reason: 'not-enough-materials', missing: { [firstId]: 1 } });
+  });
+
+  it('금 부족 — 재료가 차 있으면 모자란 금을 돌려준다', () => {
+    const g = relic('w_towerbane');
+    const c = exact(g);
+    const r = canRefine({ gear: g, have: c.cost, gold: c.gold - 1, highestFloor: 100 });
+    expect(r).toMatchObject({ ok: false, reason: 'not-enough-gold', missingGold: 1 });
+  });
+
+  it('유물이 아니면 재련할 수 없다 — 정예도 안 된다', () => {
+    for (const id of ['w_chipped', 'w_emberfang', 'g_t5_elite_weapon']) {
+      const r = canRefine({ gear: relic(id), have: {}, gold: RICH, highestFloor: 100 });
+      expect(r, id).toMatchObject({ ok: false, reason: 'not-relic' });
+    }
+  });
+
+  it('10단계는 더 올릴 수 없다', () => {
+    const r = canRefine({ gear: relic('w_towerbane_t10'), have: {}, gold: RICH, highestFloor: 100 });
+    expect(r).toMatchObject({ ok: false, reason: 'max-tier' });
+  });
+
+  it('2단계에서 10단계까지 여덟 번 재련하면 10단계 유물과 같다', () => {
+    let g = relic('t_lastlight', { enhance: 2 });
+    for (let i = 0; i < 8; i++) {
+      const c = exact(g);
+      const r = refine({ gear: g, have: c.cost, gold: c.gold, highestFloor: 100 });
+      if (!r.ok) throw new Error(`${i}번째: ${r.reason}`);
+      g = r.gear;
+    }
+    expect(g.defId).toBe('t_lastlight_t10');
+    expect(g.enhance).toBe(2);
+    expect(GEAR_DEFS[g.defId]).toBe(ladderSet(10, 'relic').find((d) => d.slot === 'trinket'));
+  });
+
+  it('재련·제작은 난수를 받지 않는다 — 인자가 하나뿐이다', () => {
+    expect(refine.length).toBe(1);
+    expect(canRefine.length).toBe(1);
+    expect(craft.length).toBe(1);
   });
 });
