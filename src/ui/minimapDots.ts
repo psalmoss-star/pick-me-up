@@ -2,7 +2,9 @@
  * 미니맵 점 — 전투 재생 상태를 미니맵 좌표로 옮긴다. 표시 전용(2026-10-01).
  *
  * - 순수 함수. 엔진은 이 파일을 모르고, 이 파일은 화면이 이미 가진 값(HP·이탈·단계·결과)만 읽는다.
- * - 전투는 접점 한 곳에서 한 판이다(사용자 결정) — 점은 입구 → 접점 → (승리 시) 계단만 오간다.
+ * - 전투는 접점 한 곳에서 한 판이다(사용자 결정) — 아군 점은 입구 → 접점 → (승리 시) 계단만 오간다.
+ *   적 점은 출정 전에 **종류마다 머무는 자리**(`map.groups`)에 있다가 싸움이 붙으면 접점으로 몰려온다(STEP 71).
+ *   어느 길을 골라도 전부와 싸운다는 것이 이 움직임으로 보인다.
  * - 목표 좌표만 준다. 이동(직선 transition)과 쓰러진 점 지우기(투명도 전환)는 화면 몫이다.
  */
 import { clampRoute, type FloorMap } from '../game/floormap';
@@ -36,8 +38,10 @@ export const DOT = {
   entryInset: 0.7,
   /** 교전 중 아군·적 무리가 접점에서 떨어진 거리(칸) */
   contactOffset: 1.2,
-  /** 출정 전 적이 기다리는 자리(접점 오른쪽, 칸) */
+  /** 출정 전 적이 기다리는 자리(접점 오른쪽, 칸) — 머무는 자리를 모르는 적만 쓴다 */
   enemyWait: 1.6,
+  /** 머무는 자리에서 점을 길 옆으로 비키는 거리(칸) — 자리 표식(✕·원)을 가리지 않게 */
+  homeOffset: 0.9,
 } as const;
 
 /** 무리 순서 — 아군, 호위, 적. 같은 편은 uid 순 */
@@ -64,8 +68,17 @@ export function minimapDots(
   const enemyFront: [number, number] = [cx + DOT.contactOffset, cy];
   const enemyWait: [number, number] = [cx + DOT.enemyWait, cy];
 
+  /** 적 uid(`E:번호:defId`)에서 종류를 읽어 머무는 자리를 찾는다. 접점이 곧 그 자리면 접점 옆에서 기다린다 */
+  const homeOf = (uid: string): [number, number] => {
+    const defId = uid.split(':').slice(2).join(':');
+    const nodeId = map.groups.find((g) => g.defId === defId)?.nodeId;
+    if (!nodeId || nodeId === chosen.contactId) return enemyWait;
+    const [hx, hy] = at(nodeId);
+    return [hx + DOT.homeOffset, hy];
+  };
+
   const anchorOf = (u: DotUnit): [number, number] => {
-    if (u.side === 'enemy') return state.phase === 'approach' ? enemyWait : enemyFront;
+    if (u.side === 'enemy') return state.phase === 'approach' ? homeOf(u.uid) : enemyFront;
     if (u.withdrawn) return entry;
     if (!u.alive) return allyFront;
     if (state.phase === 'approach') return entry;

@@ -79,3 +79,45 @@ describe('미니맵 배치', () => {
     }
   });
 });
+
+describe('미니맵 배치 — 모양(STEP 71)', () => {
+  const mapOf = (shape: string) => FLOORS.map((f) => floorMapOf(f)).find((m) => m.shape === shape)!;
+  const segments = (pts: Array<[number, number]>) =>
+    pts.slice(1).map((p, i) => [pts[i], p].map((q) => q.join(',')).sort().join('|'));
+
+  it('1~100층 — 길은 가로·세로로만 꺾이고, 입구에서 시작해 계단에서 끝난다', () => {
+    for (const f of FLOORS) {
+      const map = floorMapOf(f);
+      const l = minimapLayout(map);
+      expect(l.roads).toHaveLength(map.routes.length);
+      for (const road of l.roads) {
+        expect(road.points[0]).toEqual(pointOf(l, 'entry'));
+        expect(road.points.at(-1)).toEqual(pointOf(l, 'exit'));
+        for (let i = 1; i < road.points.length; i++) {
+          const [ax, ay] = road.points[i - 1];
+          const [bx, by] = road.points[i];
+          expect(ax === bx || ay === by).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('모이는 길 — 함께 지나는 구간은 어느 경로에서든 같은 선이다', () => {
+    const map = mapOf('fork');
+    const l = minimapLayout(map);
+    const [a, b] = l.roads.map((r) => new Set(segments(r.points)));
+    const shared = [...a].filter((s) => b.has(s));
+    // 모인 뒤 계단까지의 구간은 겹쳐 그려진다
+    expect(shared.length).toBeGreaterThan(0);
+    expect(shared.length).toBeLessThan(a.size);
+  });
+
+  it('보스의 방은 땅을 넓게 칠한다', () => {
+    const arena = minimapLayout(mapOf('arena'));
+    const corridor = minimapLayout(mapOf('corridor'));
+    const filled = (l: typeof arena) => l.cells.filter((c) => c !== null).length;
+    // 자리 하나가 자리 둘인 외길만큼은 칠한다 — 가운데가 한 공간으로 읽힌다
+    expect(filled(arena)).toBeGreaterThan(filled(corridor) * 0.9);
+    expect(new Set(arena.cells.filter((c) => c !== null)).size).toBe(1);
+  });
+});

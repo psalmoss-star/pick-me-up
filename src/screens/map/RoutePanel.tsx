@@ -37,6 +37,7 @@ export function RoutePanel({ map, route, onSelectRoute, loadout, report, scoutNa
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
         {map.routes.map((r) => {
+          const solo = map.routes.length === 1;
           const tag = report ? reportedTerrain(map, report, r.index) : contactTerrain(map, r.index);
           const on = r.index === route;
           const notes = loadout.map((id) => ({ id, mod: terrainModifier(tag, id) }))
@@ -45,14 +46,18 @@ export function RoutePanel({ map, route, onSelectRoute, loadout, report, scoutNa
             <button
               key={r.index}
               onClick={() => onSelectRoute(r.index)}
+              // 길이 하나면 고를 것이 없다 — 누르는 것처럼 보이지 않게 한다
+              disabled={solo}
               style={{
                 minHeight: 44, padding: '8px 10px', boxSizing: 'border-box', width: '100%',
-                background: 'transparent', fontFamily: 'inherit', color: T.text, cursor: 'pointer',
-                border: `1px solid ${on ? T.gold : T.panelHi}`,
+                background: 'transparent', fontFamily: 'inherit', color: T.text, cursor: solo ? 'default' : 'pointer',
+                border: `1px solid ${on && !solo ? T.gold : T.panelHi}`,
               }}
             >
               <div style={{ fontSize: 13, letterSpacing: '.08em', color: on ? T.gold : T.text }}>
-                {r.index + 1}번 길 · 접점 {tag ? TERRAIN[tag].name : '?'}
+                {solo
+                  ? `${map.shape === 'arena' ? '보스의 방' : '외길'} · ${tag ? TERRAIN[tag].name : '?'}`
+                  : `${r.index + 1}번 길 · 접점 ${tag ? TERRAIN[tag].name : '?'}`}
               </div>
               {notes.length > 0 && (
                 <div style={{ fontSize: 11, lineHeight: 1.7, marginTop: 2 }}>
@@ -68,6 +73,11 @@ export function RoutePanel({ map, route, onSelectRoute, loadout, report, scoutNa
         })}
       </div>
       <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.8, marginTop: 8 }}>
+        {/* 길이 여럿일 때만 — 지도의 적 이름이 "이 길로 가면 이 적만 만난다"로 읽히지 않게 */}
+        {map.routes.length > 1 && (
+          <div>어느 길로 가든 이 층의 적 전부와 싸운다. 길이 정하는 것은 부딪히는 자리다.</div>
+        )}
+        {map.shape === 'arena' && <div>돌아갈 길이 없다. 한 공간에서 끝을 본다.</div>}
         {!report
           ? '✕ 는 적과 부딪히는 곳이다. 그곳의 땅이 책략의 성패를 바꾼다.'
           : report.style === 'silent'

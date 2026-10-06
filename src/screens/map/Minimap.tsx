@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { MM, T } from '../../ui/tokens';
 import { TERRAIN } from '../../game/data/terrain';
-import type { FloorMap } from '../../game/floormap';
+import { groupsAt, type FloorMap } from '../../game/floormap';
+import { enemyPlaceOf } from '../../game/data/enemyPlaces';
 import { minimapLayout } from '../../ui/minimapLayout';
 import type { MinimapDot } from '../../ui/minimapDots';
 
@@ -135,7 +136,8 @@ export function Minimap({ map, route, width, labels, onSelectRoute, contacts: re
             style={{
               position: 'absolute',
               left: edge ? edge.left : `${(p.x / cols) * 100}%`,
-              top: `calc(${(p.y / rows) * 100}% + ${n.y > 0.5 ? -15 : 15}px)`,
+              // 두 줄 이름표(땅 + 적)는 한 줄보다 키가 커서 자리 표식에서 더 멀리 띄운다
+              top: `calc(${(p.y / rows) * 100}% + ${(n.y > 0.5 ? -1 : 1) * (n.kind === 'path' && groupsAt(map, n.id).length > 0 ? 21 : 15)}px)`,
               transform: `translate(${edge ? edge.shift : '-50%'}, -50%)`,
               padding: '1px 4px',
               borderRadius: 2,
@@ -148,6 +150,15 @@ export function Minimap({ map, route, width, labels, onSelectRoute, contacts: re
             }}
           >
             {text}
+            {/*
+              이 자리에 머무는 적 — 종류만 적는다. **수는 적지 않는다**(수는 정찰 보고의 몫이고,
+              지도가 참 수를 말하면 보고 왜곡이 무의미해진다). 종류는 편성 화면도 참으로 보여 준다.
+            */}
+            {n.kind === 'path' && groupsAt(map, n.id).length > 0 && (
+              <span style={{ display: 'block', color: T.blood, textAlign: 'center' }}>
+                {groupsAt(map, n.id).map((id) => enemyPlaceOf(id).short).join('·')}
+              </span>
+            )}
           </span>
         );
       })}

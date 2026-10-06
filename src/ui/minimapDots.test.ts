@@ -108,3 +108,49 @@ describe('미니맵 점', () => {
     }
   });
 });
+
+describe('미니맵 점 — 적이 머무는 자리(STEP 71)', () => {
+  // 갈림길이고, 접점이 아닌 자리에 머무는 적이 있는 층
+  const picked = FLOORS.map((x) => ({ f: x, m: floorMapOf(x) }))
+    .find(({ m }) => m.routes.length > 1 && m.groups.some((g) => g.nodeId !== m.routes[0].contactId))!;
+  const m = picked.m;
+  const l = minimapLayout(m);
+  const away = m.groups.find((g) => g.nodeId !== m.routes[0].contactId)!;
+  const home = l.nodes.find((n) => n.id === away.nodeId)!;
+  const meet = l.nodes.find((n) => n.id === m.routes[0].contactId)!;
+  const foe = unit(`E:0:${away.defId}`, 'enemy');
+
+  it('출정 전 — 적은 자기 종류가 머무는 자리에 있다', () => {
+    const [d] = minimapDots(l, m, 0, { phase: 'approach', units: [foe] });
+    expect(Math.hypot(d.x - home.x, d.y - home.y)).toBeLessThanOrEqual(DOT.homeOffset + 0.01);
+  });
+
+  it('싸움이 붙으면 — 머물던 자리가 어디든 접점으로 몰려온다', () => {
+    const [d] = minimapDots(l, m, 0, { phase: 'engage', units: [foe] });
+    expect(Math.hypot(d.x - meet.x, d.y - meet.y)).toBeLessThanOrEqual(DOT.contactOffset + 0.01);
+  });
+
+  it('종류를 모르는 적은 예전처럼 접점 옆에서 기다린다', () => {
+    const [d] = minimapDots(l, m, 0, { phase: 'approach', units: [unit('E:9', 'enemy')] });
+    expect(d.x).toBeCloseTo(meet.x + DOT.enemyWait, 5);
+    expect(d.y).toBeCloseTo(meet.y, 5);
+  });
+
+  it('1~100층 — 어떤 층에서도 점이 격자 밖으로 나가지 않는다', () => {
+    for (const x of FLOORS) {
+      const fm = floorMapOf(x);
+      const fl = minimapLayout(fm);
+      const units = x.enemyIds.map((id, i) => unit(`E:${i}:${id}`, 'enemy'));
+      for (const phase of ['approach', 'engage'] as const) {
+        for (let r = 0; r < fm.routes.length; r++) {
+          for (const d of minimapDots(fl, fm, r, { phase, units: [...party, ...units] })) {
+            expect(d.x).toBeGreaterThanOrEqual(0);
+            expect(d.x).toBeLessThanOrEqual(MINIMAP.cols);
+            expect(d.y).toBeGreaterThanOrEqual(0);
+            expect(d.y).toBeLessThanOrEqual(MINIMAP.rows);
+          }
+        }
+      }
+    }
+  });
+});
