@@ -240,19 +240,28 @@ function buildAlly(
   };
 }
 
+/**
+ * 층 깊이 배수를 먹인 적 스탯.
+ *
+ * 배수는 hp/atk/def에만 곱한다.
+ * - spd를 곱하면 적이 항상 선공하게 되어 전투가 일방적이 된다(속도는 순서를 정할 뿐이다).
+ * - crit은 확률이라 곱하면 1.0을 넘어 전부 치명타가 된다.
+ *
+ * export하는 이유: 화면의 HP 바 분모(`encounter.ts` 로스터)가 이 값을 따로 다시 적으면
+ * 갈라진다 — 실제로 로스터가 배수 없는 hp를 써서 21층 이후 적 HP 바가 어긋났다.
+ */
+export function scaledEnemyStats(base: Stats, mult = 1): Stats {
+  return mult === 1 ? { ...base } : {
+    ...base,
+    hp: Math.round(base.hp * mult),
+    atk: Math.round(base.atk * mult),
+    def: Math.round(base.def * mult),
+  };
+}
+
 function buildEnemy(eid: EnemyDefId, index: number, d: BattleData, mult = 1): Combatant {
   const e = d.enemies[eid];
-  /**
-   * 층 깊이 배수는 hp/atk/def에만 곱한다.
-   * - spd를 곱하면 적이 항상 선공하게 되어 전투가 일방적이 된다(속도는 순서를 정할 뿐이다).
-   * - crit은 확률이라 곱하면 1.0을 넘어 전부 치명타가 된다.
-   */
-  const stats: Stats = mult === 1 ? { ...e.stats } : {
-    ...e.stats,
-    hp: Math.round(e.stats.hp * mult),
-    atk: Math.round(e.stats.atk * mult),
-    def: Math.round(e.stats.def * mult),
-  };
+  const stats = scaledEnemyStats(e.stats, mult);
   return {
     uid: `E:${index}:${eid}`,
     side: 'enemy',

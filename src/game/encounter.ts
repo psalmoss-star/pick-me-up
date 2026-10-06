@@ -8,7 +8,7 @@
  *
  * 전투 엔진 자체는 건드리지 않는다. 여기는 조립만 한다.
  */
-import { simulateBattle, type BattleData, type BattleInput, type BattleOutcome } from './battle';
+import { scaledEnemyStats, simulateBattle, type BattleData, type BattleInput, type BattleOutcome } from './battle';
 import { statsOfInstance } from './stats';
 import { displayName } from './identity';
 import { applyBonus, heroBonus } from './gear';
@@ -64,6 +64,8 @@ export function runEncounter(args: {
 }): EncounterResult {
   const { party, floor, data, rng, inventory } = args;
   const alive = party.filter((h) => !h.isDead);
+  // 엔진과 로스터(HP 바 분모)가 같은 배수를 쓴다
+  const enemyStatMult = enemyStatMultFor(floor.id);
 
   const outcome = simulateBattle({
     allies: alive,
@@ -84,7 +86,7 @@ export function runEncounter(args: {
      * 각자 계산하면 갈라지고, 하나라도 빠뜨리면 그 경로만 조용히 쉬운 전투가 된다.
      * (§5-14 "밸런스 수치를 화면에서 다시 계산하지 말 것"과 같은 이유다.)
      */
-    enemyStatMult: enemyStatMultFor(floor.id),
+    enemyStatMult,
     inventory,
     potions: args.potions,
   });
@@ -128,7 +130,8 @@ export function runEncounter(args: {
       return {
         uid: `E:${i}:${eid}`,
         name: e.name,
-        maxHp: e.stats.hp,
+        // 엔진의 buildEnemy와 같은 함수 — 깊이 배수를 빼면 21층 이후 바가 어긋난다
+        maxHp: scaledEnemyStats(e.stats, enemyStatMult).hp,
         kind: 'enemy',
         side: 'enemy',
         sourceId: eid,

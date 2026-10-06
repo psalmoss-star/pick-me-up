@@ -5,7 +5,8 @@ import { createRng } from './rng';
 import { klassFor } from './stats';
 import { heroes, enemies, skills, starScaling, elementChart, HERO } from './data/sample';
 import { FLOORS, floorAt, floorRewards } from './data/floors';
-import type { HeroDefId, HeroInstId, HeroInstance, Star } from './types';
+import { enemyStatMultFor } from './data/floorgen';
+import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance, Star } from './types';
 
 const data = { heroes, enemies, skills, starScaling, elementChart } as unknown as BattleData;
 
@@ -55,6 +56,27 @@ describe('로스터 구성', () => {
       expect(u.maxHp).toBeGreaterThan(0);
       expect(u.star).toBeGreaterThanOrEqual(1);
       expect(u.defId).toBeTruthy();
+    }
+  });
+
+  it('적 로스터의 maxHp는 층 깊이 배수를 먹은 값이다 (21층 이후 HP 바 분모)', () => {
+    const floor = floorAt(49); // 50층: 생성 층
+    const mult = enemyStatMultFor(floor.id);
+    expect(mult).toBeGreaterThan(1);
+    const r = run(49);
+    const foes = r.roster.filter((u) => u.kind === 'enemy');
+    expect(foes.length).toBeGreaterThan(0);
+    for (const u of foes) {
+      const base = data.enemies[u.sourceId as EnemyDefId].stats.hp;
+      expect(u.maxHp, u.name).toBe(Math.round(base * mult));
+      expect(u.maxHp, u.name).toBeGreaterThan(base);
+    }
+  });
+
+  it('손으로 짠 층(1~20)의 적 maxHp는 정의 값 그대로다', () => {
+    const r = run(0);
+    for (const u of r.roster.filter((x) => x.kind === 'enemy')) {
+      expect(u.maxHp).toBe(data.enemies[u.sourceId as EnemyDefId].stats.hp);
     }
   });
 
