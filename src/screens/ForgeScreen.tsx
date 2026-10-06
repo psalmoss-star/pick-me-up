@@ -32,6 +32,13 @@ export interface ForgeScreenProps {
    * 시설 강화가 눈에 띄는 유일한 자리에서 효과가 없어 보였다(실기기에서 발견).
    */
   forgeLevel: number;
+  /**
+   * 합성소에 배치된 영웅(STEP 73).
+   *
+   * ⚠️ 이게 없어서 예상치가 **배치 인원을 빼고** 계산됐다 — 배치하면 실제 획득량이 화면보다 컸다.
+   * 스토어(`fuse`)는 제물 본인을 인원에서 빼므로 여기서도 똑같이 뺀다.
+   */
+  forgeAssigned?: readonly HeroInstId[];
   onFuse: (targetId: HeroInstId, sacrificeId: HeroInstId) => FuseResult | FuseCheck;
   onPromote: (id: HeroInstId) => PromoteResult | PromoteCheck;
   /** 합성소 시설 강화 카드로. 마을이 Lv.N을 약속하므로 여기서 닿아야 한다 */
@@ -45,7 +52,7 @@ export interface ForgeScreenProps {
  * 그 사실을 화면이 숨기면 퍼머데스의 무게가 사라진다 (CLAUDE.md).
  */
 export function ForgeScreen({
-  roster, party, wallet, forgeLevel, onFuse, onPromote, onOpenFacility,
+  roster, party, wallet, forgeLevel, forgeAssigned = [], onFuse, onPromote, onOpenFacility,
 }: ForgeScreenProps) {
   const [mode, setMode] = useState<Mode>('fuse');
   const [targetId, setTargetId] = useState<HeroInstId | null>(null);
@@ -173,12 +180,13 @@ export function ForgeScreen({
 
       {/* 예상 결과 */}
       {mode === 'fuse' && target && sacrifice && (() => {
-        const gain = Math.round(sacrificeValue(sacrifice, gameData.starScaling) * fuseEfficiency(forgeLevel));
+        const rate = fuseEfficiency(forgeLevel, forgeAssigned.filter((id) => id !== sacrifice.instId).length);
+        const gain = Math.round(sacrificeValue(sacrifice, gameData.starScaling) * rate);
         const need = expToNext(target.star, target.level) - target.exp;
         const enough = gain >= need;
         return (
           <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.9, marginBottom: 14 }}>
-            획득 경험치 약 {gain} · 다음 레벨까지 {need}
+            전환율 {Math.round(rate * 100)}% · 획득 경험치 약 {gain} · 다음 레벨까지 {need}
             <br />
             {/* 레벨이 오를지 미리 알려준다 — 바친 뒤에 알면 늦다 */}
             <span style={{ color: enough ? T.gold : T.dim }}>

@@ -7,6 +7,8 @@ import type { HeroInstId, HeroInstance, Wallet } from '../game/types';
 import { livingHeroes } from '../game/roster';
 
 export interface BaseScreenProps {
+  /** 숙소에서 쉴 차례인 영웅 수 — 마을의 숙소 핀이 알린다 */
+  restReady?: number;
   floor: FloorSpec;
   roster: HeroInstance[];
   party: HeroInstId[];
@@ -46,7 +48,7 @@ export interface BaseScreenProps {
 export function BaseScreen({
   floor, roster, party, facilities, wallet,
   onGoTo,
-  towerCleared = false, deathCount, awayCount = 0,
+  towerCleared = false, deathCount, awayCount = 0, restReady = 0,
 }: BaseScreenProps) {
   const alive = livingHeroes(roster);
   /*
@@ -74,6 +76,7 @@ export function BaseScreen({
           facilities={facilities}
           deathCount={deathCount ?? 0}
           awayCount={awayCount}
+          restReady={restReady}
           onSelect={onGoTo}
           floorLabel={towerCleared ? undefined : `${floor.id}F`}
           /*

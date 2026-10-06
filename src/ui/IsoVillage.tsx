@@ -153,10 +153,22 @@ function Facility({
         warm={warm ? ISO.roofWarm : ISO.roofCool}
         dark={warm ? ISO.roofWarmD : ISO.roofCoolD}
       />
+      {/*
+        강화가 **건물에서** 보여야 한다(STEP 73, "올라도 달라지는 게 안 보인다").
+        - Lv.0은 불이 꺼져 있다 — 아직 쓰지 않는 건물이다. 한 번 강화하면 창에 불이 들어온다.
+        - 만렙은 깃발에 더해 처마에 금띠를 두른다. 예전에는 Lv.2와 Lv.3이 깃발 하나 차이였다.
+        ⚠️ 높이는 바꾸지 않는다 — 라벨 높이(`facTop`)가 여기서 나오고, 마을은 핀이 꽉 차 있다(iso.test.ts).
+      */}
       <Windows
         x={x + 1.5} y={y} d={1.2} z={roofZ - fh * 0.45}
-        n={floors} color={warm ? ISO.glow : ISO.glowAlt}
+        n={floors} color={level === 0 ? ISO.stoneL : warm ? ISO.glow : ISO.glowAlt}
       />
+      {level >= FACILITY_MAX_LEVEL && (
+        <Box
+          x={x - 0.04} y={y - 0.04} w={1.58} d={1.28} h={0.07} z0={roofZ - 0.07}
+          top={T.gold} right={T.gold} left={T.amber}
+        />
+      )}
       {level >= FACILITY_MAX_LEVEL && <Flag x={x + 0.75} y={y + 0.6} z={roofZ + 0.5} />}
     </g>
   );
@@ -463,6 +475,8 @@ export interface IsoVillageProps {
   livingCount?: number;
   /** 로스터 최고 등급 — 거주 구역 건물의 **구조**를 정한다(색이 아니라) */
   topStar?: number;
+  /** 숙소에서 쉴 차례인 영웅 수 — 0보다 크면 숙소 핀이 "쉼 N명"으로 바뀌고 금테를 두른다 */
+  restReady?: number;
 }
 
 /**
@@ -480,12 +494,14 @@ interface Lot {
   /** 라벨이 뜰 높이(건물 꼭대기보다 살짝 위) */
   lz: number;
   sub?: string;
+  /** 지금 들를 이유가 있다 — 알약에 금테를 두른다 */
+  alert?: boolean;
   render: () => React.ReactNode;
 }
 
 export function IsoVillage({
   facilities, onSelect, deathCount = 0, towerLocked = false, floorLabel, awayCount = 0,
-  livingCount = 0, topStar = 1,
+  livingCount = 0, topStar = 1, restReady = 0,
 }: IsoVillageProps) {
   const fac = (k: FacilityKind) => facilities[k] ?? 0;
   /** 시설 높이 = 층수 × 층높이 + 지붕. Facility의 상수와 맞물려 있다 */
@@ -533,7 +549,8 @@ export function IsoVillage({
       render: () => <Facility {...at('forge')} level={fac('forge')} warm={false} />,
     },
     {
-      spot: 'rest', label: '숙소', sub: `Lv.${fac('rest')}`,
+      spot: 'rest', label: '숙소', sub: restReady > 0 ? `쉼 ${restReady}명` : `Lv.${fac('rest')}`,
+      alert: restReady > 0,
       ...at('rest'), lz: facTop('rest'),
       render: () => <Facility {...at('rest')} level={fac('rest')} warm={false} />,
     },
@@ -727,7 +744,7 @@ export function IsoVillage({
                 display: 'block',
                 padding: '4px 10px',
                 background: 'rgba(12,9,26,.82)',
-                border: `1px solid ${T.panelHi}`,
+                border: `1px solid ${p.alert ? T.gold : T.panelHi}`,
                 borderRadius: 999,
                 color: T.text,
                 fontSize: 11,

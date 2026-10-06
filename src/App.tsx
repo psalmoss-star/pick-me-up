@@ -23,7 +23,10 @@ import { T } from './ui/tokens';
 import type { VillageSpot } from './ui/iso';
 import type { FacilityKind } from './game/data/facilities';
 import { TabBar, type TabKey } from './ui/TabBar';
-import { useRunStore, isSquadLocked, restQuote } from './stores/runStore';
+import { useRunStore, isSquadLocked, restQuote, innQuote } from './stores/runStore';
+import { armoryAtkMult } from './game/data/facilities';
+import { statsOfInstance } from './game/stats';
+import type { InnGuestView } from './screens/FacilityScreen';
 import { loadRun } from './stores/save';
 import { loadLegacy } from './stores/legacy';
 import { floorAt, gameData } from './game/data';
@@ -112,6 +115,10 @@ export default function App() {
   const maxFloorReached = useRunStore((s) => s.maxFloorReached);
   const revisits = useRunStore((s) => s.revisits);
   const result = useRunStore((s) => s.result);
+  const restPending = useRunStore((s) => s.restPending);
+  const innRest = useRunStore((s) => s.innRest);
+  /** 결과 화면의 "숙소에서 쉬기"로 방금 쉰 결과 — 숙소 화면이 한 번 보여 주고, 화면을 떠나면 지운다 */
+  const [innReport, setInnReport] = useState<InnGuestView[] | null>(null);
   const snapshot = useRunStore((s) => s.snapshot);
   const interventions = useRunStore((s) => s.interventions);
   const wallet = useRunStore((s) => s.wallet);
@@ -156,6 +163,16 @@ export default function App() {
   const prep = useRunStore((s) => s.prep);
   const buyPrep = useRunStore((s) => s.buyPrep);
   const rest = useRunStore((s) => s.rest);
+  /**
+   * 숙소에서 쉴 차례인 영웅 — 스토어의 견적(`innQuote`)에 이름만 붙인다.
+   * 회복량은 화면이 계산하지 않는다(견적과 실제가 갈리지 않게).
+   */
+  const innGuestsOf = (st: Parameters<typeof innQuote>[0]): InnGuestView[] =>
+    innQuote(st).map((g) => {
+      const h = st.roster.find((x) => x.instId === g.instId);
+      return { ...g, name: h ? displayName(h, gameData.heroes) : '' };
+    });
+  const innGuests = innGuestsOf({ roster, restPending, facilities });
   const gear = useRunStore((s) => s.gear);
   const buyGear = useRunStore((s) => s.buyGear);
   const equipGear = useRunStore((s) => s.equipGear);
@@ -224,7 +241,8 @@ export default function App() {
         그냥 다 나와서 "쓸데없는 화면"이 된다(실기기에서 보고됨).
       */
       case 'rest':
-      case 'training': setFacilityFocus(spot); setScreen('facility'); break;
+      // 마을에서 들어올 때는 지난번 쉰 결과를 지운다 — 탭으로 화면을 떠났으면 남아 있을 수 있다
+      case 'training': setInnReport(null); setFacilityFocus(spot); setScreen('facility'); break;
       /*
         탑 — 층 선택 화면으로. 예전엔 곧장 브리핑으로 갔지만, 기존 층 재도전(파밍)이
         들어오면서 "어느 층으로 들어갈지" 고르는 자리가 필요해졌다(TowerScreen).
@@ -466,6 +484,7 @@ export default function App() {
             towerCleared={towerCleared}
             deathCount={deathCount}
             awayCount={dispatchedHeroIds(dispatches).size}
+            restReady={innGuests.length}
           />
         )}
         {screen === 'heroes' && (
@@ -505,6 +524,7 @@ export default function App() {
             onSortie={() => goToSpot('tower')}
             floor={floor}
             gear={gear}
+            armoryMult={armoryAtkMult(facilities.armory)}
           />
         )}
         {screen === 'facility' && (
@@ -512,9 +532,19 @@ export default function App() {
             facilities={facilities}
             wallet={wallet}
             onUpgrade={upgradeFacility}
-            onBack={() => setScreen('base')}
+            onBack={() => { setInnReport(null); setScreen('base'); }}
             initialFocus={facilityFocus}
             onRest={rest}
+            innGuests={innGuests}
+            onInnRest={innRest}
+            innReport={innReport ?? undefined}
+            context={{
+              rest: innGuests.length > 0 ? `쉴 차례 ${innGuests.length}명` : undefined,
+              armory: party.length > 0 ? `출전 ${party.length}명의 공격에 걸린다` : undefined,
+              forge: assignedHeroIds.size > 0 || roster.filter((h) => !h.isDead).length > party.length
+                ? `편성 밖 영웅 ${roster.filter((h) => !h.isDead && !party.includes(h.instId)).length}명 — 제물이 될 수 있다`
+                : undefined,
+            }}
             restCost={restQuote(roster).cost}
             restInjured={restQuote(roster).injured.length}
             /*
@@ -634,7 +664,7 @@ export default function App() {
             wallet={wallet}
             onEnhance={enhanceGear}
             onBack={() => setScreen('base')}
-            onOpenFacility={() => { setFacilityFocus('armory'); setScreen('facility'); }}
+            onOpenFacility={() => { setInnReport(null); setFacilityFocus('armory'); setScreen('facility'); }}
             materials={materials}
             /* 레시피 해금은 **도달 최고 층**으로 판정한다 — 지금 고른 층이 아니다 */
             highestFloor={FLOORS[maxFloorReached].id}
@@ -648,9 +678,10 @@ export default function App() {
             party={party}
             wallet={wallet}
             forgeLevel={facilities.forge}
+            forgeAssigned={assignments.forge}
             onFuse={fuse}
             onPromote={promote}
-            onOpenFacility={() => { setFacilityFocus('forge'); setScreen('facility'); }}
+            onOpenFacility={() => { setInnReport(null); setFacilityFocus('forge'); setScreen('facility'); }}
           />
         )}
         {screen === 'summon' && (
@@ -701,6 +732,8 @@ export default function App() {
             // 거기로 가야 "선택 → 확인 → 돌아가서 다시 선택"이 자연스럽다.
             onBack={() => setScreen('tower')}
             onStart={start}
+            innPending={{ count: innGuests.filter((g) => party.includes(g.instId as never)).length, onRest: innRest }}
+            armoryMult={armoryAtkMult(facilities.armory)}
             // 준비 한 수 — 임무 유형마다 하나씩, 층당 1개
             prep={prepForMission(floor.mission.kind)}
             prepBought={prep != null}
@@ -766,6 +799,28 @@ export default function App() {
             trainingLevel={facilities.training}
             materials={loot.materials}
             gearDrop={loot.gearDefId}
+            /*
+              다친 생존자 수 — finish()보다 먼저 뜨는 화면이라 스토어의 `restPending`은 아직 비어 있다.
+              finish()와 같은 기준(잔여 HP < 최대 HP)으로 여기서 센다. 표시뿐이다.
+            */
+            innCount={result.survivors.filter((sv) => {
+              const h = snapshot.find((x) => x.instId === sv.instId);
+              return !!h && sv.currentHp > 0
+                && sv.currentHp < statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+            }).length}
+            onInn={() => {
+              /*
+                결과를 확정하고(쉴 차례가 여기서 생긴다) 바로 쉬게 한 뒤 숙소 화면으로 간다.
+                쉬기 전 견적을 잡아 두었다가 넘겨야 숙소가 "방금 쉰 결과"를 보여 줄 수 있다 —
+                쉬고 나면 견적이 빈다.
+              */
+              finishBattle();
+              const guests = innGuestsOf(useRunStore.getState());
+              innRest();
+              setInnReport(guests);
+              setFacilityFocus('rest');
+              setScreen('facility');
+            }}
             onFinish={() => {
               /*
                 무덤행 조건은 ResultScreen의 `ending`(towerCleared && win)과 반드시 같은 뜻이어야

@@ -66,6 +66,26 @@ export interface FacilityScreenProps {
   assignedInfo?: { instId: string; name: string; level: number }[];
   onAssign?: (kind: AssignableFacility, instId: string) => void;
   onUnassign?: (instId: string) => void;
+  /**
+   * 숙소에서 쉴 차례인 영웅과 회복 뒤 HP(STEP 73) — 스토어의 `innQuote`에 이름만 붙인 것.
+   * 화면이 회복량을 계산하지 않는다(`restCost`와 같은 이유).
+   */
+  innGuests?: InnGuestView[];
+  /** 쉰다 — 무료. 부르면 `innGuests`가 비워진다 */
+  onInnRest?: () => void;
+  /** 방금 쉰 결과 — 결과 화면의 "숙소에서 쉬기"로 들어왔을 때 App이 넘긴다 */
+  innReport?: InnGuestView[];
+  /** 시설마다 "지금 왜 필요한가" 한 줄 — 없으면 그리지 않는다 */
+  context?: Partial<Record<FacilityKind, string>>;
+}
+
+/** 숙소 손님 한 명 — 쉬기 전후의 HP */
+export interface InnGuestView {
+  instId: string;
+  name: string;
+  max: number;
+  before: number;
+  after: number;
 }
 
 /** 훈련소에 표시할 대기 영웅 한 명 */
@@ -92,7 +112,8 @@ const ORDER: FacilityKind[] = ['rest', 'training', 'forge', 'armory'];
 function effectText(kind: FacilityKind, level: number, assigned = 0): string {
   switch (kind) {
     case 'rest':
-      return `층 사이 회복 ${Math.round(restHealRate(level) * 100)}%`;
+      // 회복은 전투 뒤 숙소에서 쉬어야 받는다(STEP 73) — "층 사이"라고 적으면 저절로 낫는 줄 안다
+      return `쉬면 최대 HP의 ${Math.round(restHealRate(level) * 100)}% 회복`;
     case 'training': {
       // 배치 인원이 반영된 값이다 — 화면이 따로 더하면 실제 지급과 갈라진다
       const exp = idleExpWithAssign(level, assigned);
@@ -133,8 +154,16 @@ export function FacilityScreen({
   trainees = [],
   assignments = { training: [], forge: [] },
   assignable = [], assignedInfo = [], onAssign, onUnassign,
+  innGuests = [], onInnRest, innReport, context = {},
 }: FacilityScreenProps) {
   const [notice, setNotice] = useState<string | null>(null);
+  /** 방금 쉰 결과 — 쉬고 나면 견적이 비므로 화면이 기억해 둔다 */
+  const [rested, setRested] = useState<InnGuestView[] | null>(innReport?.length ? innReport : null);
+  const doInnRest = () => {
+    if (!onInnRest || innGuests.length === 0) return;
+    setRested(innGuests);
+    onInnRest();
+  };
   /**
    * 마을에서 고른 시설. 해당 카드로 스크롤하고 강조만 한다.
    *
@@ -168,7 +197,15 @@ export function FacilityScreen({
       );
       return;
     }
-    setNotice(`${FACILITY_META[kind].name} Lv.${r.level} — ${effectText(kind, r.level)} (금 ${r.spent} 소모)`);
+    /*
+      무엇이 달라졌는지를 **전 → 후**로 말한다. 예전 문구는 새 수치만 적어서
+      "올랐는데 달라진 게 안 보인다"가 됐다(사용자 지적). 배치 인원은 강화 전후로 같다.
+    */
+    const assigned = isAssignable(kind) ? assignments[kind].length : 0;
+    setNotice(
+      `${FACILITY_META[kind].name} Lv.${r.level - 1} → Lv.${r.level}\n`
+      + `${effectText(kind, r.level - 1, assigned)} → ${effectText(kind, r.level, assigned)}\n금 ${r.spent} 소모`,
+    );
   };
 
   /**
@@ -203,6 +240,18 @@ export function FacilityScreen({
       </div>
 
       <SectionLabel>대기실</SectionLabel>
+
+      {/*
+        알림은 **맨 위**에 둔다. 예전에는 카드 넷 아래에 있어서, 강화를 눌러도 결과가
+        화면 밖에 떴다 — "눌렀는데 아무 일도 없다"로 읽힌 이유 중 하나다.
+      */}
+      {notice && (
+        <div style={{ marginBottom: 12 }}>
+          <SystemPanel compact tone="rare">
+            <div style={{ fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{notice}</div>
+          </SystemPanel>
+        </div>
+      )}
 
       {/*
         ⚠️ 여기에 부감 맵(`BaseMap`)을 두지 않는다.
@@ -243,6 +292,10 @@ export function FacilityScreen({
               <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.1em', marginBottom: 10 }}>
                 {FACILITY_META[kind].desc}
               </div>
+              {/* 지금 이 시설이 왜 필요한가 — 수치 표가 아니라 "오늘 들를 이유"로 읽히게 */}
+              {context[kind] && (
+                <div style={{ fontSize: 11, color: T.rare, marginBottom: 10 }}>{context[kind]}</div>
+              )}
 
               {/* 등급 표현과 같은 원리 — 단계는 색이 아니라 칸으로 보인다 */}
               <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
@@ -408,12 +461,48 @@ export function FacilityScreen({
                 </div>
               )}
 
+              {/*
+                숙소에서 쉬기(STEP 73) — 전투에서 다쳐 돌아온 영웅이 여기서 회복한다. 무료다.
+                예전에는 전투 직후 저절로 나았고, 그래서 숙소는 들를 이유가 없었다.
+                HP 바는 쉬기 전 → 쉰 뒤를 그대로 보여 준다(값은 스토어의 견적).
+              */}
+              {kind === 'rest' && onInnRest && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
+                  {rested ? (
+                    <>
+                      <div style={{ fontSize: 11, color: T.gold, marginBottom: 8, letterSpacing: '.1em' }}>
+                        {rested.length}명이 쉬었다
+                      </div>
+                      <InnList guests={rested} done />
+                    </>
+                  ) : innGuests.length > 0 ? (
+                    <>
+                      <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, letterSpacing: '.1em' }}>
+                        쉴 차례 {innGuests.length}명
+                      </div>
+                      <InnList guests={innGuests} />
+                      <div style={{ marginTop: 10 }}>
+                        <Button small tone="rare" onClick={doInnRest}>쉬게 한다 · 무료</Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
+                      쉴 차례인 영웅이 없다 — 전투에서 다쳐 돌아오면 여기서 쉰다
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 금을 내는 완전 회복 — 쉬어도 모자랄 때의 선택이다. 쉴 차례가 남았으면 먼저 쉬는 편이 싸다 */}
               {kind === 'rest' && onRest && (
                 <div style={{ marginTop: 10, borderTop: `1px solid ${T.panelHi}`, paddingTop: 10 }}>
                   <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, lineHeight: 1.7 }}>
                     {restCost == null
                       ? '전원 만전입니다'
-                      : `부상 ${restInjured}명 · 금 ${restCost}`}
+                      : `부상 ${restInjured}명 · 전원 완전 회복에 금 ${restCost}`}
+                    {restCost != null && innGuests.length > 0 && !rested && (
+                      <><br />먼저 쉬게 하면 더 싸다</>
+                    )}
                   </div>
                   <Button
                     small
@@ -421,8 +510,8 @@ export function FacilityScreen({
                     disabled={restCost == null || wallet.gold < restCost}
                   >
                     {restCost == null
-                      ? '휴식 불필요'
-                      : wallet.gold >= restCost ? `휴식 · 금 ${restCost}` : `금 ${restCost} 필요`}
+                      ? '치료 불필요'
+                      : wallet.gold >= restCost ? `치료 · 금 ${restCost}` : `금 ${restCost} 필요`}
                   </Button>
                 </div>
               )}
@@ -431,14 +520,6 @@ export function FacilityScreen({
           );
         })}
       </div>
-
-      {notice && (
-        <div style={{ marginTop: 16 }}>
-          <SystemPanel compact tone="rare">
-            <div style={{ fontSize: 13, lineHeight: 1.7 }}>{notice}</div>
-          </SystemPanel>
-        </div>
-      )}
 
       {/*
         아무것도 살 수 없을 때만 금의 출처를 알려준다.
@@ -459,6 +540,30 @@ export function FacilityScreen({
       <div style={{ marginTop: 20, textAlign: 'center', minHeight: TOUCH_MIN }}>
         <Button onClick={onBack}>돌아가기</Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 숙소 손님 목록 — 쉬기 전 HP에서 쉰 뒤 HP로.
+ * `done`이면 쉰 뒤의 바를 금색으로 그리고 얼마나 찼는지 적는다.
+ */
+function InnList({ guests, done = false }: { guests: InnGuestView[]; done?: boolean }) {
+  return (
+    <div style={{ display: 'grid', gap: 7 }}>
+      {guests.map((g) => (
+        <div key={g.instId}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+            <span>{g.name}</span>
+            <span style={{ color: done ? T.gold : T.dim }}>
+              {done
+                ? `${g.before} → ${g.after} (+${g.after - g.before})`
+                : `${g.before} / ${g.max} → ${g.after}`}
+            </span>
+          </div>
+          <HpBar cur={done ? g.after : g.before} max={g.max} color={done ? T.gold : T.blood} w="100%" h={4} />
+        </div>
+      ))}
     </div>
   );
 }

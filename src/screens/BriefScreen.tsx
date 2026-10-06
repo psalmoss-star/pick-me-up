@@ -27,6 +27,10 @@ export interface BriefScreenProps {
   quests?: QuestDef[];
   onBack: () => void;
   onStart: () => void;
+  /** 숙소에서 쉴 차례인 영웅 수와 쉬게 하는 동작 — 진입 버튼 아래에서 알린다 */
+  innPending?: { count: number; onRest: () => void };
+  /** 무기창고의 공격력 보정(배수). 1이면 그리지 않는다 */
+  armoryMult?: number;
   /**
    * 이 층의 임무에 대응하는 준비 한 수. STEP 49.
    *
@@ -57,7 +61,7 @@ export interface BriefScreenProps {
 
 /** 임무 브리핑 — 진입 전 마지막 확인 */
 export function BriefScreen({
-  floor, partySize, quests = [], onBack, onStart,
+  floor, partySize, quests = [], onBack, onStart, innPending, armoryMult = 1,
   prep, prepBought = false, gold = 0, onBuyPrep, speakers = [], stratagem, routePanel, scoutPanel,
 }: BriefScreenProps) {
   const speaker = pickSpeaker(speakers, floor.id);
@@ -127,6 +131,8 @@ export function BriefScreen({
         ))}
         <div style={{ fontSize: 12, color: T.dim, marginTop: 16, lineHeight: 1.9 }}>
           출전 {partySize}명{scoutPanel ? '' : ` · 적 ${floor.enemyIds.length}기`}
+          {/* 무기창고 — 효과가 시설 카드 밖에서는 어디에도 안 보였다(STEP 73) */}
+          {armoryMult > 1 && ` · 무기창고 공격 +${Math.round((armoryMult - 1) * 100)}%`}
           <br />
           전투 중 사망한 영웅은 되살릴 수 없습니다.
         </div>
@@ -266,6 +272,18 @@ export function BriefScreen({
           {confirmBack ? '준비를 버리고 돌아가기' : '돌아가기'}
         </Button>
         <Button tone="warning" onClick={onStart}>진입</Button>
+        {/*
+          쉬지 않은 영웅이 있으면 진입 전에 알린다(STEP 73). 막지는 않는다 — 다친 채로 가는 것도 선택이다.
+          다만 여기서 바로 쉴 수 있게 한다: 숙소까지 돌아갔다 오게 하면 "잊어서 손해"가 벌이 된다.
+        */}
+        {innPending && innPending.count > 0 && (
+          <div style={{ marginTop: 12, fontSize: 11, color: T.amber, lineHeight: 1.8 }}>
+            ⚠ 쉬지 않은 영웅 {innPending.count}명 — 다친 채로 싸운다
+            <div style={{ marginTop: 6 }}>
+              <Button small onClick={innPending.onRest}>숙소에서 쉬게 한다 · 무료</Button>
+            </div>
+          </div>
+        )}
       </div>
       {confirmBack && (
         <div style={{

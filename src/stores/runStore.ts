@@ -30,6 +30,7 @@ import { floorRewards, isFinalFloor } from '../game/data/floors';
 import { partyLimitAt, squadsOpen, SQUAD_COUNT } from '../game/data/party';
 import { livingHeroes } from '../game/roster';
 import { revisitMultiplier } from '../game/data/revisit';
+import { innHeal } from '../game/rest';
 import {
   armoryAtkMult, restHealRate, upgradeCost, ASSIGN_SLOTS, ASSIGNABLE,
   REST_COST_PER_HP, REST_COST_MIN, type FacilityKind, type AssignableFacility,
@@ -203,6 +204,20 @@ export interface RunSlice {
    * 화면에 이름이 안 뜨니 해제할 방법도 없다 — 교착이다.
    */
   assignments: Record<AssignableFacility, HeroInstId[]>;
+  /**
+   * 숙소에서 쉴 차례인 영웅 — **직전 전투에서 살아 돌아온 부상자**(STEP 73).
+   *
+   * 예전에는 `finish()`가 전투 직후 이 영웅들을 자동으로 회복시켰다. 그래서 숙소는 들를 이유가 없었다
+   * (사용자: "정통 RPG에서 숙소는 전투를 치르면 꼭 들르는 회복 장소였다").
+   * 지금은 같은 양의 회복을 `innRest()`로 **직접 받는다.** 받기만 하면 예전과 HP가 똑같다 —
+   * 측정 도구(`sim`·`climb-check`)가 "매 층 쉰다"를 전제로 옛 공식을 그대로 쓰는 이유다.
+   *
+   * - **저장한다.** 안 하면 새로고침으로 쉴 차례가 사라져 회복을 통째로 잃는다.
+   * - 쉬지 않고 다음 전투를 치르면 **새 전투의 부상자로 갈아 끼운다.** 예전 부상자의 차례는 사라진다(안 쉰 대가).
+   * - 대상을 "직전 전투의 부상자"로 좁힌 이유: 전원을 쉬게 하면 대기 중인 부상자까지 공짜로 낫는다 —
+   *   예전에는 없던 회복이라 구간 완주율 표가 전부 움직인다.
+   */
+  restPending: HeroInstId[];
   /**
    * 보유 장비. 착용 여부는 각 인스턴스의 equippedBy가 들고 있다.
    *
@@ -422,6 +437,8 @@ export interface RunActions {
   unassign: (id: HeroInstId) => void;
   /** 숙소 휴식 — 금을 내고 살아있는 영웅 전원의 HP를 즉시 만피로 되돌린다. */
   rest: () => RestResult;
+  /** 숙소에서 쉰다 — 무료. 쉴 차례인 영웅(`restPending`)이 숙소 레벨만큼 회복한다 */
+  innRest: () => InnRestResult;
   /** 상점 구매. 금으로 장비를 사서 창고에 넣는다. */
   buyGear: (defId: GearDefId) => BuyGearResult;
   /** 장비 착용. 같은 슬롯에 있던 것은 자동으로 창고로 돌아간다. */
@@ -525,6 +542,39 @@ export type RefineGearResult = RefineResult | { ok: false; reason: 'not-owned' }
 export type BuyPotionResult =
   | { ok: true; count: number; spent: number }
   | { ok: false; reason: 'not-enough-gold' };
+
+export type InnRestResult =
+  | { ok: true; healed: InnGuest[] }
+  | { ok: false; reason: 'nobody' };
+
+/** 숙소에서 쉴 영웅 한 명 — 지금 HP와 쉬고 난 뒤의 HP */
+export interface InnGuest {
+  instId: HeroInstId;
+  max: number;
+  before: number;
+  after: number;
+}
+
+/**
+ * 숙소 쉬기 견적 — 쉴 차례인 영웅과 회복 뒤 HP.
+ *
+ * ⚠️ **화면과 스토어가 같은 함수를 쓴다**(`restQuote`와 같은 이유). 결과 화면·시설 화면·브리핑 경고가
+ * 여기 값을 그대로 보여 주고, `innRest()`가 같은 값으로 HP를 바꾼다.
+ * 죽었거나 로스터에 없는 id는 건너뛴다 — 차례가 남은 채 제물이 됐을 수 있다.
+ */
+export function innQuote(s: Pick<RunSlice, 'roster' | 'restPending' | 'facilities'>): InnGuest[] {
+  const rate = restHealRate(s.facilities.rest);
+  const out: InnGuest[] = [];
+  for (const id of s.restPending) {
+    const h = s.roster.find((x) => x.instId === id);
+    if (!h || h.isDead) continue;
+    const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+    const before = h.currentHp === 0 ? max : Math.min(max, h.currentHp);
+    const after = innHeal(before, max, rate);
+    if (after > before) out.push({ instId: id, max, before, after });
+  }
+  return out;
+}
 
 export type RestResult =
   | { ok: true; healed: number; heroes: number; spent: number }
@@ -671,6 +721,7 @@ function freshSlice(): RunSlice {
     facilities: { rest: 0, training: 0, forge: 0, armory: 0 },
     // 회차를 넘기지 않는다 — gdd-v3 §7, 계승은 기록뿐이다
     assignments: { training: [], forge: [] },
+    restPending: [],
     gear: [],
     gearSeq: 0,
     battleCount: 0,
@@ -1054,7 +1105,6 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
       const wasCleared = get().towerCleared;
 
       const survivedHp = new Map(result.survivors.map((s) => [s.instId as string, s.currentHp]));
-      const healRate = restHealRate(get().facilities.rest);
       /**
        * 배치된 영웅 전체 — 유휴 exp에서 빼는 데 쓴다(파견의 `awayNow`와 같은 이유).
        * 배치자는 exp 대신 시설 산출을 올리므로, 둘 다 받으면 배치가 순이득이 되어
@@ -1152,10 +1202,14 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
              * 상한(최대 HP)은 battle.ts의 buildAlly가 clamp하므로 여기서는 계산만 한다 —
              * 스토어가 최대 HP를 다시 계산하면 잠재치·등급 규칙이 두 곳으로 갈라진다.
              */
+            /*
+              STEP 73 — 회복은 여기서 하지 않는다. 잔여 HP만 넘기고, 회복은 숙소에서 받는다(`innRest`).
+              아래 `restPending`이 "쉴 차례"를 기억한다.
+            */
             const hp = survivedHp.get(h.instId);
             if (hp != null && hp > 0) {
               const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
-              next = { ...next, currentHp: Math.min(max, hp + Math.round(max * healRate)) };
+              next = { ...next, currentHp: Math.min(max, hp) };
             }
           } else {
             /**
@@ -1210,6 +1264,14 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
          * 플레이어가 해제할 방법이 없다. 파견이 유령 레코드를 버리는 것과 같은 이유다.
          */
         assignments: pruneAssignments(s.assignments, (id) => !casualties.has(id)),
+        // 쉴 차례 — 이번 전투에서 살아 돌아온 부상자. 예전 차례는 갈아 끼운다(안 쉰 대가)
+        restPending: result.survivors
+          .filter((sv) => {
+            const h = s.roster.find((x) => x.instId === sv.instId);
+            if (!h || sv.currentHp <= 0) return false;
+            return sv.currentHp < statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+          })
+          .map((sv) => sv.instId),
         adventureOutcomes: off.outcomes,
         carriedPotions: 0,
         /**
@@ -1720,10 +1782,33 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
           return { ...h, currentHp: max };
         }),
         wallet: { ...s.wallet, gold: s.wallet.gold - cost },
+        // 전원이 만전이 됐으니 쉴 차례도 끝났다 — 남겨 두면 "쉴 수 있음"이 거짓으로 뜬다
+        restPending: [],
       }));
       // 재화를 쓴 결과이므로 즉시 저장한다 (upgradeFacility와 같은 원칙).
       saveRun(get());
       return { ok: true, healed: missingTotal, heroes: injured.length, spent: cost };
+    },
+
+    /**
+     * 숙소에서 쉰다(STEP 73). 무료이고, 쉴 차례인 영웅만 숙소 레벨만큼 회복한다.
+     * 회복량은 예전 자동 회복과 같은 공식(`innHeal`)이다 — 받기만 하면 예전과 HP가 같다.
+     */
+    innRest: () => {
+      const guests = innQuote(get());
+      if (guests.length === 0) {
+        // 대상이 없어도 차례는 비운다 — 죽었거나 이미 만전인 id가 남아 "쉴 수 있음"이 계속 뜨지 않게
+        if (get().restPending.length > 0) { set({ restPending: [] }); saveRun(get()); }
+        return { ok: false, reason: 'nobody' };
+      }
+      const after = new Map(guests.map((g) => [g.instId, g.after]));
+      set((s) => ({
+        roster: s.roster.map((h) => (after.has(h.instId) ? { ...h, currentHp: after.get(h.instId)! } : h)),
+        restPending: [],
+      }));
+      // HP가 바뀌었으므로 즉시 저장한다 — 안 하면 새로고침으로 한 번 더 쉴 수 있다
+      saveRun(get());
+      return { ok: true, healed: guests };
     },
 
     buyGear: (defId) => {
@@ -1998,6 +2083,7 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         codex: backfillCodex(saved.codex, saved.roster),
         facilities: saved.facilities,
         assignments: saved.assignments,
+        restPending: saved.restPending,
         gear: saved.gear,
         gearSeq: saved.gearSeq,
         battleCount: saved.battleCount,

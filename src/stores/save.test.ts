@@ -29,6 +29,7 @@ const sample = (): RunSlice => {
     maxFloorReached: 2,
     revisits: {},
     roster,
+    restPending: [],
     squads: [roster.slice(0, 2).map((h) => h.instId), []],
     lockedSquad: null,
     lastSortieSquad: 0,

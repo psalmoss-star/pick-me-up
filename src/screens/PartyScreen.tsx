@@ -30,6 +30,8 @@ import type { FloorSpec } from '../game/data/floors';
 import type { GearInstance, HeroInstId, HeroInstance } from '../game/types';
 
 export interface PartyScreenProps {
+  /** 무기창고의 공격력 보정(배수). 1이면 그리지 않는다 */
+  armoryMult?: number;
   roster: HeroInstance[];
   squads: HeroInstId[][];
   /** 지금 편성 중인 군 */
@@ -61,7 +63,7 @@ export interface PartyScreenProps {
  */
 export function PartyScreen({
   roster, squads, editing, onEditingChange, partyLimit,
-  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor, gear,
+  squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor, gear, armoryMult = 1,
 }: PartyScreenProps) {
   const gearIndex = new Map(gear.map((g) => [g.instId, g]));
   const bonusOf = (h: HeroInstance) => heroBonus(h.gear, gearIndex, gameData.heroes[h.defId]?.lineage);
@@ -309,6 +311,10 @@ export function PartyScreen({
 
       <SystemPanel compact>
         <Row label="파티 총 전투력" value={total.toLocaleString()} gold />
+        {/* 무기창고는 전투력 숫자에 들어 있지 않다(전투에서 공격력에 곱해진다) — 따로 적어야 보인다 */}
+        {armoryMult > 1 && (
+          <Row label="무기창고" value={`전투 중 공격 +${Math.round((armoryMult - 1) * 100)}%`} />
+        )}
         <Row label="평균 레벨" value={members.length ? `Lv.${avgLevel}` : '—'} />
         <Row
           label="속성 구성"

@@ -51,7 +51,7 @@ export type SavedRun = Pick<
   'floorIndex' | 'maxFloorReached' | 'revisits' | 'roster' | 'squads' | 'lockedSquad'
   | 'deathCount' | 'wallet' | 'gacha' | 'codex' | 'seenFirstLegendary' | 'towerCleared'
   | 'facilities' | 'gear' | 'gearSeq' | 'battleCount' | 'potions' | 'claimedQuests'
-  | 'materials' | 'dispatches' | 'assignments'
+  | 'materials' | 'dispatches' | 'assignments' | 'restPending'
   | 'stratagemLoadout' | 'stratagemResist' | 'fallback'
 >;
 
@@ -99,6 +99,8 @@ export function serialize(s: RunSlice): string {
        * "매 판 다시 꽂는" 잡일이 된다(파견을 저장하는 것과 같은 이유).
        */
       assignments: s.assignments,
+      /** 숙소에서 쉴 차례(STEP 73). 저장하지 않으면 새로고침으로 회복을 통째로 잃는다 */
+      restPending: s.restPending,
       /**
        * 책략 장착·적의 내성·군령. 장착과 군령은 **매 전투 다시 고르는 잡일**이 되면 안 되고,
        * 내성은 저장하지 않으면 새로고침으로 적의 기억이 지워진다.
@@ -410,6 +412,15 @@ export function deserialize(raw: string): SavedRun | null {
   }
 
   /*
+    숙소에서 쉴 차례는 STEP 73에서 추가됐다. 없는 세이브는 빈 목록으로 읽는다 — 그 세이브의 영웅들은
+    예전 규칙(전투 직후 자동 회복)으로 이미 회복을 받았다. 기본값이 안전하므로 SAVE_VERSION을 올리지 않는다.
+    살아 있는 로스터의 id만 남기고 중복은 버린다.
+  */
+  const rawPending = Array.isArray(r.restPending) ? (r.restPending as unknown[]) : [];
+  const restPending = [...new Set(rawPending.filter((id): id is HeroInstId =>
+    typeof id === 'string' && assignable.has(id as HeroInstId)))];
+
+  /*
     달성 과제는 STEP 8에서 추가됐다. 없는 세이브는 미달성으로 읽는다.
 
     정의에 없는 id는 버린다 — 과제를 빼거나 이름을 바꿨을 때 유령 id가 남으면
@@ -431,6 +442,7 @@ export function deserialize(raw: string): SavedRun | null {
       deathCount, wallet, gacha, codex, seenFirstLegendary, towerCleared, facilities,
       gear: fixedGear, gearSeq, battleCount, potions, claimedQuests, materials, dispatches,
       assignments,
+      restPending,
       /*
         책략은 2026-09-29에 추가됐다. 없는 세이브는 기본 장착·내성 없음·군령 없음으로 읽는다 —
         기본값이 안전하므로 SAVE_VERSION을 올리지 않는다(배치와 같은 판단).

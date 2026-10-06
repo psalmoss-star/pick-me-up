@@ -11,8 +11,8 @@
  * 수치 테이블 자체(단조 증가·범위 clamp)는 game/facilities.test.ts의 몫이다.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createRunStore, initialWallet, restQuote } from './runStore';
-import { loadRun } from './save';
+import { createRunStore, initialWallet, restQuote, innQuote } from './runStore';
+import { loadRun, deserialize, serialize } from './save';
 import { restHealRate, FACILITY_COST, FACILITY_MAX_LEVEL } from '../game/data/facilities';
 import { statsOfInstance } from '../game/stats';
 import { gameData } from '../game/data';
@@ -94,6 +94,7 @@ describe('층간 HP 유지', () => {
       });
       const party = s.getState().squads[0];
       fightOnce(s);
+      s.getState().innRest(); // 회복은 숙소에서 받는다(STEP 73)
       return party
         .map((id) => heroById(s, id))
         .filter((h) => !h.isDead)
@@ -115,12 +116,137 @@ describe('층간 HP 유지', () => {
     const s = store();
     const party = s.getState().squads[0];
     fightOnce(s);
+    s.getState().innRest(); // 회복은 숙소에서 받는다(STEP 73)
     for (const id of party) {
       const h = heroById(s, id);
       if (h.isDead) continue;
       const max = statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
       expect(h.currentHp).toBe(max);
     }
+  });
+});
+
+/**
+ * 숙소에서 쉬기(STEP 73) — 전투 뒤 자동 회복을 숙소에서 직접 받는 것으로 바꿨다.
+ *
+ * 지키려는 것:
+ *   1. 전투가 끝나도 저절로 낫지 않는다
+ *   2. 쉬면 **예전 자동 회복과 똑같은 HP**가 된다(측정 도구가 그 공식을 그대로 쓴다)
+ *   3. 쉴 차례는 한 번뿐이고, 직전 전투의 부상자만 대상이다
+ *   4. 쉴 차례는 저장된다
+ */
+describe('숙소에서 쉬기', () => {
+  const BOSS_FLOOR = 5; // 소모가 깊어 회복이 상한에 닿지 않는다
+  const afterBoss = (level = 1) => {
+    const s = store();
+    s.setState({ floorIndex: BOSS_FLOOR, facilities: { rest: level, training: 0, forge: 0, armory: 0 } });
+    const party = [...s.getState().squads[0]];
+    s.getState().start();
+    const survivors = new Map(s.getState().result!.survivors.map((x) => [x.instId, x.currentHp]));
+    s.getState().finish();
+    return { s, party, survivors };
+  };
+  const maxOf = (s: ReturnType<typeof store>, id: HeroInstId) => {
+    const h = heroById(s, id);
+    return statsOfInstance(h, gameData.heroes[h.defId], gameData.starScaling).hp;
+  };
+
+  it('전투가 끝나도 저절로 낫지 않는다 — 잔여 HP 그대로다', () => {
+    const { s, survivors } = afterBoss();
+    expect(survivors.size).toBeGreaterThan(0);
+    for (const [id, hp] of survivors) expect(heroById(s, id).currentHp).toBe(Math.min(hp, maxOf(s, id)));
+  });
+
+  it('쉬면 예전 자동 회복과 똑같은 HP가 된다 — 잔여 + 최대 × 회복률', () => {
+    for (const level of [0, 1, 2, 3]) {
+      const { s, survivors } = afterBoss(level);
+      const quote = innQuote(s.getState());
+      const r = s.getState().innRest();
+      expect(r.ok).toBe(true);
+      // 화면이 보여 준 견적과 실제 결과가 같다
+      if (r.ok) expect(r.healed).toEqual(quote);
+      let healed = 0;
+      for (const [id, hp] of survivors) {
+        const max = maxOf(s, id);
+        const expected = Math.min(max, hp + Math.round(max * restHealRate(level)));
+        expect(heroById(s, id).currentHp).toBe(expected);
+        if (expected > hp) healed++;
+      }
+      expect(healed).toBeGreaterThan(0);
+    }
+  });
+
+  it('쉴 차례는 한 번뿐이다', () => {
+    const { s } = afterBoss();
+    expect(s.getState().restPending.length).toBeGreaterThan(0);
+    expect(s.getState().innRest().ok).toBe(true);
+    expect(s.getState().restPending).toEqual([]);
+    const hp = s.getState().roster.map((h) => h.currentHp);
+    expect(s.getState().innRest()).toEqual({ ok: false, reason: 'nobody' });
+    expect(s.getState().roster.map((h) => h.currentHp)).toEqual(hp);
+  });
+
+  it('쉴 차례는 직전 전투의 부상자뿐이다 — 대기 중인 부상자는 공짜로 낫지 않는다', () => {
+    const { s, party } = afterBoss();
+    const bench = s.getState().roster.find((h) => !party.includes(h.instId) && !h.isDead)!;
+    const half = Math.floor(maxOf(s, bench.instId) / 2);
+    s.setState({ roster: s.getState().roster.map((h) => (h.instId === bench.instId ? { ...h, currentHp: half } : h)) });
+    expect(s.getState().restPending).not.toContain(bench.instId);
+    s.getState().innRest();
+    expect(heroById(s, bench.instId).currentHp).toBe(half);
+  });
+
+  it('다치지 않고 돌아온 영웅은 쉴 차례에 넣지 않는다', () => {
+    const s = store();
+    fightOnce(s);
+    for (const id of s.getState().restPending) {
+      const h = heroById(s, id);
+      expect(h.currentHp).toBeGreaterThan(0);
+      expect(h.currentHp).toBeLessThan(maxOf(s, id));
+    }
+  });
+
+  it('쉬지 않고 다음 전투를 치르면 예전 차례는 사라진다', () => {
+    const { s } = afterBoss();
+    const first = [...s.getState().restPending];
+    expect(first.length).toBeGreaterThan(0);
+    // 1군을 비우고 다른 영웅 하나로 쉬운 층을 치른다
+    const other = s.getState().roster.find((h) => !h.isDead && !first.includes(h.instId))!;
+    s.setState({ floorIndex: 0, squads: [[other.instId], []] });
+    fightOnce(s);
+    for (const id of first) expect(s.getState().restPending).not.toContain(id);
+  });
+
+  it('쉴 차례는 저장된다 — 새로고침으로 회복을 잃지 않는다', () => {
+    const { s } = afterBoss();
+    const pending = [...s.getState().restPending];
+    const again = store();
+    again.getState().hydrate(deserialize(serialize(s.getState()))!);
+    expect(again.getState().restPending).toEqual(pending);
+    expect(again.getState().innRest().ok).toBe(true);
+  });
+
+  it('쉬고 나면 저장된다 — 새로고침으로 한 번 더 쉴 수 없다', () => {
+    const { s } = afterBoss();
+    s.getState().innRest();
+    const again = store();
+    again.getState().hydrate(deserialize(serialize(s.getState()))!);
+    expect(again.getState().restPending).toEqual([]);
+    expect(again.getState().innRest().ok).toBe(false);
+  });
+
+  it('금을 내고 전원 회복하면 쉴 차례도 끝난다', () => {
+    const { s } = afterBoss();
+    s.setState({ wallet: { ...s.getState().wallet, gold: 1_000_000 } });
+    expect(s.getState().rest().ok).toBe(true);
+    expect(s.getState().restPending).toEqual([]);
+  });
+
+  it('차례가 남은 채 쓰러진 영웅은 견적에서 빠진다', () => {
+    const { s } = afterBoss();
+    const id = s.getState().restPending[0];
+    s.setState({ roster: s.getState().roster.map((h) => (h.instId === id ? { ...h, isDead: true } : h)) });
+    expect(innQuote(s.getState()).some((g) => g.instId === id)).toBe(false);
   });
 });
 

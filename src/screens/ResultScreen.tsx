@@ -86,6 +86,12 @@ export interface ResultScreenProps {
   report?: ScoutReport | null;
   route?: number;
   onFinish: () => void;
+  /**
+   * 다쳐서 돌아온 생존자 수(STEP 73). 0보다 크고 `onInn`이 있으면 "숙소에서 쉬기" 버튼이 뜬다.
+   * 회복은 이제 저절로 되지 않는다 — 전투가 끝난 자리에서 숙소로 가는 길을 열어 둔다.
+   */
+  innCount?: number;
+  onInn?: () => void;
 }
 
 /**
@@ -95,7 +101,7 @@ export interface ResultScreenProps {
 export function ResultScreen({
   result, roster, floor, questGrants = [], towerCleared = false, totalDeaths = 0,
   rewardMult = 1, levelUps = [], materials = {}, gearDrop = null, report = null, route = 0,
-  offTower = null, trainingLevel = 0, onFinish,
+  offTower = null, trainingLevel = 0, onFinish, innCount = 0, onInn,
 }: ResultScreenProps) {
   const win = result.outcome === 'victory';
   const find = (id: string) => roster.find((h) => h.instId === id);
@@ -439,8 +445,18 @@ export function ResultScreen({
       {/* 탑 밖 — 획득·손실 다음, 버튼 위. 탑에 간 사이 남은 이들에게 있었던 일 */}
       {offTower && <OffTowerPanel off={offTower} cleared={win} trainingLevel={trainingLevel} />}
 
-      <div style={{ textAlign: 'center', marginTop: 30 }}>
-        <Button tone={win ? 'rare' : 'normal'} onClick={onFinish}>
+      {/*
+        숙소로 가는 길(STEP 73). 다친 생존자가 있을 때만 — 엔딩에서는 띄우지 않는다(다음 층이 없다).
+        숙소 버튼을 앞에 둔다: 대부분의 판에서 눌러야 하는 쪽이다.
+      */}
+      <div style={{ textAlign: 'center', marginTop: 30, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+        {!ending && innCount > 0 && onInn && (
+          <>
+            <Button tone="rare" onClick={onInn}>숙소에서 쉬기 · {innCount}명</Button>
+            <div style={{ fontSize: 11, color: T.dim }}>다친 영웅은 숙소에서 쉬어야 회복한다</div>
+          </>
+        )}
+        <Button tone={win && !(innCount > 0 && onInn && !ending) ? 'rare' : 'normal'} onClick={onFinish}>
           {ending ? '기록을 남긴다' : '대기실로'}
         </Button>
       </div>
