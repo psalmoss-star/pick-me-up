@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   GEAR_DEFS, GEAR_SLOTS, ladderTarget, gearTag, ladderSet, nextShopTier, shopStock, tierOf,
-  tierFirstFloor, TIER_COUNT, unlockedTierOf,
+  tierFirstFloor, TIER_COUNT, unlockedTierOf, relicNext, RELIC_FIRST_TIER,
 } from './data/gear';
 import { refPartyAt, tierRefFloor } from './data/refParty';
 import { bonusOf, makeGear } from './gear';
@@ -57,13 +57,13 @@ describe('기존 장비 재배치', () => {
     for (const id of ['w_chipped', 'a_tatter', 't_charm']) expect([at(id).tier, at(id).line]).toEqual([1, 'supply']);
     for (const id of ['w_soldier', 'a_guard', 't_swift']) expect([at(id).tier, at(id).line]).toEqual([1, 'elite']);
     for (const id of ['w_emberfang', 'a_bulwark', 't_bloodpact']) expect([at(id).tier, at(id).line]).toEqual([2, 'elite']);
-    for (const id of ['w_towerbane', 'a_ashshroud', 't_lastlight']) expect(at(id).line).toBe('relic');
+    for (const id of ['w_towerbane', 'a_ashshroud', 't_lastlight']) expect([at(id).tier, at(id).line]).toEqual([2, 'relic']);
   });
 
   it('표시 꼬리표', () => {
     expect(gearTag(GEAR_DEFS['w_chipped' as GearDefId])).toBe('1단계 · 보급');
     expect(gearTag(GEAR_DEFS['w_emberfang' as GearDefId])).toBe('2단계 · 정예');
-    expect(gearTag(GEAR_DEFS['w_towerbane' as GearDefId])).toBe('유물');
+    expect(gearTag(GEAR_DEFS['w_towerbane' as GearDefId])).toBe('2단계 · 유물');
   });
 });
 
@@ -192,5 +192,123 @@ describe('rank 정리', () => {
   it('rank는 line에서 정해진다 — supply=common, elite=rare, relic=relic', () => {
     const want = { supply: 'common', elite: 'rare', relic: 'relic' } as const;
     for (const d of Object.values(GEAR_DEFS)) expect(d.rank, d.id).toBe(want[d.line]);
+  });
+});
+
+/**
+ * 유물 재련(2026-10-06) — 유물도 사다리에 있다. 2~10단계, 같은 단계 정예보다 한 칸 위.
+ * 2단계는 기존 id 그대로다(세이브의 유물이 저절로 2단계가 된다).
+ */
+describe('유물 — 2~10단계', () => {
+  const rawPower = (b: GearBonus) =>
+    (b.hp ?? 0) * W.hp + (b.atk ?? 0) * W.atk + (b.def ?? 0) * W.def + (b.spd ?? 0) * W.spd + (b.crit ?? 0) * W.crit;
+  const power = (id: GearDefId) => rawPower(bonusOf(makeGear(id, 1)));
+
+  it('2~10단계마다 유물 한 벌이 있고 1단계에는 없다', () => {
+    expect(ladderSet(1, 'relic')).toEqual([]);
+    for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+      const set = ladderSet(t, 'relic');
+      expect(set.map((d) => d.slot), `${t}단계`).toEqual(['weapon', 'armor', 'trinket']);
+      for (const d of set) {
+        expect([d.tier, d.line, d.rank]).toEqual([t, 'relic', 'relic']);
+        expect(d.price, d.id).toBeUndefined();
+      }
+    }
+  });
+
+  it('id 규칙 — 2단계는 기존 id, 3단계부터 _t{단계}. 이름·설명은 단계가 올라도 같다', () => {
+    const family = { weapon: 'w_towerbane', armor: 'a_ashshroud', trinket: 't_lastlight' } as const;
+    for (const slot of GEAR_SLOTS) {
+      const first = GEAR_DEFS[family[slot] as GearDefId];
+      for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+        const d = ladderSet(t, 'relic').find((x) => x.slot === slot)!;
+        expect(d.id).toBe(t === RELIC_FIRST_TIER ? family[slot] : `${family[slot]}_t${t}`);
+        expect(d.name).toBe(first.name);
+        expect(d.lore).toBe(first.lore);
+      }
+    }
+  });
+
+  it('relicNext — 2단계에서 10단계까지 한 단계씩 이어지고 끝에서 null', () => {
+    for (const start of ['w_towerbane', 'a_ashshroud', 't_lastlight'] as const) {
+      let id: GearDefId | null = start as GearDefId;
+      const tiers: number[] = [];
+      while (id) {
+        tiers.push(GEAR_DEFS[id].tier);
+        const next: GearDefId | null = relicNext(id);
+        if (next) expect(GEAR_DEFS[next].slot).toBe(GEAR_DEFS[id].slot);
+        id = next;
+      }
+      expect(tiers).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+  });
+
+  it('relicNext — 유물이 아니면 null', () => {
+    expect(relicNext('w_chipped' as GearDefId)).toBeNull();
+    expect(relicNext('g_t3_elite_weapon' as GearDefId)).toBeNull();
+    expect(relicNext('nope' as GearDefId)).toBeNull();
+  });
+
+  it('같은 슬롯이면 위 단계 유물이 더 강하다', () => {
+    for (const slot of GEAR_SLOTS) {
+      for (let t = RELIC_FIRST_TIER + 1; t <= TIER_COUNT; t++) {
+        const prev = ladderSet(t - 1, 'relic').find((d) => d.slot === slot)!;
+        const cur = ladderSet(t, 'relic').find((d) => d.slot === slot)!;
+        expect(power(cur.id), `${slot} ${t - 1}→${t}단계`).toBeGreaterThan(power(prev.id));
+      }
+    }
+  });
+
+  /**
+   * 재련 화면은 전후 수치를 나란히 보인다 — 합(전력)이 올라도 공격이 29 → 27로 내려가면
+   * "올렸는데 약해졌다"로 읽힌다(첫 생성에서 5·8단계 무기가 실제로 그랬다, 치명이 오르며 공격이 밀렸다).
+   */
+  it('재련하면 어떤 능력치도 내려가지 않는다', () => {
+    for (const slot of GEAR_SLOTS) {
+      for (let t = RELIC_FIRST_TIER + 1; t <= TIER_COUNT; t++) {
+        const prev = ladderSet(t - 1, 'relic').find((d) => d.slot === slot)!.base;
+        const cur = ladderSet(t, 'relic').find((d) => d.slot === slot)!.base;
+        for (const k of Object.keys(prev) as (keyof GearBonus)[]) {
+          expect(cur[k] ?? 0, `${slot} ${t - 1}→${t}단계 ${k}`).toBeGreaterThanOrEqual(prev[k] ?? 0);
+        }
+      }
+    }
+  });
+
+  it('같은 단계면 유물이 정예보다 강하다 — 슬롯마다', () => {
+    for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+      for (const slot of GEAR_SLOTS) {
+        const e = ladderSet(t, 'elite').find((d) => d.slot === slot)!;
+        const r = ladderSet(t, 'relic').find((d) => d.slot === slot)!;
+        expect(power(r.id), `${t}단계 ${slot}`).toBeGreaterThan(power(e.id));
+      }
+    }
+  });
+
+  it('단계 기준 파티(첫 층)에서 유물 한 벌 비율이 목표 범위 안', () => {
+    for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+      const r = setPowerRatio(refPartyAt(tierRefFloor(t)), ladderSet(t, 'relic').map((d) => bonusOf(makeGear(d.id, 1))));
+      const { lo, hi } = ladderTarget(t, 'relic');
+      expect(r, `${t}단계 ${(r * 100).toFixed(1)}%`).toBeGreaterThanOrEqual(lo);
+      expect(r, `${t}단계 ${(r * 100).toFixed(1)}%`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it('단계 안 모든 층의 기준 파티에 대해 유물 상한을 넘지 않는다', () => {
+    for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+      for (let f = tierFirstFloor(t); f <= tierFirstFloor(t) + 9; f++) {
+        const r = setPowerRatio(refPartyAt(f), ladderSet(t, 'relic').map((d) => bonusOf(makeGear(d.id, 1))));
+        expect(r, `${f}층 ${(r * 100).toFixed(1)}%`).toBeLessThanOrEqual(ladderTarget(t, 'relic').hi);
+      }
+    }
+  });
+
+  it('유물의 능력치 구성 — 무기 공격·치명·속도 / 방어구 체력·방어 / 장신구 체력·속도·치명', () => {
+    for (let t = RELIC_FIRST_TIER; t <= TIER_COUNT; t++) {
+      const [w, a, tr] = ladderSet(t, 'relic').map((d) => Object.keys(d.base).sort());
+      expect(w, `${t}단계 무기`).toEqual(['atk', 'crit', 'spd']);
+      expect(a, `${t}단계 방어구`).toEqual(['def', 'hp']);
+      expect(tr, `${t}단계 장신구`).toEqual(['crit', 'hp', 'spd']);
+    }
   });
 });

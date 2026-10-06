@@ -45,6 +45,8 @@ export const RANK_ORDER: Record<GearRank, number> = {
 /** 단계 수 — 10층마다 하나, 100층까지 */
 export const TIER_COUNT = 10;
 export const TIER_SPAN = 10;
+/** 유물이 시작하는 단계 — 제작(10·12·15층)이 만드는 것이 이 단계다 */
+export const RELIC_FIRST_TIER = 2;
 
 /** 층 → 단계(1~10). 범위 밖은 양 끝으로 접는다 */
 export function tierOf(floorId: number): number {
@@ -61,9 +63,9 @@ export const LINE_LABEL: Record<GearLine, string> = {
   relic: '유물',
 };
 
-/** 화면 꼬리표 — "3단계 · 보급". 유물은 단계가 없다 */
+/** 화면 꼬리표 — "3단계 · 보급". 유물도 단계가 있다(재련, 2026-10-06) */
 export function gearTag(def: GearDef): string {
-  return def.line === 'relic' ? LINE_LABEL.relic : `${def.tier}단계 · ${LINE_LABEL[def.line]}`;
+  return `${def.tier}단계 · ${LINE_LABEL[def.line]}`;
 }
 
 export const GEAR_TUNING = {
@@ -139,8 +141,9 @@ const g = (id: string) => id as GearDefId;
  * relic은 **상점에 없다**(price 없음) — 제작·드롭·과제로만 나온다.
  * 금으로 최상급을 살 수 있으면 등반이 아니라 지갑이 강함을 정한다.
  *
- * 장비 사다리(2026-10-02): 기존 12종은 1·2단계와 유물이다 — common = 1단계 보급,
+ * 장비 사다리(2026-10-02): 기존 9종은 1·2단계다 — common = 1단계 보급,
  * fine = 1단계 정예, rare = 2단계 정예. 2단계 이상의 나머지는 `gearLadder.ts`(생성)에서 온다.
+ * 유물 3종은 아래 `RELIC_DEFS`가 만든다(재련, 2026-10-06 — 유물도 2~10단계가 있다).
  * id는 세이브에 남으므로 바꾸지 않는다.
  */
 const LEGACY_DEFS: GearDef[] = ([
@@ -149,22 +152,17 @@ const LEGACY_DEFS: GearDef[] = ([
       lore: '누군가 끝까지 쥐고 있었던 자국이 남았다.' },
     { id: 'w_soldier', name: '병사의 장검', slot: 'weapon', rank: 'rare', tier: 1, line: 'elite', base: { atk: 14, crit: 0.02 } },
     { id: 'w_emberfang', name: '잿송곳니', slot: 'weapon', rank: 'rare', tier: 2, line: 'elite', base: { atk: 16, crit: 0.02 } }, // 사다리 2단계 정예에 맞춤(atk 38 → 16·치명 4 → 2%, 2026-10-02)
-    { id: 'w_towerbane', name: '탑을 베는 것', slot: 'weapon', rank: 'relic', tier: 0, line: 'relic', base: { atk: 56, crit: 0.07, spd: 4 },
-      lore: '이름만 남고 주인은 남지 않았다.' },
 
     // ── 방어구 ──
     { id: 'a_tatter', name: '해진 가죽갑옷', slot: 'armor', rank: 'common', tier: 1, line: 'supply', base: { hp: 26, def: 2 }, price: 220 },
     { id: 'a_guard', name: '수비대 사슬갑옷', slot: 'armor', rank: 'rare', tier: 1, line: 'elite', base: { hp: 45, def: 4 } },
     { id: 'a_bulwark', name: '성벽 판금', slot: 'armor', rank: 'rare', tier: 2, line: 'elite', base: { hp: 60, def: 6, spd: -3 },
       lore: '무겁다. 그만큼 오래 버틴다.' },
-    { id: 'a_ashshroud', name: '재의 장막', slot: 'armor', rank: 'relic', tier: 0, line: 'relic', base: { hp: 330, def: 34 } },
 
     // ── 장신구 ──
     { id: 't_charm', name: '닳은 부적', slot: 'trinket', rank: 'common', tier: 1, line: 'supply', base: { spd: 2, crit: 0.01 }, price: 220 },
     { id: 't_swift', name: '질풍의 고리', slot: 'trinket', rank: 'rare', tier: 1, line: 'elite', base: { spd: 3, crit: 0.02 } },
     { id: 't_bloodpact', name: '피의 서약', slot: 'trinket', rank: 'rare', tier: 2, line: 'elite', base: { atk: 8, crit: 0.02 } }, // 사다리 2단계 정예에 맞춤(atk 18 → 8·치명 6 → 2%, 2026-10-02)
-    { id: 't_lastlight', name: '마지막 불빛', slot: 'trinket', rank: 'relic', tier: 0, line: 'relic', base: { hp: 150, spd: 12, crit: 0.08 },
-      lore: '꺼지기 직전이 가장 밝다.' },
   ] satisfies Array<Omit<GearDef, 'id'> & { id: string }>)
   .map((d) => ({ ...d, id: g(d.id) } as GearDef));
 
@@ -180,6 +178,8 @@ const LEGACY_DEFS: GearDef[] = ([
 export const LADDER_TARGET = {
   supply: { goal: 0.03, lo: 0.02, hi: 0.04 },
   elite: { goal: 0.05, lo: 0.04, hi: 0.065 },
+  /** 유물 — 정예보다 한 칸 위(재련, 2026-10-06). `climb-check --gear relic`으로 고른다 */
+  relic: { goal: 0.09, lo: 0.071, hi: 0.116 },
 } as const;
 
 /**
@@ -197,10 +197,12 @@ export const LADDER_TARGET_TIER1 = {
 export const LADDER_TARGET_TIER2 = {
   supply: { goal: 0.05, lo: 0.04, hi: 0.06 },
   elite: { goal: 0.09, lo: 0.075, hi: 0.105 },
+  relic: { goal: 0.17, lo: 0.14, hi: 0.20 },
 } as const;
 
-/** 단계·계열의 비율 목표 — 생성기와 테스트가 같이 쓴다 */
-export function ladderTarget(tier: number, line: 'supply' | 'elite') {
+/** 단계·계열의 비율 목표 — 생성기와 테스트가 같이 쓴다. 유물은 2단계부터라 1단계 값이 없다 */
+export function ladderTarget(tier: number, line: GearLine) {
+  if (line === 'relic') return (tier <= RELIC_FIRST_TIER ? LADDER_TARGET_TIER2 : LADDER_TARGET).relic;
   const t = tier <= 1 ? LADDER_TARGET_TIER1 : tier === 2 ? LADDER_TARGET_TIER2 : LADDER_TARGET;
   return t[line];
 }
@@ -219,26 +221,57 @@ const LINE_NOUN: Record<'supply' | 'elite', Record<GearSlot, string>> = {
 };
 
 /** 2단계 이상 사다리 장비 — 수치는 생성 파일(`gearLadder.ts`)에서 온다 */
-const LADDER_DEFS: GearDef[] = GEAR_LADDER.map((r) => ({
+const LADDER_DEFS: GearDef[] = GEAR_LADDER.flatMap((r) => (r.line === 'relic' ? [] : [{
   id: g(`g_t${r.tier}_${r.line}_${r.slot}`),
   name: `${TIER_WORD[r.tier]} ${LINE_NOUN[r.line][r.slot]}`,
   slot: r.slot,
-  rank: r.line === 'supply' ? 'common' : 'rare',
+  rank: r.line === 'supply' ? 'common' as const : 'rare' as const,
   tier: r.tier,
   line: r.line,
   base: r.base,
   ...(r.line === 'supply' ? { price: r.price } : {}),
-}));
+}]));
+
+/**
+ * 유물 가족 — 슬롯마다 하나. 이름·설명은 단계가 올라도 같다(같은 물건을 재련한다).
+ * 2단계 id는 옛 유물 id 그대로다 — 세이브의 유물이 저절로 2단계가 된다.
+ */
+const RELIC_FAMILY: Record<GearSlot, { id: string; name: string; lore?: string }> = {
+  weapon: { id: 'w_towerbane', name: '탑을 베는 것', lore: '이름만 남고 주인은 남지 않았다.' },
+  armor: { id: 'a_ashshroud', name: '재의 장막' },
+  trinket: { id: 't_lastlight', name: '마지막 불빛', lore: '꺼지기 직전이 가장 밝다.' },
+};
+const relicId = (slot: GearSlot, tier: number) =>
+  g(tier === RELIC_FIRST_TIER ? RELIC_FAMILY[slot].id : `${RELIC_FAMILY[slot].id}_t${tier}`);
+
+/** 유물 2~10단계 — 수치는 생성 파일에서 온다. 상점에 없다(price 없음) */
+const RELIC_DEFS: GearDef[] = GEAR_LADDER.flatMap((r) => (r.line !== 'relic' ? [] : [{
+  id: relicId(r.slot, r.tier),
+  name: RELIC_FAMILY[r.slot].name,
+  slot: r.slot,
+  rank: 'relic' as const,
+  tier: r.tier,
+  line: 'relic' as const,
+  base: r.base,
+  ...(RELIC_FAMILY[r.slot].lore ? { lore: RELIC_FAMILY[r.slot].lore } : {}),
+}]));
 
 export const GEAR_DEFS: Record<GearDefId, GearDef> = Object.fromEntries(
-  [...LEGACY_DEFS, ...LADDER_DEFS].map((d) => [d.id, d]),
+  [...LEGACY_DEFS, ...LADDER_DEFS, ...RELIC_DEFS].map((d) => [d.id, d]),
 ) as Record<GearDefId, GearDef>;
 
 /** 단계·계열의 한 벌 — [무기, 방어구, 장신구] 순. 빠진 슬롯은 건너뛴다 */
-export function ladderSet(tier: number, line: 'supply' | 'elite'): GearDef[] {
+export function ladderSet(tier: number, line: GearLine): GearDef[] {
   return GEAR_SLOTS
     .map((slot) => Object.values(GEAR_DEFS).find((d) => d.tier === tier && d.line === line && d.slot === slot))
     .filter((d): d is GearDef => !!d);
+}
+
+/** 재련하면 되는 다음 단계 유물. 유물이 아니거나 마지막 단계면 null */
+export function relicNext(defId: GearDefId): GearDefId | null {
+  const d = GEAR_DEFS[defId];
+  if (!d || d.line !== 'relic' || d.tier >= TIER_COUNT) return null;
+  return relicId(d.slot, d.tier + 1);
 }
 
 /**

@@ -2,7 +2,7 @@
  * 장비 사다리 수치 생성 — `npx tsx scripts/gear-ladder.mts [--write]`
  *
  * 단계 t의 기준 파티(refPartyAt(tierRefFloor(t)))에 한 벌을 입혔을 때 파티 전투력이
- * 보급 +15% / 정예 +25%가 되도록 슬롯별 크기를 푼다. 전투력은 스탯의 가중합(선형)이라
+ * `ladderTarget`의 목표(보급·정예·유물)가 되도록 슬롯별 크기를 푼다. 전투력은 스탯의 가중합(선형)이라
  * 닫힌 식으로 풀린다. 결과를 setPowerRatio로 다시 재서 허용 범위를 확인하고,
  * --write면 src/game/data/gearLadder.ts에 쓴다(floor-tune --write와 같은 방식).
  *
@@ -20,13 +20,14 @@ import { gameData, FLOORS } from '../src/game/data';
 import { floorRewards } from '../src/game/data/floors';
 import type { GearBonus, GearSlot } from '../src/game/types';
 
-type Line = 'supply' | 'elite';
+type Line = 'supply' | 'elite' | 'relic';
 const SLOTS: GearSlot[] = ['weapon', 'armor', 'trinket'];
 const SHARE: Record<GearSlot, number> = { weapon: 0.4, armor: 0.35, trinket: 0.25 };
-/** 단계와 무관한 고정 부분 */
+/** 단계와 무관한 고정 부분. 유물은 모양이 다르다 — 무기에 속도가 붙고 장신구는 체력으로 큰다 */
 const FIXED: Record<Line, Record<GearSlot, GearBonus>> = {
   supply: { weapon: { crit: 0.02 }, armor: {}, trinket: { spd: 4, crit: 0.02 } },
   elite: { weapon: { crit: 0.04 }, armor: {}, trinket: { spd: 8, crit: 0.03 } },
+  relic: { weapon: { crit: 0.05, spd: 4 }, armor: {}, trinket: { spd: 10, crit: 0.05 } },
 };
 const raw = (b: GearBonus) =>
   (b.hp ?? 0) * W.hp + (b.atk ?? 0) * W.atk + (b.def ?? 0) * W.def + (b.spd ?? 0) * W.spd + (b.crit ?? 0) * W.crit;
@@ -78,6 +79,7 @@ function solve(tier: number, line: Line, slot: GearSlot): GearBonus {
     const u = rest / (11 * W.hp + W.def);
     return { hp: Math.max(1, Math.round(11 * u)), def: Math.max(1, Math.round(u)) };
   }
+  if (line === 'relic' && slot === 'trinket') return { ...fixed, hp: Math.max(1, Math.round(rest / W.hp)) };
   return { ...fixed, atk: Math.max(1, Math.round(rest / W.atk)) };
 }
 
@@ -111,19 +113,36 @@ function atLeastPrev(base: GearBonus, prev: GearBonus | undefined): GearBonus {
   return out;
 }
 
+/**
+ * 유물은 능력치 **하나하나**가 이전 단계 이상이어야 한다 — 재련 화면이 전후 수치를 나란히 보이므로
+ * 합이 올라도 "공격 29 → 27"이 찍히면 올렸는데 약해진 것으로 읽힌다(치명이 오르며 공격이 밀린 경우).
+ * 보급·정예는 새로 사거나 줍는 물건이라 같은 줄에서 비교되지 않는다 — 기존 수치를 흔들지 않으려 유물에만 건다.
+ */
+function noStatDrop(base: GearBonus, prev: GearBonus | undefined): GearBonus {
+  if (!prev) return base;
+  const out: GearBonus = { ...base };
+  for (const k of Object.keys(prev) as (keyof GearBonus)[]) {
+    if ((out[k] ?? 0) < (prev[k] ?? 0)) out[k] = prev[k];
+  }
+  return out;
+}
+
 const rows: string[] = [];
 console.log('\n  단계 | 계열   | 비율');
 for (let t = 1; t <= TIER_COUNT; t++) {
-  for (const line of ['supply', 'elite'] as Line[]) {
+  for (const line of ['supply', 'elite', 'relic'] as Line[]) {
+    // 유물은 2단계부터다 — 제작이 10·12·15층에 열린다
+    if (line === 'relic' && t < 2) continue;
     // 기존 장비가 차지한 자리(1단계 보급·정예, 2단계 정예)는 생성하지 않고 비율만 보고한다
-    const legacy = t === 1 || (t === 2 && line === 'elite');
+    const legacy = line !== 'relic' && (t === 1 || (t === 2 && line === 'elite'));
     const set = SLOTS.map((slot) => {
       if (legacy) {
         const d = Object.values(GEAR_DEFS).find((x) => x.tier === t && x.line === line && x.slot === slot)!;
         prevBase.set(`${line}:${slot}`, d.base);
         return d.base;
       }
-      const base = atLeastPrev(solve(t, line, slot), prevBase.get(`${line}:${slot}`));
+      const lifted = atLeastPrev(solve(t, line, slot), prevBase.get(`${line}:${slot}`));
+      const base = line === 'relic' ? noStatDrop(lifted, prevBase.get(`${line}:${slot}`)) : lifted;
       prevBase.set(`${line}:${slot}`, base);
       rows.push(`  { tier: ${t}, line: '${line}', slot: '${slot}', base: ${JSON.stringify(base)}${line === 'supply' ? `, price: ${price(t)}` : ''} },`);
       return base;
@@ -149,7 +168,7 @@ import type { GearBonus, GearSlot } from '../types';
 
 export interface LadderRow {
   tier: number;
-  line: 'supply' | 'elite';
+  line: 'supply' | 'elite' | 'relic';
   slot: GearSlot;
   base: GearBonus;
   price?: number;

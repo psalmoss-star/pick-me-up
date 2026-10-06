@@ -270,7 +270,7 @@ export type GearRank = 'common' | 'fine' | 'rare' | 'relic';
  * 장비 계열(2026-10-02 장비 성장 사다리).
  *   supply — 보급형. 그 단계에 들어서면 상점에 열리고 일반 층에서도 떨어진다
  *   elite  — 정예. 그 단계 보스가 확정으로, 모험이 확률로 준다. 상점에 없다
- *   relic  — 유물. 제작·최종 과제로만. 단계 사다리 밖이다
+ *   relic  — 유물. 제작·최종 과제로만. 대장간에서 재련해 단계를 올린다(2~10단계)
  */
 export type GearLine = 'supply' | 'elite' | 'relic';
 
@@ -299,7 +299,7 @@ export interface GearDef {
   name: string;
   slot: GearSlot;
   rank: GearRank;
-  /** 단계 1~10 — 10층마다 하나(`tierOf`). 유물은 정해진 단계가 없어 0 */
+  /** 단계 1~10 — 10층마다 하나(`tierOf`). 유물은 2~10 */
   tier: number;
   line: GearLine;
   /** 강화 0단계 기준 보정치 */
