@@ -80,6 +80,14 @@ describe('과제 정의', () => {
     }
   });
 
+  it('최종 층 과제의 유물은 10단계다 — 100층에서 2단계 유물을 받으면 받는 순간 쓸모가 없다', () => {
+    const relics = QUESTS
+      .filter((q) => q.reward.gear != null && GEAR_DEFS[q.reward.gear].line === 'relic')
+      .map((q) => GEAR_DEFS[q.reward.gear!]);
+    expect(relics.length).toBe(2);
+    for (const d of relics) expect(d.tier, d.id).toBe(10);
+  });
+
   it('questsForFloor는 해당 층 것만 돌려준다', () => {
     for (const f of FLOORS) {
       for (const q of questsForFloor(f.id)) expect(q.floorId).toBe(f.id);

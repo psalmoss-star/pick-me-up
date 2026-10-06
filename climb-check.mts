@@ -19,7 +19,7 @@ import { gainExp } from './src/game/progression';
 import type {
   GearInstance, GearInstId, GearSlot, HeroDefId, HeroInstId, HeroInstance, Star,
 } from './src/game/types';
-import { GEAR_DEFS, ladderSet, tierOf } from './src/game/data/gear';
+import { RELIC_FIRST_TIER, ladderSet, tierOf } from './src/game/data/gear';
 import { makeGear } from './src/game/gear';
 
 /**
@@ -31,12 +31,10 @@ const GEAR_ARG = process.argv.includes('--gear')
   : null;
 
 /**
- * --gear relic|relic1 — 유물 한 벌(제작 3종)이 사다리 옆에서 얼마나 센지 재는 측정.
- * 유물은 단계가 없으므로 재료가 모이는 21층부터 입힌 것으로 치고, 그 전은 정예다.
- * relic = 전원(상한), relic1 = 첫 출전자 1명만(30층까지 재료로 닿는 현실적인 양), 나머지는 정예.
+ * --gear relic|relic1 — 유물 한 벌이 사다리 옆에서 얼마나 센지 재는 측정.
+ * 층 단계의 유물을 입힌다. 유물은 2단계(11층)부터라 그 전은 정예다.
+ * relic = 전원(상한), relic1 = 첫 출전자 1명만, 나머지는 정예.
  */
-const RELIC_FROM = 21;
-const RELIC_SET = Object.values(GEAR_DEFS).filter((d) => d.line === 'relic');
 
 /** 단계별 한 벌 인벤토리 — 영웅마다 같은 장비를 따로 입힌 것으로 친다(인스턴스 id만 다르게) */
 function gearUp(
@@ -44,12 +42,13 @@ function gearUp(
 ): { party: HeroInstance[]; inventory?: Map<GearInstId, GearInstance> } {
   if (!GEAR_ARG) return { party: roster };
   const relicMode = GEAR_ARG === 'relic' || GEAR_ARG === 'relic1';
-  const ladder = ladderSet(tierOf(floorId), relicMode ? 'elite' : GEAR_ARG);
+  const tier = tierOf(floorId);
+  const ladder = ladderSet(tier, relicMode ? 'elite' : GEAR_ARG);
+  const relics = relicMode && tier >= RELIC_FIRST_TIER ? ladderSet(tier, 'relic') : null;
   const inventory = new Map<GearInstId, GearInstance>();
   const party = roster.map((h, i) => {
     const gear: Partial<Record<GearSlot, GearInstId>> = {};
-    const wearsRelic = relicMode && floorId >= RELIC_FROM && (GEAR_ARG === 'relic' || i === 0);
-    const set = wearsRelic ? RELIC_SET : ladder;
+    const set = relics && (GEAR_ARG === 'relic' || i === 0) ? relics : ladder;
     set.forEach((d, k) => {
       const g = { ...makeGear(d.id, i * 3 + k + 1), equippedBy: h.instId };
       inventory.set(g.instId, g);
@@ -224,7 +223,7 @@ const MAX = 6; // 저층 파티이므로 6층까지
  *    수치는 data/facilities.ts에서 읽는다. 여기서 다시 적으면 튜닝이 갈라진다.
  */
 if (GEAR_ARG) console.log(`\n  ⚙ 장비: 층 단계에 맞는 ${GEAR_ARG === 'supply' ? '보급형' : '정예'} 한 벌을 입고 오른다${
-  GEAR_ARG === 'relic' ? ` — ${RELIC_FROM}층부터 전원 유물` : GEAR_ARG === 'relic1' ? ` — ${RELIC_FROM}층부터 첫 출전자만 유물` : ''}`);
+  GEAR_ARG === 'relic' ? ` — 11층부터 전원 유물` : GEAR_ARG === 'relic1' ? ` — 11층부터 첫 출전자만 유물` : ''}`);
 console.log('\n  숙소 레벨별 연속 등반 (저층 파티, 300회)\n');
 console.log('  숙소      | 회복률 | 평균 도달 | 6층 완주');
 for (let lv = 0; lv <= FACILITY_MAX_LEVEL; lv++) {

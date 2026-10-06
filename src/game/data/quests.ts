@@ -215,7 +215,7 @@ export const QUESTS: QuestDef[] = [
     desc: '최상층을 파티 전원이 살아서 돌파',
     floorId: 100,
     check: (c) => c.deaths === 0,
-    reward: { gold: 12000, gear: 'w_towerbane' as GearDefId },
+    reward: { gold: 12000, gear: 'w_towerbane_t10' as GearDefId },
   },
   /**
    * 등반 전체를 관통하는 과제.
@@ -233,7 +233,7 @@ export const QUESTS: QuestDef[] = [
     desc: '한 명도 잃지 않고 탑을 완주',
     floorId: 100,
     check: (c) => c.totalDeaths === 0,
-    reward: { gold: 12000, gear: 't_lastlight' as GearDefId },
+    reward: { gold: 12000, gear: 't_lastlight_t10' as GearDefId },
   },
 ];
 
