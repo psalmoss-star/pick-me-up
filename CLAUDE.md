@@ -78,6 +78,9 @@
   이름은 `displayName(inst, defs)`으로만 읽는다 — `def.name` 직접 읽기 금지.
   죽은 영웅의 이름도 영구 봉인된다(초상화 재사용은 허용).
 - 등급과 캐릭터 유형은 **독립**이다. ★5 카일도, ★1 이스카도 나올 수 있다.
+- **클래스 이름은 계열 × 등급이다(STEP 68).** 화면은 `klassName(defId, star, defs)`로만 읽는다 — `klassFor(star)`를
+  화면에 다시 쓰면 사제가 "정예병"이 된다. 계열(`HeroDef.lineage`)은 **지금 표시 전용**이고, 전투에 닿게 하는 것은
+  다음 단계(HANDOFF §STEP 68 "남은 것")다. 보조직업은 사용자 결정으로 묻어 뒀다 — 먼저 제안하지 말 것.
 - 합성 UI에서 **"제물"이라는 단어를 그대로 쓴다.** 순화하지 말 것.
 - 승급은 레벨을 1로 리셋한다 → 승급 직후는 이전보다 약하다. 이건 버그가 아니라 설계다.
   **소환 시작 레벨(`summonLevel`)을 승급에 적용하지 말 것** — 그 대가가 사라진다.
@@ -175,7 +178,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1232개 통과)
+npm test           # Vitest 1회 실행 (현재 1239개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -275,6 +278,7 @@ src/
 │  ├─ adventure.ts  # 모험 파견 판정 — 사망 없음(부상만). 각성석의 유일한 공급원
 │  ├─ craft.ts     # 제작·재련 — 재료→유물, 유물 단계 올리기. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
+│  ├─ klass.ts       # 클래스 이름(계열 × 등급) — klassName이 화면의 유일한 관문. 표시 전용
 │  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
 │  ├─ temperament.ts # 기질 — seed에서 파생. 승급해도 안 바뀐다. 수치엔 안 닿고 정찰 보고 성향만 정한다
 │  ├─ voice.ts       # 대사 선택(seed+순간+맥락) · 조사 처리 · 템플릿 유언
@@ -303,6 +307,7 @@ src/
 │     ├─ elements.ts  # 상성표(순환 규칙에서 파생) + 등급 스케일링
 │     ├─ skills.ts    # 스킬 15종
 │     ├─ heroes.ts    # 영웅 12종 + HERO 상수
+│     ├─ lineages.ts  # 계열 7종 + 계열 × 등급 클래스 이름표
 │     ├─ enemies.ts   # 적 19종 + ENEMY 상수. 보스 수치 주석 = 밸런스 도출 근거
 │     ├─ floors.ts    # 층 정의 — 손으로 짠 1~20층 + 생성분 21~100층
 │     ├─ floorgen.ts  # 층 생성기(21~) + 적 깊이 배수. 결정적이어야 한다
