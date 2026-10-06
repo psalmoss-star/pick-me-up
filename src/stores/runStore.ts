@@ -39,7 +39,7 @@ import {
   equip as equipGearPure, unequip as unequipGearPure, enhance as enhanceGearPure,
   makeGear,
 } from '../game/gear';
-import { craft as craftPure, spendMaterials, type CraftResult } from '../game/craft';
+import { craft as craftPure, refine as refinePure, spendMaterials, type CraftResult, type RefineResult } from '../game/craft';
 import { applyPrep } from '../game/prep';
 import { resolveScout, scoutReport, type ScoutReport } from '../game/report';
 import { prepForMission, prepById, type PrepId } from '../game/data/preps';
@@ -441,6 +441,11 @@ export interface RunActions {
    * 성공하면 반드시 나오고, 조건이 안 되면 아무것도 소모되지 않는다.
    */
   craftGear: (defId: GearDefId) => CraftResult;
+  /**
+   * 재련 — 유물의 단계를 하나 올린다. **확률이 없다.** 착용 중에도 된다.
+   * 조건이 안 되면 아무것도 소모되지 않는다(`game/craft.ts`의 `refine`).
+   */
+  refineGear: (gearId: GearInstId) => RefineGearResult;
   /** 포션 구매 */
   buyPotion: (count?: number) => BuyPotionResult;
   /**
@@ -514,6 +519,8 @@ export type EquipGearResult =
 export type EnhanceGearResult =
   | { ok: true; success: boolean; enhance: number; spent: number }
   | { ok: false; reason: 'max-enhance' | 'not-enough-gold' | 'not-owned' };
+
+export type RefineGearResult = RefineResult | { ok: false; reason: 'not-owned' };
 
 export type BuyPotionResult =
   | { ok: true; count: number; spent: number }
@@ -1866,6 +1873,33 @@ export function createRunStore(seedSource: SeedSource = defaultSeedSource) {
         wallet: { ...s.wallet, gold: s.wallet.gold - r.spentGold },
       }));
       // 재화를 쓴 결과이므로 즉시 저장한다 (buyGear()와 같은 원칙).
+      saveRun(get());
+      return r;
+    },
+
+    refineGear: (gearId) => {
+      const { gear, materials, wallet, maxFloorReached } = get();
+      const target = gear.find((g) => g.instId === gearId);
+      if (!target) return { ok: false, reason: 'not-owned' };
+
+      // 잠금은 도달한 최고 층이다 — 제작과 같다(지금 고른 층이 아니다)
+      const r = refinePure({
+        gear: target,
+        have: materials,
+        gold: wallet.gold,
+        highestFloor: FLOORS[maxFloorReached].id,
+      });
+      if (!r.ok) return r;
+
+      /*
+        한 번의 set — 교체와 차감이 갈라지면 재료만 잃고 유물은 그대로인 상태가 남는다.
+        영웅의 gear 참조는 instId라 손댈 것이 없다(같은 물건이다).
+      */
+      set((s) => ({
+        gear: s.gear.map((g) => (g.instId === gearId ? r.gear : g)),
+        materials: spendMaterials(s.materials, r.spentMaterials),
+        wallet: { ...s.wallet, gold: s.wallet.gold - r.spentGold },
+      }));
       saveRun(get());
       return r;
     },
