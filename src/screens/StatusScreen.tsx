@@ -8,6 +8,8 @@ import { T, ELEMENT_KR, ELEMENT_TINT, STAR_TIERS, quartersFor } from '../ui/toke
 import { SectionLabel } from './SectionLabel';
 import { statsOfInstance, attributesOfInstance } from '../game/stats';
 import { klassName } from '../game/klass';
+import { describeTrait } from '../game/trait';
+import { TRAIT_NAME } from '../game/data/traits';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
@@ -177,6 +179,17 @@ export function StatusScreen({
               {ROLE_KR[def.role]} · {LINE_KR[lineOf(def)]} · {quartersFor(hero.star)}
             </div>
           </div>
+        </div>
+
+        {/*
+          계열 특성 — 이 영웅이 전투에서 무엇이 다른가(STEP 69).
+          머리글 옆 칸에 넣지 않는다: 그 칸은 초상 옆이라 좁아 문장이 세 줄로 꺾인다. 패널 폭을 다 쓴다.
+          문장은 `describeTrait`가 수치 데이터에서 만든다 — 손으로 적지 말 것.
+        */}
+        <div style={{ fontSize: 11, lineHeight: 1.7, marginBottom: 12 }}>
+          <span style={{ color: T.gold }}>특성 · {TRAIT_NAME[def.lineage]}</span>
+          <br />
+          <span style={{ color: T.dim }}>{describeTrait(def.lineage)}</span>
         </div>
 
         <Row label="레벨" value={atMaxLevel ? `${hero.level} · 만렙` : `${hero.level} / ${maxLevel}`} gold={atMaxLevel} />

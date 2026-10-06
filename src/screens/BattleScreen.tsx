@@ -19,6 +19,7 @@ import { minimapLayout } from '../ui/minimapLayout';
 import { minimapDots, type DotUnit, type MinimapPhase } from '../ui/minimapDots';
 import type { FloorSpec } from '../game/data/floors';
 import type { StatusKind } from '../game/types';
+import { TRAIT_NAME } from '../game/data/traits';
 
 /** 이벤트 하나를 재생하는 기본 시간(ms) */
 const STEP_MS = 400;
@@ -219,7 +220,7 @@ export function BattleScreen({
     .filter((e) =>
       e.type === 'skillUse' || e.type === 'damage' || e.type === 'heal'
       || e.type === 'death' || e.type === 'retreat' || e.type === 'statusApplied'
-      || e.type === 'stratagem' || e.type === 'withdraw')
+      || e.type === 'stratagem' || e.type === 'withdraw' || e.type === 'trait')
     .slice(-SIZE.logLines);
 
   const nameOf = (uid?: string) => result.roster.find((u) => u.uid === uid)?.name ?? '';
@@ -352,6 +353,7 @@ export function BattleScreen({
                 : e.type === 'heal' ? '#6FBF8F'
                 : e.type === 'retreat' || e.type === 'withdraw' ? T.rare
                 : e.type === 'stratagem' ? (e.success ? T.gold : T.amber)
+                : e.type === 'trait' ? T.gold
                 : e.type === 'statusApplied' ? T.dim
                 : e.type === 'damage' && e.affinity === 'adv' ? '#FFB454'
                 : e.type === 'damage' && e.affinity === 'dis' ? '#7E93A8'
@@ -371,10 +373,19 @@ export function BattleScreen({
               `　└ ${nameOf((e.targetUids ?? [])[0])}에게 ${e.amount} 피해`
               + `${e.isCrit ? ' (치명타)' : ''}`
               + `${e.affinity === 'adv' ? ' ▲효과적' : e.affinity === 'dis' ? ' ▼반감' : ''}`
+              // 계열 특성이 이 숫자를 바꿨다 — 이름을 붙여야 "왜 더 아픈가"가 읽힌다
+              + `${e.trait ? ` ·${TRAIT_NAME[e.trait]}` : ''}`
             )}
             {e.type === 'heal' && (
               `　└ ${nameOf((e.targetUids ?? [])[0])} ${e.amount} 회복`
               + `${e.fromPotion ? ' (물약)' : ''}`
+              + `${e.trait ? ` ·${TRAIT_NAME[e.trait]}` : ''}`
+            )}
+            {/* 따로 드러나는 특성 — 전투 시작의 선제·진두지휘, 넘친 치유가 남긴 보호막 */}
+            {e.type === 'trait' && e.trait && (
+              e.amount
+                ? `　└ ${nameOf((e.targetUids ?? [])[0])} 보호막 +${e.amount} ·${TRAIT_NAME[e.trait]}`
+                : `◆ ${nameOf(e.actorUid)} — ${TRAIT_NAME[e.trait]}`
             )}
             {e.type === 'statusApplied' && (
               `　└ ${nameOf((e.targetUids ?? [])[0])} ${STATUS_MARK[e.status!]?.sign ?? e.status}`

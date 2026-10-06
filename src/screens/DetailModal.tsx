@@ -7,6 +7,8 @@ import { heroArtOf } from '../ui/artMap';
 import { ELEMENT_KR, T, quartersFor, nextQuartersFor } from '../ui/tokens';
 import { computeAttributes, computeHeroStats, isAtCap } from '../game/stats';
 import { klassName } from '../game/klass';
+import { describeTrait } from '../game/trait';
+import { TRAIT_NAME } from '../game/data/traits';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { applyBonus, heroBonus, bonusOf } from '../game/gear';
@@ -143,6 +145,8 @@ export function DetailModal({
             {' · '}방어 <Stat v={stats.def} up={!!bonus.def} /> · 속도 <Stat v={stats.spd} up={!!bonus.spd} />
             <br />
             보유스킬 : {def.skillIds.map((id) => gameData.skills[id]?.name).filter(Boolean).join(', ')}
+            <br />
+            특성 : <span style={{ color: T.gold }}>{TRAIT_NAME[def.lineage]}</span> — {describeTrait(def.lineage)}
           </div>
 
           {/* 장비 — 슬롯 3칸. gear를 안 넘기면 통째로 감춘다 */}
