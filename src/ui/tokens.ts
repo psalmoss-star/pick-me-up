@@ -177,8 +177,10 @@ export const ELEMENT_KR: Record<string, string> = {
  * 왜 T와 따로 두는가: 마을 `V`와 같은 이유다 — 장면 전용 색을 T에 섞으면 카드·패널까지 물든다.
  * 전부 명도를 낮췄다. 길(금색)과 점(보라·핏빛)이 그 위에 떠야 지도가 읽힌다.
  */
-export const MM: Record<'ground' | TerrainTag, string> = {
+export const MM: Record<'ground' | 'label' | TerrainTag, string> = {
   ground: '#0B0A10',
+  /** 이름표 바탕 — 지형 면 위에서도 글자가 읽히게 하는 반투명 ground */
+  label: 'rgba(11, 10, 16, 0.78)',
   forest: '#1D3324',
   river: '#172A3D',
   fort: '#36302A',

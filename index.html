@@ -9,6 +9,8 @@
       누가 API 호출을 다시 넣어도 브라우저가 막는다. 폰트 CSS(link)는 connect-src가 아니라 영향 없다.
       src/noExternalApi.test.ts가 이 줄이 있는지 검사한다.
     -->
+    <!-- 이 게임은 처음부터 어두운 화면이다 — 브라우저가 다크 모드로 색을 다시 칠하지 않기를 기대하고 넣었다(index.css의 color-scheme과 같은 선언. 효과는 폰에서 미확인) -->
+    <meta name="color-scheme" content="dark" />
     <meta http-equiv="Content-Security-Policy" content="connect-src 'self'" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

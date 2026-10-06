@@ -42,10 +42,11 @@ export function Minimap({ map, route, width, labels, onSelectRoute, contacts: re
   const small = !labels;
 
   return (
+    <div style={{ position: 'relative', width: '100%', maxWidth: width, margin: '0 auto' }}>
     <svg
       viewBox={`0 0 ${width} ${H}`}
       width="100%"
-      style={{ display: 'block', maxWidth: width, margin: '0 auto' }}
+      style={{ display: 'block' }}
       role="img"
       aria-label="층 지도"
     >
@@ -112,42 +113,74 @@ export function Minimap({ map, route, width, labels, onSelectRoute, contacts: re
                 strokeWidth={small ? 0.8 : 1.2}
               />
             )}
-            {labels && (() => {
-              const text = n.kind === 'entry' ? '입구' : n.kind === 'exit' ? '계단' : TERRAIN[n.tag!].name;
-              const at = { x, y: y + (n.y > 0.5 ? -11 : 19), textAnchor: 'middle' as const, fontSize: 10, style: { fontFamily: 'inherit' } };
-              // 테두리를 별도 층으로 먼저 그린다 — paint-order를 무시하는 폰 브라우저에서는
-              // 테두리가 글자 위에 덮여 10px 글자가 뭉개졌다(2026-10-01 폰 실측).
-              return (
-                <>
-                  <text {...at} fill="none" stroke={MM.ground} strokeWidth={3} strokeLinejoin="round">{text}</text>
-                  <text {...at} fill={on ? T.text : T.dim}>{text}</text>
-                </>
-              );
-            })()}
           </g>
         );
       })}
 
-      {/* 점 — 위치가 바뀌면 직선으로 미끄러져 가고, 쓰러지면 회색이 되어 사라진다 */}
-      {dots?.map((d) => {
-        const color = d.dead ? T.dim : d.side === 'enemy' ? T.blood : d.side === 'guard' ? T.gold : T.rare;
-        const s = u * 0.3;
+    </svg>
+      {/*
+        이름표는 SVG 글자가 아니라 HTML로 얹는다(2026-10-06 폰 스크린샷). SVG 두 겹(어두운 테두리 + 글자)이
+        폰에서 흰 덩어리로 뭉개졌고, 같은 화면에서 지형 면도 코드 값보다 밝았다. 폰 브라우저 다크 모드가
+        SVG의 어두운 색을 밝게 바꾼 것으로 **추정**한다(데스크톱에서 재현 못 함). 같은 화면의 HTML 글씨는
+        멀쩡했으므로 이름표를 그쪽으로 옮겼다. 폰 재확인 전 — HANDOFF STEP 64.
+      */}
+      {labels && layout.nodes.map((p) => {
+        const n = byId.get(p.id)!;
+        const text = n.kind === 'entry' ? '입구' : n.kind === 'exit' ? '계단' : TERRAIN[n.tag!].name;
+        // 입구·계단은 지도 가장자리에 있다 — 가운데 맞춤이면 이름표가 지도 밖으로 삐져나간다
+        const edge = n.kind === 'entry' ? { left: 0, shift: '0' } : n.kind === 'exit' ? { left: '100%', shift: '-100%' } : null;
         return (
-          <g
-            key={d.uid}
+          <span
+            key={n.id}
             style={{
-              transform: `translate(${px(d.x)}px, ${px(d.y)}px)`,
-              transition: 'transform 900ms ease-in-out, opacity 600ms',
-              opacity: d.dead ? 0 : 1,
+              position: 'absolute',
+              left: edge ? edge.left : `${(p.x / cols) * 100}%`,
+              top: `calc(${(p.y / rows) * 100}% + ${n.y > 0.5 ? -15 : 15}px)`,
+              transform: `translate(${edge ? edge.shift : '-50%'}, -50%)`,
+              padding: '1px 4px',
+              borderRadius: 2,
+              background: MM.label,
+              color: onChosen.has(n.id) ? T.text : T.dim,
+              fontSize: 10,
+              lineHeight: 1.2,
+              whiteSpace: 'nowrap',
               pointerEvents: 'none',
             }}
           >
-            {d.side === 'guard'
-              ? <rect x={-s} y={-s} width={s * 2} height={s * 2} transform="rotate(45)" fill={color} />
-              : <circle r={s} fill={color} />}
-          </g>
+            {text}
+          </span>
         );
       })}
-    </svg>
+      {/* 점은 이름표보다 위다 — 이름표 바탕이 점을 가리면 "지금 어디서 싸우나"가 안 읽힌다 */}
+      {dots && (
+        <svg
+          viewBox={`0 0 ${width} ${H}`}
+          width="100%"
+          style={{ position: 'absolute', inset: 0, display: 'block', pointerEvents: 'none' }}
+          aria-hidden
+        >
+          {/* 점 — 위치가 바뀌면 직선으로 미끄러져 가고, 쓰러지면 회색이 되어 사라진다 */}
+          {dots?.map((d) => {
+            const color = d.dead ? T.dim : d.side === 'enemy' ? T.blood : d.side === 'guard' ? T.gold : T.rare;
+            const s = u * 0.3;
+            return (
+              <g
+                key={d.uid}
+                style={{
+                  transform: `translate(${px(d.x)}px, ${px(d.y)}px)`,
+                  transition: 'transform 900ms ease-in-out, opacity 600ms',
+                  opacity: d.dead ? 0 : 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                {d.side === 'guard'
+                  ? <rect x={-s} y={-s} width={s * 2} height={s * 2} transform="rotate(45)" fill={color} />
+                  : <circle r={s} fill={color} />}
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
   );
 }
