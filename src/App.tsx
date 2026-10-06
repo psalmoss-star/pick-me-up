@@ -164,6 +164,7 @@ export default function App() {
   const toggleFavorite = useRunStore((s) => s.toggleFavorite);
   const enhanceGear = useRunStore((s) => s.enhanceGear);
   const craftGear = useRunStore((s) => s.craftGear);
+  const refineGear = useRunStore((s) => s.refineGear);
   const materials = useRunStore((s) => s.materials);
   const potions = useRunStore((s) => s.potions);
   const buyPotion = useRunStore((s) => s.buyPotion);
@@ -638,6 +639,7 @@ export default function App() {
             /* 레시피 해금은 **도달 최고 층**으로 판정한다 — 지금 고른 층이 아니다 */
             highestFloor={FLOORS[maxFloorReached].id}
             onCraft={craftGear}
+            onRefine={refineGear}
           />
         )}
         {screen === 'forge' && (

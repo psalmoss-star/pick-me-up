@@ -10,14 +10,14 @@ import {
   GEAR_DEFS, GEAR_SLOTS, GEAR_TUNING, SLOT_LABEL, gearTag,
   enhanceCostOf, enhanceChanceOf,
 } from '../game/data/gear';
-import { RECIPES } from '../game/data/recipes';
+import { RECIPES, refineCostOf } from '../game/data/recipes';
 import { MATERIAL_DEFS, MATERIAL_ORDER } from '../game/data/materials';
-import { canCraft, amountOf, type CraftResult } from '../game/craft';
+import { canCraft, canRefine, amountOf, type CraftResult, type RefineCheck } from '../game/craft';
 import { gameData } from '../game/data';
 import type {
   GearDefId, GearInstId, GearInstance, HeroInstance, MaterialBag, Wallet,
 } from '../game/types';
-import type { EnhanceGearResult } from '../stores/runStore';
+import type { EnhanceGearResult, RefineGearResult } from '../stores/runStore';
 
 type Mode = 'enhance' | 'craft';
 
@@ -34,6 +34,8 @@ export interface SmithScreenProps {
   /** 도달한 최고 층. **지금 고른 층이 아니다** — 레시피 해금 판정 기준 */
   highestFloor: number;
   onCraft: (defId: GearDefId) => CraftResult;
+  /** 유물 재련 — 확률이 없다. 착용 중에도 된다 */
+  onRefine: (gearId: GearInstId) => RefineGearResult;
 }
 
 /**
@@ -45,14 +47,14 @@ export interface SmithScreenProps {
  */
 export function SmithScreen({
   gear, roster, wallet, onEnhance, onBack, onOpenFacility,
-  materials, highestFloor, onCraft,
+  materials, highestFloor, onCraft, onRefine,
 }: SmithScreenProps) {
   const [mode, setMode] = useState<Mode>('enhance');
   const [selected, setSelected] = useState<GearInstId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /**
    * 단계 내림차순 → 슬롯 순(장비 사다리). 장비가 60종이 되면 정렬 없는 목록이 가장 먼저 무너진다.
-   * 유물(tier 0)은 보통 가장 강하므로 맨 위로 올린다.
+   * 유물은 맨 위로 올린다 — 재련하러 오는 물건이다.
    */
   const rankKey = (id: GearInstance['defId']) => {
     const d = GEAR_DEFS[id];
@@ -113,6 +115,28 @@ export function SmithScreen({
     }
     // 확률이 없으므로 "성공했습니다"가 아니라 결과를 그대로 말한다
     setNotice(`${GEAR_DEFS[defId].name}이(가) 완성되었습니다. 창고에 넣었습니다.`);
+  };
+
+  /** 재련 판정 — 유물을 골랐을 때만. 버튼·부족분·잠금 문구가 전부 이 결과 하나에서 나온다 */
+  const refineCheck = target && targetDef?.line === 'relic'
+    ? canRefine({ gear: target, have: materials, gold: wallet.gold, highestFloor })
+    : null;
+
+  const doRefine = () => {
+    if (!target || !targetDef) return;
+    const r = onRefine(target.instId);
+    if (!r.ok) {
+      setNotice(
+        r.reason === 'locked' ? `${r.unlockFloor}층에 닿아야 올릴 수 있습니다.`
+          : r.reason === 'not-enough-gold' ? `금이 ${r.missingGold?.toLocaleString()} 모자랍니다.`
+            : r.reason === 'not-enough-materials' ? '재료가 모자랍니다.'
+              : r.reason === 'max-tier' ? '더는 올릴 수 없습니다.'
+                : '재련할 수 없는 물건입니다.',
+      );
+      return;
+    }
+    // 확률이 없으므로 결과를 그대로 말한다(제작과 같다)
+    setNotice(`${targetDef.name}이(가) ${GEAR_DEFS[r.gear.defId].tier}단계가 되었습니다.`);
   };
 
   const cost = target ? enhanceCostOf(target.enhance) : null;
@@ -216,6 +240,7 @@ export function SmithScreen({
       ))}
 
       {mode === 'enhance' && target && targetDef && (
+        <>
         <SystemPanel compact tone={maxed ? 'rare' : 'normal'}>
           <div style={{ fontSize: 15, marginBottom: 6 }}>
             {targetDef.name}
@@ -262,6 +287,25 @@ export function SmithScreen({
             </>
           )}
         </SystemPanel>
+
+        {refineCheck && (
+          <div style={{ marginTop: 12 }}>
+            <SystemPanel compact tone={refineCheck.ok ? 'rare' : 'normal'}>
+              <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.14em', marginBottom: 8 }}>
+                재련 · {gearTag(targetDef)}
+              </div>
+              <RefineBody
+                check={refineCheck}
+                target={target}
+                materials={materials}
+                gold={wallet.gold}
+                bonusText={bonusText}
+                onRefine={doRefine}
+              />
+            </SystemPanel>
+          </div>
+        )}
+        </>
       )}
 
       {notice && (
@@ -397,7 +441,83 @@ function CraftPanel({
       {/* 제작에 확률이 없다는 것은 눌러보기 전에 알려야 한다 */}
       <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.8, margin: '10px 2px 18px' }}>
         제작은 실패하지 않습니다. 재료와 금이 차면 반드시 완성됩니다.
+        <br />
+        만든 유물은 '벼리기'에서 재련해 단계를 올립니다.
       </div>
+    </>
+  );
+}
+
+/**
+ * 재련 영역 — 유물을 골랐을 때 강화 패널 아래에 뜬다.
+ *
+ * 잠긴 단계도 **무엇이 되는지는 보인다**(상점의 잠금 카드와 같은 원리) — 숨기면
+ * "이 유물은 여기까지"로 읽힌다. 재료 부족분은 잠겨 있을 때는 띄우지 않는다.
+ */
+function RefineBody({
+  check, target, materials, gold, bonusText, onRefine,
+}: {
+  check: RefineCheck;
+  target: GearInstance;
+  materials: MaterialBag;
+  gold: number;
+  bonusText: (g: GearInstance) => string;
+  onRefine: () => void;
+}) {
+  if (!check.ok && (check.reason === 'max-tier' || !check.next)) {
+    return (
+      <div style={{ fontSize: 12, color: T.gold, letterSpacing: '.2em' }}>
+        더 올릴 수 없습니다
+      </div>
+    );
+  }
+
+  const next = check.next!;
+  const after = bonusText({ ...target, defId: next.id });
+
+  if (!check.ok && check.reason === 'locked') {
+    return (
+      <>
+        <div style={{ fontSize: 12, marginBottom: 6, opacity: 0.5 }}>
+          {next.tier}단계 → {after}
+        </div>
+        <div style={{ fontSize: 12, color: T.dim, letterSpacing: '.14em' }}>
+          🔒 {check.unlockFloor}층 도달 시
+        </div>
+      </>
+    );
+  }
+
+  const price = refineCostOf(next.slot, next.tier);
+  return (
+    <>
+      <div style={{ fontSize: 12, marginBottom: 8 }}>
+        {next.tier}단계 → {after}
+      </div>
+      <div style={{ display: 'grid', gap: 3, marginBottom: 10 }}>
+        {(Object.entries(price.cost) as [keyof MaterialBag, number][]).map(([id, need]) => {
+          const have = amountOf(materials, id);
+          return (
+            <div key={String(id)} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ color: T.dim }}>{MATERIAL_DEFS[id]?.name}</span>
+              <span style={{ color: have < need ? T.amber : T.text }}>{have} / {need}</span>
+            </div>
+          );
+        })}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+          <span style={{ color: T.dim }}>금</span>
+          <span style={{ color: gold < price.gold ? T.amber : T.text }}>
+            {gold.toLocaleString()} / {price.gold.toLocaleString()}
+          </span>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: T.dim, marginBottom: 12 }}>
+        재련은 실패하지 않습니다 · 벼린 단계와 착용은 그대로입니다
+      </div>
+      <Button small onClick={onRefine} disabled={!check.ok}>
+        {check.ok ? `재련 → ${next.tier}단계`
+          : check.reason === 'not-enough-gold' ? '금이 모자랍니다' : '재료가 모자랍니다'}
+      </Button>
     </>
   );
 }
