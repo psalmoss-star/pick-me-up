@@ -156,6 +156,12 @@
   원정 진행 문장(`legs`)은 **결과를 암시하지 않는다** — 파견 순간 결과가 정해지므로 흘리면 "즉시 복귀"로 부상을 피한다(금지어 테스트).
 - SVG 글자 테두리에 **`paint-order`를 쓰지 말 것** — 폰 브라우저가 무시해 테두리가 글자를 덮었다. 테두리 층과 글자 층을 따로 그린다.
 - **장비 사다리(STEP 66).** 10층마다 1단계(`tierOf`), 단계마다 **보급형**(상점·일반 드롭)·**정예**(보스 확정·모험 확률). 유물은 제작·최종 과제만.
+  **유물도 사다리에 있다(STEP 67)** — 2~10단계, 같은 단계 정예보다 한 칸 위(`ladderTarget(tier, 'relic')` — 2단계 17%, 3단계 이후 9%, 완주율 실측).
+  제작이 만드는 것은 2단계이고, 대장간에서 **재련**(`craft.ts`의 `refine` — 확률 없음, `defId`만 바뀌고 강화·착용자 유지)으로 한 단계씩 올린다.
+  다음 단계는 그 단계 첫 층 도달 시 열린다. 2단계 id는 옛 유물 id 그대로(`w_towerbane`), 3~10단계는 `_t{단계}`.
+  유물은 **능력치 하나하나가 이전 단계 이상**이어야 한다(재련 화면이 전후를 나란히 보인다 — 생성기 `noStatDrop`).
+  재련 비용은 `data/recipes.ts`의 `REFINE_MATERIALS` — **구간 비율이 아니라 100층 누적으로** 잡았다(제작 3종이 재료를 먼저 먹는다, `scripts/mat-probe.mts`).
+  유물의 tier가 0이 아니므로 **`tier`만 보고 장비를 고르는 코드를 쓰면 유물이 드롭·상점에 샌다** — 반드시 `line`을 함께 본다(`ladderSet(tier, line)`).
   장비는 **여유분**이다 — 층 난이도·`sim`·`climb-check` 기본값은 장비 없음. 2단계 이상 수치는 `data/gearLadder.ts`(**생성 파일** —
   `npx tsx scripts/gear-ladder.mts --write`)에만 있고 손으로 고치지 않는다. 비율(`ladderTarget` — 1단계 7.5%·13%, 2단계 5%·9%, 3단계 이후 3%·5%, **완주율 실측으로 고름**)·단계 단조 증가를 테스트가 잠근다.
   **장비 판정의 난수 소비를 바꾸지 말 것**(재료 지문 `loot.test.ts`), **모험 정예 판정은 각성석 뒤**(모험 지문 `adventure.test.ts`) — 깨지면 지문을 갱신하지 말 것.
@@ -169,7 +175,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1197개 통과)
+npm test           # Vitest 1회 실행 (현재 1232개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -185,6 +191,8 @@ npx tsx scripts/stratagem-check.mts     # 책략 카드별 승률·사망·발�
 npx tsx scripts/orders-check.mts        # 방침 카드(공격·보호·퇴각) — 퇴각만 쓰인다
 npx tsx scripts/gear-ladder.mts [--write]  # 장비 사다리 수치 풀이 → data/gearLadder.ts (STEP 66)
 npx tsx climb-check.mts --gear supply|elite  # 단계에 맞는 한 벌을 입고 연속 등반
+npx tsx climb-check.mts --gear relic|relic1  # 층 단계의 유물을 입고(전원 / 첫 출전자만) 연속 등반 (STEP 67)
+npx tsx scripts/mat-probe.mts               # 단계별 재료 수급 — 재련 비용의 근거 (STEP 67)
 ```
 
 ⚠️ **`sim`·`climb-check`·`floor-tune`은 책략·지형을 쓰지 않는다.** 층 난이도는 "책략 없음" 기준이다.
@@ -265,7 +273,7 @@ src/
 │  ├─ quest.ts       # 층 돌파 과제 — 전투 기록 재판정 (전투를 다시 돌리지 않는다)
 │  ├─ loot.ts       # 층 전리품 — 회수→장비→재료. **소비 순서의 단일 출처**
 │  ├─ adventure.ts  # 모험 파견 판정 — 사망 없음(부상만). 각성석의 유일한 공급원
-│  ├─ craft.ts     # 제작 — 재료→유물. **확률이 없다**(RNG를 받지 않는다)
+│  ├─ craft.ts     # 제작·재련 — 재료→유물, 유물 단계 올리기. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
 │  ├─ temperament.ts # 기질 — seed에서 파생. 승급해도 안 바뀐다. 수치엔 안 닿고 정찰 보고 성향만 정한다
@@ -301,7 +309,7 @@ src/
 │     ├─ potential.ts # 잠재치/발굴 튜닝 상수 단일 출처
 │     ├─ facilities.ts # 시설 4종 튜닝 (회복률·공격력·유휴 exp·비용)
 │     ├─ gear.ts      # 장비 도감(기존 12종 + 사다리) + 튜닝 + 단계(tierOf·ladderSet·shopStock). 2단계 이상 수치는 gearLadder.ts
-│     ├─ gearLadder.ts # 장비 사다리 수치 — **생성 파일**(scripts/gear-ladder.mts --write). 손으로 고치지 말 것
+│     ├─ gearLadder.ts # 장비 사다리 수치(유물 2~10단계 포함) — **생성 파일**(scripts/gear-ladder.mts --write). 손으로 고치지 말 것
 │     ├─ refParty.ts  # 단계별 기준 파티 — sim과 같아야 한다(CLI라 복제)
 │     ├─ quests.ts    # 과제 18종 — 조건·보상 (사망을 요구하는 과제는 두지 않는다)
 │     ├─ party.ts     # 파티 정원 규칙 — 층 구간별 정원, 2군 개방 조건. 상수가 아니라 함수다

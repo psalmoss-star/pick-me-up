@@ -4,13 +4,15 @@
  * 밸런스 수치는 전부 여기 있고 코드에는 없다 (CLAUDE.md 아키텍처 규칙).
  *
  * ── 왜 유물만 만드는가 ──────────────────────────────────
- * `data/gear.ts:110`이 이미 못 박아 뒀다 — "relic은 **상점에 없다**(price 없음),
+ * `data/gear.ts`의 도감 주석이 이미 못 박아 뒀다 — "relic은 **상점에 없다**(price 없음),
  * 제작·드롭·과제로만 나온다. 금으로 최상급을 살 수 있으면 등반이 아니라
  * 지갑이 강함을 정한다."
  *
  * 즉 제작은 **금을 우회하는 경로여야 의미가 있다.** common~rare을 만들게 하면
  * 상점과 경쟁하게 되고, 상점이 금으로 즉시 주는 이상 제작은 항상 진다.
  * 유물 3종(무기/방어구/장신구 각 1)만 레시피를 갖는다.
+ *
+ * 만들어지는 것은 **2단계 유물**이다(재련, 2026-10-06). 그 뒤는 아래 `REFINE_MATERIALS`로 한 단계씩 올린다.
  *
  * ── 왜 금도 함께 받는가 ────────────────────────────────
  * 재료만 받으면 후반에 남아도는 금(실측 30전투 32,986)이 갈 곳이 그대로 없다.
@@ -62,25 +64,25 @@ const bag = (pairs: Array<[string, number]>): MaterialBag =>
  * 유물 3종.
  *
  * 무기 → 방어구 → 장신구 순으로 비싸진다. 순서의 근거는 `gear.ts`의 보정값이다 —
- * 장신구 `t_lastlight`(hp 150 · spd 12 · crit 8%)가 셋 중 가장 넓게 붙는다.
+ * 장신구 `t_lastlight`가 셋 중 가장 넓게 붙는다(체력·속도·치명). 수치는 생성 파일 `gearLadder.ts`에 있다.
  */
 export const RECIPES: readonly RecipeDef[] = [
   {
-    // 탑을 베는 것 — atk 56 · crit 7% · spd 4
+    // 탑을 베는 것
     gearDefId: 'w_towerbane' as GearDefId,
     cost: bag([[MATERIAL.ore, 12], [MATERIAL.hide, 6], [MATERIAL.essence, 2]]),
     gold: 1800,
     unlockFloor: 10,
   },
   {
-    // 재의 장막 — hp 330 · def 34
+    // 재의 장막
     gearDefId: 'a_ashshroud' as GearDefId,
     cost: bag([[MATERIAL.ore, 8], [MATERIAL.hide, 12], [MATERIAL.essence, 3]]),
     gold: 2000,
     unlockFloor: 12,
   },
   {
-    // 마지막 불빛 — hp 150 · spd 12 · crit 8%. 셋 중 가장 넓게 붙는다
+    // 마지막 불빛 — 셋 중 가장 넓게 붙는다
     gearDefId: 't_lastlight' as GearDefId,
     cost: bag([[MATERIAL.ore, 6], [MATERIAL.hide, 8], [MATERIAL.essence, 5]]),
     gold: 2400,
