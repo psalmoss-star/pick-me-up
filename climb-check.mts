@@ -10,7 +10,7 @@
 import { runEncounter } from './src/game/encounter';
 import { createRng } from './src/game/rng';
 import { klassFor, statsOfInstance } from './src/game/stats';
-import { gameData, FLOORS } from './src/game/data';
+import { gameData as gameDataOn, gameDataNoTraits, FLOORS } from './src/game/data';
 import { HERO } from './src/game/data/sample';
 import { restHealRate, FACILITY_MAX_LEVEL } from './src/game/data/facilities';
 import { floorRewards } from './src/game/data/floors';
@@ -21,6 +21,9 @@ import type {
 } from './src/game/types';
 import { RELIC_FIRST_TIER, ladderSet, tierOf } from './src/game/data/gear';
 import { makeGear } from './src/game/gear';
+
+/** --no-traits — 계열 특성을 끈 번들로 잰다(특성 이전 기준선). 켠 것과의 차이를 볼 때만 쓴다 */
+const gameData = process.argv.includes('--no-traits') ? gameDataNoTraits : gameDataOn;
 
 /**
  * --gear supply|elite — 기준 파티가 **층의 단계에 맞는 한 벌**을 입고 오른다(장비 사다리 측정).

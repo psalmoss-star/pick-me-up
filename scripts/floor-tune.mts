@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { runEncounter } from '../src/game/encounter';
 import { createRng } from '../src/game/rng';
 import { klassFor } from '../src/game/stats';
-import { gameData } from '../src/game/data';
+import { gameData as gameDataOn, gameDataNoTraits } from '../src/game/data';
 import { HERO } from '../src/game/data/sample';
 import {
   HANDCRAFTED_UNTIL, TOWER_HEIGHT, BOSS_EVERY, MIN_REPEAT_GAP,
@@ -40,6 +40,9 @@ import {
 import { FLOOR_VARIANT } from '../src/game/data/floorVariants';
 import { partyLimitAt } from '../src/game/data/party';
 import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance, Star } from '../src/game/types';
+
+/** --no-traits — 계열 특성을 끈 번들로 잰다(특성 이전 기준선). 켠 것과의 차이를 볼 때만 쓴다 */
+const gameData = process.argv.includes('--no-traits') ? gameDataNoTraits : gameDataOn;
 
 const hero = (defId: HeroDefId, star: Star, level: number, n: number): HeroInstance => ({
   instId: `${defId}#${n}` as HeroInstId, defId, star, klass: klassFor(star), level, exp: 0,

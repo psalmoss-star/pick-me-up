@@ -210,10 +210,25 @@ describe('척후 — 선제', () => {
     expect(marks[0]).toMatchObject({ turn: 1, actorUid: uidOf(hush) });
   });
 
-  it('속도 수치 자체는 건드리지 않는다 — 순서만 바뀌고 피해는 같다', () => {
-    const { on, off } = pair({ allies: [hero(HERO.gale, 4, 40, 1)], enemyIds: [ENEMY.slime] }, 1);
-    // 리엔은 원래도 슬라임보다 빠르다 → 순서가 안 바뀌므로 로그가 같아야 한다
-    expect(core(on)).toEqual(off.events);
+  const gale = hero(HERO.gale, 4, 40, 1);
+  const duel = { allies: [gale], enemyIds: [ENEMY.golem] };
+
+  it('속도 배수는 순서만 바꾼다 — 원래도 빠르면 아무것도 달라지지 않는다', () => {
+    // 피해 배수를 1로 두면 남는 것은 속도뿐이고, 리엔은 원래도 골렘보다 빠르다
+    const speedOnly = withTraits({ ...LINEAGE_TRAITS, scout: { turns: 1, spdMult: 1.5, damageMult: 1 } });
+    const { on, off } = pair(duel, 1, speedOnly);
+    expect(core(on).map(strip)).toEqual(off.events);
+  });
+
+  it('첫 턴의 피해만, 정확히 배수만큼 커진다', () => {
+    const { on, off } = pair(duel, 1);
+    const a = core(on);
+    const i = a.findIndex((e) => e.type === 'damage' && e.trait === 'scout');
+    expect(i).toBeGreaterThan(-1);
+    expect(a[i].turn).toBe(1);
+    expect(a[i].amount).toBe(Math.round(off.events[i].amount! * LINEAGE_TRAITS.scout.damageMult));
+    // 둘째 턴부터는 꼬리표가 붙지 않는다
+    expect(on.events.some((e) => e.trait === 'scout' && e.type === 'damage' && e.turn > LINEAGE_TRAITS.scout.turns)).toBe(false);
   });
 });
 
@@ -281,9 +296,16 @@ describe('특성 설명 문장', () => {
   });
 
   it('수치는 데이터에서 나온다 — 손으로 적은 문장이 아니다', () => {
-    expect(describeTrait('blade')).toBe('HP 30% 이하인 적에게 피해 +30%');
-    expect(describeTrait('guardian')).toBe('공격으로 받는 피해 −12%');
-    const tuned = { ...LINEAGE_TRAITS, blade: { hpBelow: 0.5, damageMult: 1.1 } };
+    const tuned: LineageTraits = {
+      ...LINEAGE_TRAITS,
+      blade: { hpBelow: 0.5, damageMult: 1.1 },
+      guardian: { damageTakenMult: 0.88 },
+      scout: { turns: 2, spdMult: 1.5, damageMult: 1.2 },
+    };
     expect(describeTrait('blade', tuned)).toBe('HP 50% 이하인 적에게 피해 +10%');
+    expect(describeTrait('guardian', tuned)).toBe('공격으로 받는 피해 −12%');
+    expect(describeTrait('scout', tuned)).toBe('전투 첫 2턴에 속도 +50% · 피해 +20%');
+    // 현행 수치로 만든 문장에도 그 수치가 들어 있다
+    expect(describeTrait('blade')).toContain(`${Math.round(LINEAGE_TRAITS.blade.hpBelow * 100)}%`);
   });
 });

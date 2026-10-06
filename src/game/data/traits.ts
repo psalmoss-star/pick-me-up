@@ -29,20 +29,23 @@ export interface LineageTraits {
   mage: { multiTargetMult: number };
   /** 약점 사냥 — 해로운 상태에 걸린 적에게 주는 피해 배수 */
   hunter: { afflictedMult: number };
-  /** 선제 — 전투 첫 `turns`턴 동안 행동 순서를 정하는 속도 배수 */
-  scout: { turns: number; spdMult: number };
+  /**
+   * 선제 — 전투 첫 `turns`턴 동안 행동 순서를 정하는 속도 배수와, 그 턴에 주는 피해 배수.
+   * 속도만으로는 효과가 0이었다(척후는 원래도 가장 빨라 순서가 안 바뀐다 — `trait-check` 실측).
+   */
+  scout: { turns: number; spdMult: number; damageMult: number };
   /** 진두지휘 — 전장에 있는 동안 아군 영웅 전체의 공격력 배수. 지휘관이 둘이어도 한 번만 */
   commander: { allyAtkMult: number };
 }
 
 export const LINEAGE_TRAITS: LineageTraits = {
-  blade: { hpBelow: 0.3, damageMult: 1.3 },
-  guardian: { damageTakenMult: 0.88 },
-  priest: { overflowToShield: 0.5, shieldCapRatio: 0.25 },
-  mage: { multiTargetMult: 1.15 },
-  hunter: { afflictedMult: 1.25 },
-  scout: { turns: 1, spdMult: 1.5 },
-  commander: { allyAtkMult: 1.06 },
+  blade: { hpBelow: 0.35, damageMult: 1.35 },
+  guardian: { damageTakenMult: 0.95 },
+  priest: { overflowToShield: 0.3, shieldCapRatio: 0.12 },
+  mage: { multiTargetMult: 1.2 },
+  hunter: { afflictedMult: 1.3 },
+  scout: { turns: 1, spdMult: 1.5, damageMult: 1.2 },
+  commander: { allyAtkMult: 1.03 },
 };
 
 export const TRAIT_NAME: Record<Lineage, string> = {

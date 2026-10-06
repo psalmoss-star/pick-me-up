@@ -27,9 +27,7 @@ export function describeTrait(lineage: Lineage, t: LineageTraits = LINEAGE_TRAIT
     case 'hunter':
       return `해로운 상태에 걸린 적에게 피해 ${pct(t.hunter.afflictedMult)}`;
     case 'scout':
-      return t.scout.turns === 1
-        ? `전투 첫 턴에 속도 ${pct(t.scout.spdMult)}`
-        : `전투 첫 ${t.scout.turns}턴 동안 속도 ${pct(t.scout.spdMult)}`;
+      return `전투 첫 ${t.scout.turns === 1 ? '턴' : `${t.scout.turns}턴`}에 속도 ${pct(t.scout.spdMult)} · 피해 ${pct(t.scout.damageMult)}`;
     case 'commander':
       return `전장에 있는 동안 아군 전체 공격력 ${pct(t.commander.allyAtkMult)}`;
   }

@@ -3,10 +3,13 @@ import { runEncounter } from './encounter';
 import { createRng } from './rng';
 import { klassFor } from './stats';
 import { MISSION_LABEL } from './mission';
-import { gameData, FLOORS } from './data';
+import { gameData as gameDataOn, gameDataNoTraits, FLOORS } from './data';
 import type { FloorSpec } from './data/floors';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from './types';
 import { HERO } from './data/sample';
+
+/** --no-traits — 계열 특성을 끈 번들로 잰다(특성 이전 기준선). 켠 것과의 차이를 볼 때만 쓴다 */
+const gameData = process.argv.includes('--no-traits') ? gameDataNoTraits : gameDataOn;
 
 const hero = (
   defId: HeroDefId, star: Star, level: number, n: number, seed?: number,

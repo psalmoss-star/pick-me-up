@@ -867,6 +867,9 @@ function applyEffect(
       if (t && actor.lineage === 'hunter' && isAfflicted(target)) {
         mult *= t.hunter.afflictedMult; trait = 'hunter';
       }
+      if (t && actor.lineage === 'scout' && turn <= t.scout.turns) {
+        mult *= t.scout.damageMult; trait = 'scout';
+      }
       if (t && target.lineage === 'guardian') {
         mult *= t.guardian.damageTakenMult; trait = 'guardian';
       }

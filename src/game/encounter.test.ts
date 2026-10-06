@@ -7,6 +7,7 @@ import { heroes, enemies, skills, starScaling, elementChart, HERO } from './data
 import { FLOORS, floorAt, floorRewards } from './data/floors';
 import { enemyStatMultFor } from './data/floorgen';
 import type { EnemyDefId, HeroDefId, HeroInstId, HeroInstance, Star } from './types';
+import { TRAIT_COMPENSATION } from './data/floorgen';
 
 const data = { heroes, enemies, skills, starScaling, elementChart } as unknown as BattleData;
 
@@ -73,10 +74,14 @@ describe('로스터 구성', () => {
     }
   });
 
-  it('손으로 짠 층(1~20)의 적 maxHp는 정의 값 그대로다', () => {
+  // 깊이 배수는 없지만 계열 특성 보정(STEP 69)은 손층에도 붙는다 — 엔진이 쓰는 배수와 같아야 한다
+  it('손으로 짠 층(1~20)의 적 maxHp는 정의 값에 특성 보정만 곱한 값이다', () => {
     const r = run(0);
-    for (const u of r.roster.filter((x) => x.kind === 'enemy')) {
-      expect(u.maxHp).toBe(data.enemies[u.sourceId as EnemyDefId].stats.hp);
+    const enemiesInRoster = r.roster.filter((x) => x.kind === 'enemy');
+    expect(enemiesInRoster.length).toBeGreaterThan(0);
+    for (const u of enemiesInRoster) {
+      const base = data.enemies[u.sourceId as EnemyDefId].stats.hp;
+      expect(u.maxHp).toBe(Math.round(base * TRAIT_COMPENSATION.handcrafted));
     }
   });
 

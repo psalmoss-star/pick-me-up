@@ -238,8 +238,25 @@ export function tierOf(floorId: number): Tier {
  */
 export const DEPTH_MULT_BASE = 1.015;
 
+/**
+ * 계열 특성 보정 — 특성(STEP 69)으로 영웅이 강해진 만큼 **모든 층의 적**에 곱한다.
+ *
+ * 특성은 순수한 강점으로 주고(사용자 결정, 2026-10-06) 그만큼 층을 다시 맞춘다.
+ * 층마다 적 수치를 손으로 다시 적는 대신 배수로 되돌린다 — 손으로 짠 1~20층의
+ * 상대적 모양(어느 층이 쉽고 어느 층이 막히는가)이 그대로 남는다.
+ *
+ * ⚠️ 위 주석의 "1~20층은 반드시 1.0"을 **의도적으로** 깼다. 그 규칙이 지키려던 것은
+ * 실측 승률표이고, 이 값은 그 표를 특성 이전 자리로 되돌리려고 실측으로 고른 것이다.
+ * 특성 수치(`data/traits.ts`)를 만졌으면 이 값도 다시 잰다
+ * (`scripts/trait-check.mts`의 "전부" 줄 → `npm run sim` → `climb-check` → `floor-tune`).
+ *
+ * 구간마다 값이 다른 이유: 손층은 3인(특성 셋), 생성 층은 5인(특성 다섯)이 싸운다.
+ * 한 값으로 맞추면 손층이 조여지거나(1.035: 6층 65→59%) 생성 구간이 풀린다(1.03: 21~40 완주 31→45%).
+ */
+export const TRAIT_COMPENSATION = { handcrafted: 1.03, generated: 1.04 } as const;
+
 export function enemyStatMultFor(floorId: number): number {
-  if (floorId <= HANDCRAFTED_UNTIL) return 1;
+  if (floorId <= HANDCRAFTED_UNTIL) return TRAIT_COMPENSATION.handcrafted;
   const base = DEPTH_MULT_BASE ** (floorId - HANDCRAFTED_UNTIL);
   /**
    * 보스 층은 배수를 **덜 먹인다**.
@@ -260,7 +277,8 @@ export function enemyStatMultFor(floorId: number): number {
    *   0.35 → 94%·사망 0.45 / 89%·1.02   ← 보스가 안 무섭다
    * 소모전(이기되 대가를 치른다)을 목표로 0.45를 골랐다.
    */
-  return floorId % BOSS_EVERY === 0 ? 1 + (base - 1) * 0.45 : base;
+  // 특성 보정은 보스 감쇠 **밖에서** 곱한다 — 안에 넣으면 보스 층만 보정이 절반도 안 먹는다
+  return TRAIT_COMPENSATION.generated * (floorId % BOSS_EVERY === 0 ? 1 + (base - 1) * 0.45 : base);
 }
 
 // ------------------------------------------------------------
