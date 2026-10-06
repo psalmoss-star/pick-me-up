@@ -261,6 +261,28 @@ export function PartyScreen({
         배치는 역할에 따라 정해집니다
       </div>
 
+      {/*
+        경고·출전 버튼은 진형 바로 아래에 둔다. 통계 패널 아래에 있을 때는 375×667에서
+        버튼이 탭 바 밑(688px)에 깔려 매번 스크롤해야 했다(실측 2026-10-06).
+        통계는 버튼 아래로 내렸다 — 접어서 숨기지 않는다(적 종류·전투력은 편성의 판단 근거다).
+      */}
+      {warnings.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {warnings.map((w) => (
+            <div key={w.kind + ('element' in w ? w.element : '')} style={{ fontSize: 11, color: T.amber, lineHeight: 1.8 }}>
+              ⚠ {warningText(w)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', margin: '0 0 16px' }}>
+        <Button small onClick={doAuto} disabled={locked || members.length >= partyLimit}>
+          자동 편성
+        </Button>
+        <Button onClick={onSortie} disabled={members.length === 0}>출전</Button>
+      </div>
+
       <SystemPanel compact>
         <Row label="파티 총 전투력" value={total.toLocaleString()} gold />
         <Row label="평균 레벨" value={members.length ? `Lv.${avgLevel}` : '—'} />
@@ -290,23 +312,7 @@ export function PartyScreen({
         </div>
       </SystemPanel>
 
-      {warnings.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          {warnings.map((w) => (
-            <div key={w.kind + ('element' in w ? w.element : '')} style={{ fontSize: 11, color: T.amber, lineHeight: 1.8 }}>
-              ⚠ {warningText(w)}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', margin: '16px 0 20px' }}>
-        <Button small onClick={doAuto} disabled={locked || members.length >= partyLimit}>
-          자동 편성
-        </Button>
-        <Button onClick={onSortie} disabled={members.length === 0}>출전</Button>
-      </div>
-
+      <div style={{ height: 20 }} />
       <SectionLabel>{locked ? '보유 영웅' : '눌러서 편성'}</SectionLabel>
 
       {alive.length === 0 && (
