@@ -34,7 +34,8 @@ export const ASSIGNABLE: readonly AssignableFacility[] = ['training', 'forge'];
 export const FACILITY_MAX_LEVEL = 3;
 
 export const FACILITY_META: Record<FacilityKind, { name: string; desc: string }> = {
-  rest: { name: '숙소', desc: '층 사이 회복량' },
+  // 회복은 저절로 되지 않는다 — 전투 뒤 숙소에 들러 쉬어야 받는다(STEP 73)
+  rest: { name: '숙소', desc: '전투 뒤 쉬는 곳' },
   training: { name: '훈련소', desc: '대기 영웅 유휴 경험치' },
   forge: { name: '합성소', desc: '합성 경험치 전환율' },
   armory: { name: '무기창고', desc: '파티 공격력' },
