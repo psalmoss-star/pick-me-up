@@ -61,7 +61,7 @@ export function PartyScreen({
   squadsUnlocked, lockedSquad, onToggleParty, onInspect, onSortie, floor, gear,
 }: PartyScreenProps) {
   const gearIndex = new Map(gear.map((g) => [g.instId, g]));
-  const bonusOf = (h: HeroInstance) => heroBonus(h.gear, gearIndex);
+  const bonusOf = (h: HeroInstance) => heroBonus(h.gear, gearIndex, gameData.heroes[h.defId]?.lineage);
   /** 자동 편성이 붙인 이유 — 손으로 편성을 바꾸면 지운다(이유가 더는 맞지 않는다) */
   const [reasons, setReasons] = useState<Record<HeroInstId, string>>({});
   const alive = livingHeroes(roster);

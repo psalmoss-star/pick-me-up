@@ -8,18 +8,25 @@
  * consumedInstId만 돌려주고 제거는 스토어가 하는 것과 같은 경계다.
  */
 import type {
-  GearBonus, GearDefId, GearInstId, GearInstance, GearSlot, HeroInstId, RNG, Stats,
+  GearBonus, GearDefId, GearInstId, GearInstance, GearSlot, HeroInstId, Lineage, RNG, Stats,
 } from './types';
 import { GEAR_DEFS, GEAR_TUNING, enhanceMult, enhanceChanceOf, enhanceCostOf } from './data/gear';
+import { affinityOf } from './data/gearAffinity';
 
-/** 강화까지 반영한 개별 장비의 실효 보정 */
-export function bonusOf(inst: GearInstance): GearBonus {
+/**
+ * 강화까지 반영한 개별 장비의 실효 보정.
+ *
+ * `affinity` — 장비 궁합 배수(`data/gearAffinity.ts`). 착용자의 계열이 이 슬롯을 주 장비로 삼을 때만 1보다 크다.
+ * **이로운 수치에만** 곱한다 — 판금의 속도 감소 같은 대가까지 키우면 궁합이 벌이 된다.
+ * 안 넘기면 1이라 장비 자체의 값(상점·대장간·창고가 보이는 값)이 그대로 나온다.
+ */
+export function bonusOf(inst: GearInstance, affinity = 1): GearBonus {
   const def = GEAR_DEFS[inst.defId];
   if (!def) return {};
-  const m = enhanceMult(inst.enhance);
   const out: GearBonus = {};
   for (const [k, v] of Object.entries(def.base) as Array<[keyof GearBonus, number]>) {
     if (v == null) continue;
+    const m = enhanceMult(inst.enhance) * (v > 0 ? affinity : 1);
     /*
       crit은 확률(0~1)이라 반올림하면 소수점이 통째로 날아간다.
       나머지는 정수 스탯이므로 반올림한다.
@@ -45,17 +52,22 @@ export function sumBonus(bonuses: GearBonus[]): GearBonus {
  * 한 영웅이 착용 중인 장비 전체의 보정.
  * @param gear 영웅의 slot → GearInstId 매핑
  * @param inventory 보유 장비 조회용
+ * @param lineage 착용자의 계열 — 주 장비 슬롯의 궁합이 붙는다.
+ *   ⚠️ **전투·화면이 같은 값을 써야 한다.** 엔진(`buildAlly`)·로스터(`encounter`)·착용 전 비교(`gearCompare`)·
+ *   상태창·상세·편성의 전투력이 전부 계열을 넘긴다. 한 곳이라도 빠지면 화면의 숫자와 실제 전투가 어긋난다.
  */
 export function heroBonus(
   gear: Partial<Record<GearSlot, GearInstId>> | undefined,
   inventory: Map<GearInstId, GearInstance>,
+  lineage?: Lineage,
 ): GearBonus {
   if (!gear) return {};
   const list: GearBonus[] = [];
   for (const id of Object.values(gear)) {
     if (!id) continue;
     const inst = inventory.get(id);
-    if (inst) list.push(bonusOf(inst));
+    const def = inst && GEAR_DEFS[inst.defId];
+    if (inst && def) list.push(bonusOf(inst, affinityOf(lineage, def.slot)));
   }
   return sumBonus(list);
 }

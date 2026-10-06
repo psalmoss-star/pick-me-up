@@ -90,7 +90,7 @@ export function StatusScreen({
   const def = gameData.heroes[hero.defId];
   const attrs = attributesOfInstance(hero, def, gameData.starScaling);
   const index = new Map(gear.map((g) => [g.instId, g]));
-  const bonus = heroBonus(hero.gear, index);
+  const bonus = heroBonus(hero.gear, index, def.lineage);
   const stats = applyBonus(statsOfInstance(hero, def, gameData.starScaling), bonus);
   const power = heroPower(hero, def, gameData.starScaling, bonus);
   const reveal = estimatePotential(hero);

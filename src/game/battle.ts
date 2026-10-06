@@ -227,7 +227,7 @@ function buildAlly(
    * 무기창고는 "파티 전체 공격력 +Lv×3%"이므로 장비를 포함한 실제 공격력에 걸려야 한다.
    * 뒤집으면 장비를 낄수록 시설 효과가 상대적으로 약해진다.
    */
-  const geared = inventory ? applyBonus(base, heroBonus(inst.gear, inventory)) : base;
+  const geared = inventory ? applyBonus(base, heroBonus(inst.gear, inventory, def.lineage)) : base;
   const stats = atkMult === 1 ? geared : { ...geared, atk: Math.round(geared.atk * atkMult) };
   return {
     uid: `A:${inst.instId}`,

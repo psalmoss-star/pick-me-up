@@ -29,7 +29,7 @@ function statsWith(
   inventory: Map<GearInstId, GearInstance>,
   gear: Partial<Record<GearSlot, GearInstId>>,
 ): Stats {
-  return applyBonus(statsOfInstance(hero, def, scaling), heroBonus(gear, inventory));
+  return applyBonus(statsOfInstance(hero, def, scaling), heroBonus(gear, inventory, def.lineage));
 }
 
 /** 이 영웅이 `slot`에 `candidate`를 끼면(지금 것 대신) 얼마나 바뀌나. `null`은 벗기 */

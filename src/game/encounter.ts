@@ -99,7 +99,7 @@ export function runEncounter(args: {
         전투 시작부터 바가 넘쳐 보인다 — battle.ts와 같은 계산을 써야 한다.
       */
       const base = statsOfInstance(h, def, data.starScaling);
-      const stats = inventory ? applyBonus(base, heroBonus(h.gear, inventory)) : base;
+      const stats = inventory ? applyBonus(base, heroBonus(h.gear, inventory, def.lineage)) : base;
       return {
         uid: `A:${h.instId}`,
         // 화면에 뜨는 이름. 개체 이름이 유일한 진실이다 (identity.ts).

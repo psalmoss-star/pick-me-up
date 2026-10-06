@@ -18,6 +18,7 @@ import { gameData } from '../game/data';
 import type {
   Attribute, GearInstId, GearInstance, GearSlot, HeroInstance,
 } from '../game/types';
+import { GEAR_AFFINITY, affinityOf } from '../game/data/gearAffinity';
 
 export interface DetailModalProps {
   hero: HeroInstance;
@@ -57,7 +58,7 @@ export function DetailModal({
    * 계산은 battle.ts와 같은 함수를 쓴다 — 여기서 다시 더하면 두 곳으로 갈라진다.
    */
   const index = new Map((gear ?? []).map((g) => [g.instId, g]));
-  const bonus = gear ? heroBonus(hero.gear, index) : {};
+  const bonus = gear ? heroBonus(hero.gear, index, def.lineage) : {};
   const stats = gear ? applyBonus(baseStats, bonus) : baseStats;
 
   const holderOf = (g: GearInstance) =>
@@ -79,7 +80,8 @@ export function DetailModal({
 
   /** 보정을 사람이 읽는 짧은 문구로 */
   const bonusText = (g: GearInstance) => {
-    const b = bonusOf(g);
+    // 이 영웅이 꼈을 때의 값 — 주 장비 슬롯이면 궁합이 붙은 수치다
+    const b = bonusOf(g, affinityOf(def.lineage, GEAR_DEFS[g.defId]?.slot ?? 'weapon'));
     const parts: string[] = [];
     if (b.atk) parts.push(`공${b.atk >= 0 ? '+' : ''}${b.atk}`);
     if (b.hp) parts.push(`HP${b.hp >= 0 ? '+' : ''}${b.hp}`);
@@ -155,6 +157,10 @@ export function DetailModal({
               <div style={{ fontSize: 11, color: T.dim, letterSpacing: '.3em', marginBottom: 6 }}>
                 장비
               </div>
+              {/* 궁합 — 숫자는 데이터에서 읽는다. 손으로 적으면 `gearAffinity.ts`를 고칠 때 화면이 거짓말을 한다 */}
+              <div style={{ fontSize: 10, color: T.gold, marginBottom: 8 }}>
+                ◆ 주 장비 · {SLOT_LABEL[GEAR_AFFINITY.slot[def.lineage]]} — 효과 +{Math.round((GEAR_AFFINITY.mult - 1) * 100)}%
+              </div>
               {onEquip && (
                 <div style={{ marginBottom: 10 }}>
                   {/* 자동 장착은 창고의 장비만 쓴다 — 남의 장비를 조용히 가져오지 않는다 */}
@@ -186,7 +192,8 @@ export function DetailModal({
                             cursor: onEquip ? 'pointer' : 'default',
                           }}
                         >
-                          {SLOT_LABEL[slot]} {onEquip ? (openSlot === slot ? '▴' : '▾') : ''}
+                          {/* ◆ = 이 계열의 주 장비 슬롯 — 여기 낀 장비는 효과가 더 크다 */}
+                          {affinityOf(def.lineage, slot) > 1 ? '◆ ' : ''}{SLOT_LABEL[slot]} {onEquip ? (openSlot === slot ? '▴' : '▾') : ''}
                         </button>
                         <span style={{ flex: 1, fontSize: 13, textAlign: 'left', color: wornDef ? T.text : T.dim }}>
                           {wornDef
