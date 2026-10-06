@@ -195,7 +195,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1297개 통과)
+npm test           # Vitest 1회 실행 (현재 1310개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -321,6 +321,7 @@ src/
 │  ├─ power.ts        # 전투력 — **표시 전용.** 엔진이 import하면 안 된다(테스트로 잠금)
 │  ├─ formation.ts    # 진형·속성 구성·추천 편성(recommendParty — 수호·치유 우선 + 이유). 전부 표시/보조용
 │  ├─ floorIntel.ts   # 다음 층 적 종류(수 없음)·상성 ▲▼·역할 경고. 표시 보조, 엔진은 모른다
+│  ├─ partySynergy.ts # 편성의 특성 맞물림·빈 주 장비 안내. 표시 전용 — 엔진에 있는 것만, 수치 없이
 │  ├─ gearCompare.ts  # 장비 착용 전 비교(gearDelta)·슬롯 추천(bestFreeGear). 표시 전용
 │  ├─ intervention.ts # 개입 — 화면이 쓰는 것은 후퇴 신호(withdraw)뿐. 집중/수호/1턴 후퇴는 엔진에만 남았다
 │  ├─ orders.ts       # 작전 방침 — 퇴각(군령)만 쓴다. 기본값 = 현행 엔진(비트 단위)

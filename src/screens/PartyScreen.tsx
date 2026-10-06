@@ -11,6 +11,9 @@ import { SectionLabel } from './SectionLabel';
 import { SQUAD_OPEN_ROSTER } from '../game/data/party';
 import { LINE_KR, ROLE_KR } from '../game/data/formation';
 import { formationOf, elementSpread, recommendParty } from '../game/formation';
+import { idleMainSlots, synergyNotes, type SynergyNote } from '../game/partySynergy';
+import { SLOT_LABEL } from '../game/data/gear';
+import { TRAIT_NAME } from '../game/data/traits';
 import {
   compositionWarnings, enemyKindsOf, matchupOf, type CompositionWarning,
 } from '../game/floorIntel';
@@ -96,6 +99,8 @@ export function PartyScreen({
   */
   const kinds = enemyKindsOf(floor, gameData.enemies);
   const warnings = compositionWarnings(members, gameData.heroes, gameData.skills, kinds, gameData.elementChart);
+  const notes = synergyNotes(members, gameData.heroes, gameData.skills);
+  const idle = idleMainSlots(members, gameData.heroes, gearIndex);
   const toggle = (id: HeroInstId) => {
     setReasons({});
     onToggleParty(editing, id);
@@ -283,6 +288,25 @@ export function PartyScreen({
         <Button onClick={onSortie} disabled={members.length === 0}>출전</Button>
       </div>
 
+      {/*
+        특성 맞물림·주 장비 안내(STEP 72) — **출전 버튼 아래**에 둔다. 위에 두면 버튼이 탭 바 밑으로 밀린다
+        (바로 위 주석의 실측). 엔진에 있는 것만 말하고 수치는 적지 않는다 — 수치는 상태창이 말한다.
+      */}
+      {(notes.length > 0 || idle.length > 0) && (
+        <div style={{ marginBottom: 12, fontSize: 11, lineHeight: 1.8, textAlign: 'center' }}>
+          {notes.map((n) => (
+            <div key={n.kind} style={{ color: n.kind === 'doubleCommander' ? T.amber : T.rare }}>
+              {synergyText(n)}
+            </div>
+          ))}
+          {idle.map(({ hero, slot }) => (
+            <div key={hero.instId} style={{ color: T.gold }}>
+              ◆ {displayName(hero, gameData.heroes)} — 주 장비({SLOT_LABEL[slot]})가 비어 있다. 창고에 낄 것이 있다
+            </div>
+          ))}
+        </div>
+      )}
+
       <SystemPanel compact>
         <Row label="파티 총 전투력" value={total.toLocaleString()} gold />
         <Row label="평균 레벨" value={members.length ? `Lv.${avgLevel}` : '—'} />
@@ -427,5 +451,14 @@ function warningText(w: CompositionWarning): string {
     case 'noTank': return '수호 없음 — 적의 공격이 후위에게도 그대로 간다';
     case 'noHealer': return '치유 없음 — 회복은 포션뿐이다';
     case 'weakMajority': return `${ELEMENT_KR[w.element]} 속성 적에게 약한 영웅이 절반 이상이다`;
+  }
+}
+
+/** 특성 맞물림 한 줄 — 엔진에 있는 것만, 수치 없이 */
+function synergyText(n: SynergyNote): string {
+  switch (n.kind) {
+    case 'led': return `${TRAIT_NAME.commander} — 지휘관이 전장에 있는 동안 모두의 공격이 오른다`;
+    case 'doubleCommander': return `⚠ 지휘관이 둘이어도 ${TRAIT_NAME.commander}는 한 번만 걸린다`;
+    case 'hunterFed': return `${TRAIT_NAME.hunter} — 상태이상을 거는 동료 ${n.allies}명과 맞물린다`;
   }
 }

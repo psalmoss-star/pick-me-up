@@ -57,3 +57,18 @@ export const TRAIT_NAME: Record<Lineage, string> = {
   scout: '선제',
   commander: '진두지휘',
 };
+
+/**
+ * 특성 한 줄 요약 — 편성 화면의 좁은 칸(추천 이유)에 쓴다.
+ * **수치를 적지 않는다**(테스트가 숫자·%를 막는다). 수치는 `describeTrait`가 데이터에서 만들어 상태창에 보인다 —
+ * 여기에 또 적으면 수치를 고칠 때 한쪽이 거짓말을 한다.
+ */
+export const TRAIT_BRIEF: Record<Lineage, string> = {
+  blade: '다 깎인 적을 끊는다',
+  guardian: '덜 아프게 맞는다',
+  priest: '넘친 치유가 보호막이 된다',
+  mage: '여럿을 한꺼번에 친다',
+  hunter: '약해진 적을 노린다',
+  scout: '첫 턴에 먼저 친다',
+  commander: '모두의 공격을 올린다',
+};

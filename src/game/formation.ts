@@ -10,6 +10,7 @@ import type {
 import { heroPower } from './power';
 import { canHeal, matchupOf, type EnemyKind, type Matchup } from './floorIntel';
 import { ROLE_LINE, LINE_ORDER, RECOMMEND_MATCHUP_WEIGHT, type Line } from './data/formation';
+import { TRAIT_BRIEF, TRAIT_NAME } from './data/traits';
 
 export interface FormationSlot {
   hero: HeroInstance;
@@ -87,7 +88,7 @@ export interface Recommendation {
  *
  * 1. 편성에 수호가 없으면 수호 1명(전투력 최고)
  * 2. 편성에 치유 스킬 보유자가 없으면 1명 — 역할이 아니라 스킬로 본다(`canHeal`)
- * 3. 나머지는 전투력 × 상성 보정(`matchupScore`) 순
+ * 3. 나머지는 전투력 × 상성 보정(`matchupScore`) 순 — 이유는 상성, 아니면 계열 특성
  *
  * 수호·치유 우선의 근거는 엔진에 있다: 탱커가 단일 공격의 60%를 대신 맞고(`TANK_AGGRO`),
  * 도발 없는 파티는 치유자가 먼저 쓰러진다(HANDOFF 측정). 그 밖의 역할 균형은 맞추지 않는다.
@@ -140,7 +141,14 @@ export function recommendParty(args: {
   }
   for (const x of [...pool].sort((a, b) => b.score - a.score)) {
     if (room <= 0) break;
-    take(x, x.m.strong > 0 ? `적 ${kinds.length}종 중 ${x.m.strong}종에 유리` : '전투력 상위');
+    /*
+      상성으로 뽑힌 것이 아니면 그 영웅의 **계열 특성**을 적는다(STEP 72). 예전의 "전투력 상위"는
+      옆 칸의 숫자가 이미 말하는 것이라 이유가 되지 못했다. 고르는 기준(전투력 × 상성)은 그대로다 —
+      바뀐 것은 문장뿐이다.
+    */
+    take(x, x.m.strong > 0
+      ? `적 ${kinds.length}종 중 ${x.m.strong}종에 유리`
+      : `${TRAIT_NAME[x.def.lineage]} — ${TRAIT_BRIEF[x.def.lineage]}`);
   }
   return { ids, reasons };
 }
