@@ -79,8 +79,15 @@
   죽은 영웅의 이름도 영구 봉인된다(초상화 재사용은 허용).
 - 등급과 캐릭터 유형은 **독립**이다. ★5 카일도, ★1 이스카도 나올 수 있다.
 - **클래스 이름은 계열 × 등급이다(STEP 68).** 화면은 `klassName(defId, star, defs)`로만 읽는다 — `klassFor(star)`를
-  화면에 다시 쓰면 사제가 "정예병"이 된다. 계열(`HeroDef.lineage`)은 **지금 표시 전용**이고, 전투에 닿게 하는 것은
-  다음 단계(HANDOFF §STEP 68 "남은 것")다. 보조직업은 사용자 결정으로 묻어 뒀다 — 먼저 제안하지 말 것.
+  화면에 다시 쓰면 사제가 "정예병"이 된다. 보조직업은 사용자 결정으로 묻어 뒀다 — 먼저 제안하지 말 것.
+- **계열 특성(STEP 69)은 전투 입력이다.** 계열마다 하나, 수치는 `data/traits.ts`에만 있다. **확률이 없다** — 조건으로만 발동하고
+  `computeDamage`가 낸 값에 배수로 건다(주 전투 난수의 소비 순서를 밀지 않는다). 확률 특성이 필요하면 `STREAM`에 번호를 **뒤에 추가**한다.
+  **죽음이 이득이 되는 특성을 두지 않는다.** 적은 계열이 없다.
+  `BattleData.traits`를 빼면 특성 이전 엔진과 같아야 한다 — 특성 코드가 특성 없는 전투에서 난수를 더 뽑거나 이벤트를 더하면
+  `ordersBaseline.test.ts`의 "끔" 지문이 깨진다(**깨지면 갱신하지 말고 변경을 의심할 것**).
+  설명 문장은 손으로 적지 않는다 — `describeTrait`가 수치에서 만든다.
+  **특성 수치를 만졌으면 `floorgen.ts`의 `TRAIT_COMPENSATION`(적 배수 — 손층 1.03 · 생성 1.04)도 다시 잰다.**
+  순서: `trait-check` → `npm run sim` → `climb-check` → `floor-tune`. 손층에도 배수가 붙으므로 "1~20층 적 수치 = 정의 값"이 아니다.
 - 합성 UI에서 **"제물"이라는 단어를 그대로 쓴다.** 순화하지 말 것.
 - 승급은 레벨을 1로 리셋한다 → 승급 직후는 이전보다 약하다. 이건 버그가 아니라 설계다.
   **소환 시작 레벨(`summonLevel`)을 승급에 적용하지 말 것** — 그 대가가 사라진다.
@@ -178,7 +185,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1239개 통과)
+npm test           # Vitest 1회 실행 (현재 1262개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -196,7 +203,11 @@ npx tsx scripts/gear-ladder.mts [--write]  # 장비 사다리 수치 풀이 → 
 npx tsx climb-check.mts --gear supply|elite  # 단계에 맞는 한 벌을 입고 연속 등반
 npx tsx climb-check.mts --gear relic|relic1  # 층 단계의 유물을 입고(전원 / 첫 출전자만) 연속 등반 (STEP 67)
 npx tsx scripts/mat-probe.mts               # 단계별 재료 수급 — 재련 비용의 근거 (STEP 67)
+npx tsx scripts/trait-check.mts             # 계열 특성을 하나씩만 켠 승률·사망 변화 (STEP 69)
+npx tsx climb-check.mts --no-traits         # 특성을 끈 번들로 (sim·floor-tune도 같은 옵션). 적 보정 배수는 남는다
 ```
+
+⚠️ **`sim`·`climb-check`는 술사·사냥꾼 특성을 밟지 않는다**(기준 파티에 그 계열이 없다). 그 둘은 `trait-check`가 잰다.
 
 ⚠️ **`sim`·`climb-check`·`floor-tune`은 책략·지형을 쓰지 않는다.** 층 난이도는 "책략 없음" 기준이다.
 실제 플레이(기본 장착 매복·야습)는 **중층 64→78%(+14p), 상층 74→83%(+9p)**이고, 지형(경로)이
@@ -229,6 +240,14 @@ npx tsx scripts/mat-probe.mts               # 단계별 재료 수급 — 재련
 ```
 sim         6층 65%/사망 1.40 · 12층 43% · 20층 67%
 climb-check 저층 66% / 중층 14% / 상층 10% / 31 / 31 / 42 / 19%
+```
+
+**계열 특성 + 적 보정 이후(2026-10-06, STEP 69) — 지금 도구를 돌리면 이 값이 나온다.**
+위 값은 "특성 이전"이고 보정의 목표였다.
+
+```
+sim         6층 62%/사망 1.49 · 12층 41% · 20층 73%
+climb-check 저층 61% / 중층 14% / 상층 11% / 39 / 29 / 45 / 21%
 ```
 
 ⚠️ **`sim`은 매 층을 만피로 독립 측정한다.** 층간 HP·숙소·초기 로스터를 만졌으면
@@ -279,6 +298,7 @@ src/
 │  ├─ craft.ts     # 제작·재련 — 재료→유물, 유물 단계 올리기. **확률이 없다**(RNG를 받지 않는다)
 │  ├─ identity.ts    # 개체 이름 — displayName이 유일한 관문. def.name 직접 읽기 금지
 │  ├─ klass.ts       # 클래스 이름(계열 × 등급) — klassName이 화면의 유일한 관문. 표시 전용
+│  ├─ trait.ts       # 계열 특성 설명 문장(describeTrait) — 표시 전용. 판정은 battle.ts에 있다
 │  ├─ origin.ts      # 생전 서사(지위·최후) — seed에서 파생, 저장하지 않는다. 표시 전용
 │  ├─ temperament.ts # 기질 — seed에서 파생. 승급해도 안 바뀐다. 수치엔 안 닿고 정찰 보고 성향만 정한다
 │  ├─ voice.ts       # 대사 선택(seed+순간+맥락) · 조사 처리 · 템플릿 유언
@@ -308,6 +328,7 @@ src/
 │     ├─ skills.ts    # 스킬 15종
 │     ├─ heroes.ts    # 영웅 12종 + HERO 상수
 │     ├─ lineages.ts  # 계열 7종 + 계열 × 등급 클래스 이름표
+│     ├─ traits.ts    # 계열 특성 수치·이름 — 만지면 floorgen의 TRAIT_COMPENSATION도 다시 잰다
 │     ├─ enemies.ts   # 적 19종 + ENEMY 상수. 보스 수치 주석 = 밸런스 도출 근거
 │     ├─ floors.ts    # 층 정의 — 손으로 짠 1~20층 + 생성분 21~100층
 │     ├─ floorgen.ts  # 층 생성기(21~) + 적 깊이 배수. 결정적이어야 한다
