@@ -35,6 +35,7 @@ import { terrainModifier } from './floormap';
 import type { TerrainTag } from './data/terrain';
 import { attributesOfInstance, statsOfInstance } from './stats';
 import { rngChance } from './rng';
+import type { LineageTraits } from './data/traits';
 
 // ------------------------------------------------------------
 // 입력/출력
@@ -51,6 +52,11 @@ export interface BattleData {
   skills: Record<SkillId, Skill>;
   starScaling: Record<Star, StarScaling>;
   elementChart: Record<Element, Record<Element, number>>;
+  /**
+   * 계열 특성 수치(`data/traits.ts`). **생략하면 특성 없이 돈다** — 특성 이전 엔진과
+   * 비트 단위로 같다(`ordersBaseline.test.ts`). `gameData`에는 들어 있다.
+   */
+  traits?: LineageTraits;
 }
 
 export interface BattleInput {
@@ -231,6 +237,7 @@ function buildAlly(
     name: displayName(inst, d.heroes),
     element: def.element,
     role: def.role,
+    lineage: def.lineage,
     stats,
     currentHp: Math.min(inst.currentHp > 0 ? inst.currentHp : stats.hp, stats.hp),
     shield: 0,
@@ -317,11 +324,18 @@ function modifier(c: Combatant, up: StatusKind, down: StatusKind): number {
   return Math.max(0.1, m);
 }
 
-const effAtk = (c: Combatant) => c.stats.atk * modifier(c, 'atkUp', 'atkDown');
+// atkAura는 지휘관 특성이 건다 — 특성이 없으면 undefined라 계산이 예전과 같다
+const effAtk = (c: Combatant) => c.stats.atk * modifier(c, 'atkUp', 'atkDown') * (c.atkAura ?? 1);
 const effDef = (c: Combatant) => c.stats.def * modifier(c, 'defUp', 'defDown');
 const effSpd = (c: Combatant) => c.stats.spd * modifier(c, 'spdUp', 'spdDown');
 
 const isStunned = (c: Combatant) => c.statuses.some((s) => s.kind === 'stun');
+
+/** 해로운 상태 — 정화가 씻는 것과 사냥꾼 특성이 노리는 것이 같은 목록이어야 한다 */
+const HARMFUL: readonly StatusKind[] = ['atkDown', 'defDown', 'spdDown', 'poison', 'burn', 'stun'];
+const isAfflicted = (c: Combatant) => c.statuses.some((s) => HARMFUL.includes(s.kind));
+/** 대상이 둘 이상인 기술인가 — 술사 특성의 조건 */
+const isMultiTarget = (s: Skill) => s.targetScope === 'all' || s.targetScope === 'random2';
 
 // ------------------------------------------------------------
 // 대미지 공식
@@ -588,9 +602,35 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     events.push({ turn, type: 'withdraw', targetUids: [u.uid] });
   };
 
+  /*
+    계열 특성 — `data.traits`가 없으면 아래 셋 다 예전 계산 그대로다(이벤트도 내지 않는다).
+  */
+  const traits = data.traits;
+  /** 척후 — 첫 몇 턴 동안 행동 순서만 앞당긴다. 속도 수치 자체는 건드리지 않는다 */
+  const initiative = (u: Combatant) =>
+    effSpd(u) * (traits && u.lineage === 'scout' && turn <= traits.scout.turns ? traits.scout.spdMult : 1);
+  /**
+   * 지휘관 — 전장에 있는 동안 아군 영웅 전체의 공격력을 올린다. 둘이어도 한 번이다.
+   * 쓰러지거나 이탈하면 바로 꺼져야 하므로 행동마다 다시 정한다.
+   */
+  const refreshAura = () => {
+    if (!traits) return;
+    const led = heroUnits.some((u) => inField(u) && u.lineage === 'commander');
+    for (const u of heroUnits) u.atkAura = led ? traits.commander.allyAtkMult : 1;
+  };
+
   while (turn < maxTurns) {
     turn++;
     events.push({ turn, type: 'turnStart' });
+
+    // 전투가 열리는 순간 드러나는 특성 — 화면이 "왜 먼저 움직였나 / 왜 더 아픈가"를 말할 수 있게
+    if (traits && turn === 1) {
+      for (const u of heroUnits) {
+        if (inField(u) && (u.lineage === 'scout' || u.lineage === 'commander')) {
+          events.push({ turn, type: 'trait', actorUid: u.uid, trait: u.lineage });
+        }
+      }
+    }
 
     // --- 개입 발효 ---
     // uid로 변환해 둔다. 개입은 instId로 대상을 가리키지만 전투는 uid로 돈다.
@@ -706,12 +746,13 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     // 턴 시작 시 속도 순 정렬 (버프 반영)
     const order = units
       .filter((u) => inField(u) && !isGuard(u))
-      .sort((a, b) => effSpd(b) - effSpd(a));
+      .sort((a, b) => initiative(b) - initiative(a));
 
     for (const actor of order) {
       if (!inField(actor)) continue;
       // 후퇴한 영웅은 이번 턴 행동하지 않는다
       if (retreatedUids.has(actor.uid)) continue;
+      refreshAura();
 
       // 도트 피해
       for (const st of actor.statuses) {
@@ -743,7 +784,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
           });
           for (const target of targets) {
             for (const eff of skill.effects) {
-              applyEffect(actor, target, eff, data, rng, events, turn);
+              applyEffect(actor, target, eff, data, rng, events, turn, isMultiTarget(skill));
             }
           }
           actor.cooldowns[skill.id] = skill.cooldown;
@@ -798,31 +839,70 @@ function applyEffect(
   rng: RNG,
   events: BattleEvent[],
   turn: number,
+  /** 이 효과가 속한 기술이 둘 이상을 대상으로 하는가 — 술사 특성의 조건 */
+  multiTarget = false,
 ): void {
   if (!target.isAlive && eff.kind !== 'revive') return;
   if (eff.chance !== undefined && !rngChance(rng, eff.chance)) return;
+
+  const t = d.traits;
+  // 술사 — 대상이 둘 이상인 기술의 피해·회복·보호막이 함께 커진다
+  const amp = t && actor.lineage === 'mage' && multiTarget ? t.mage.multiTargetMult : 1;
 
   switch (eff.kind) {
     case 'damage': {
       const { amount, isCrit, affinity } = computeDamage(
         actor, target, eff.power ?? 1, eff.scalesWith ?? 'atk', d.elementChart, rng,
       );
-      applyDamage(target, amount, events, turn, actor.uid, isCrit, affinity);
+      /*
+        계열 특성은 **이미 나온 피해에 배수로** 건다 — computeDamage의 난수 소비(치명·편차)는
+        그대로 두어야 특성을 켜도 주 전투 난수의 순서가 밀리지 않는다.
+        공격자 쪽은 한 영웅이 한 계열이라 겹치지 않고, 수호자는 맞는 쪽이라 따로 곱한다.
+      */
+      let mult = amp;
+      let trait: Combatant['lineage'] = amp !== 1 ? 'mage' : undefined;
+      if (t && actor.lineage === 'blade' && target.currentHp / target.stats.hp <= t.blade.hpBelow) {
+        mult *= t.blade.damageMult; trait = 'blade';
+      }
+      if (t && actor.lineage === 'hunter' && isAfflicted(target)) {
+        mult *= t.hunter.afflictedMult; trait = 'hunter';
+      }
+      if (t && target.lineage === 'guardian') {
+        mult *= t.guardian.damageTakenMult; trait = 'guardian';
+      }
+      const final = mult === 1 ? amount : Math.max(1, Math.round(amount * mult));
+      applyDamage(target, final, events, turn, actor.uid, isCrit, affinity, trait);
       break;
     }
     case 'heal': {
       const base = eff.scalesWith === 'def' ? effDef(actor) : effAtk(actor);
-      const amount = Math.round(base * (eff.power ?? 1));
+      const raw = Math.round(base * (eff.power ?? 1));
+      const amount = amp === 1 ? raw : Math.round(raw * amp);
       const before = target.currentHp;
       target.currentHp = Math.min(target.stats.hp, target.currentHp + amount);
       events.push({
         turn, type: 'heal', actorUid: actor.uid, targetUids: [target.uid],
         amount: target.currentHp - before,
+        ...(amp !== 1 ? { trait: 'mage' as const } : {}),
       });
+      // 사제 — 넘친 치유의 일부가 보호막으로 남는다. 상한까지만 쌓고, 이미 있는 보호막은 깎지 않는다
+      if (t && actor.lineage === 'priest') {
+        const overflow = before + amount - target.stats.hp;
+        const room = Math.round(target.stats.hp * t.priest.shieldCapRatio) - target.shield;
+        const gain = Math.min(Math.round(overflow * t.priest.overflowToShield), room);
+        if (gain > 0) {
+          target.shield += gain;
+          events.push({
+            turn, type: 'trait', actorUid: actor.uid, targetUids: [target.uid],
+            amount: gain, trait: 'priest',
+          });
+        }
+      }
       break;
     }
     case 'shield': {
-      target.shield += Math.round(effAtk(actor) * (eff.power ?? 1));
+      const raw = Math.round(effAtk(actor) * (eff.power ?? 1));
+      target.shield += amp === 1 ? raw : Math.round(raw * amp);
       break;
     }
     case 'buff':
@@ -845,9 +925,7 @@ function applyEffect(
       break;
     }
     case 'cleanse': {
-      target.statuses = target.statuses.filter(
-        (s) => !['atkDown', 'defDown', 'spdDown', 'poison', 'burn', 'stun'].includes(s.kind),
-      );
+      target.statuses = target.statuses.filter((s) => !HARMFUL.includes(s.kind));
       break;
     }
     case 'revive': {
@@ -928,7 +1006,7 @@ function addStatus(
 
 function applyDamage(
   target: Combatant, amount: number, events: BattleEvent[], turn: number,
-  actorUid?: string, isCrit?: boolean, affinity?: Affinity,
+  actorUid?: string, isCrit?: boolean, affinity?: Affinity, trait?: Combatant['lineage'],
 ): void {
   let remaining = amount;
   if (target.shield > 0) {
@@ -939,6 +1017,8 @@ function applyDamage(
   target.currentHp -= remaining;
   events.push({
     turn, type: 'damage', actorUid, targetUids: [target.uid], amount, isCrit, affinity,
+    // 특성이 없으면 키 자체를 싣지 않는다 — 특성 이전 로그와 글자 하나까지 같아야 한다
+    ...(trait ? { trait } : {}),
   });
 
   if (target.currentHp <= 0) {

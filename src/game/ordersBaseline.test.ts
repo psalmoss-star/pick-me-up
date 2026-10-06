@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { runEncounter } from './encounter';
 import { createRng } from './rng';
 import { klassFor } from './stats';
-import { gameData, floorAt } from './data';
+import { gameData, gameDataNoTraits, floorAt } from './data';
 import { HERO } from './data/sample';
 import type { HeroDefId, HeroInstId, HeroInstance, Star } from './types';
 
@@ -40,17 +40,37 @@ function fingerprint(s: string): string {
   return h.toString(16).padStart(8, '0');
 }
 
-describe('작전 카드 이전 기준선', () => {
-  it('1~30층 × 시드 5개의 전투 로그가 변하지 않는다', () => {
-    const rows: string[] = [];
-    for (let i = 0; i < 30; i++) {
-      for (let seed = 1; seed <= 5; seed++) {
-        const r = runEncounter({
-          party: party(), floor: floorAt(i), data: gameData, rng: createRng(seed), potions: 1,
-        });
-        rows.push(`${i + 1}:${seed} ${r.outcome} t${r.turnsElapsed} ${fingerprint(JSON.stringify(r.events))}`);
-      }
+const rowsWith = (data: typeof gameData): string[] => {
+  const rows: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    for (let seed = 1; seed <= 5; seed++) {
+      const r = runEncounter({
+        party: party(), floor: floorAt(i), data, rng: createRng(seed), potions: 1,
+      });
+      rows.push(`${i + 1}:${seed} ${r.outcome} t${r.turnsElapsed} ${fingerprint(JSON.stringify(r.events))}`);
     }
-    expect(rows).toMatchSnapshot();
+  }
+  return rows;
+};
+
+describe('작전 카드 이전 기준선', () => {
+  /*
+    계열 특성(STEP 69) 뒤로 이 지문은 **특성을 뺀 번들**로 찍는다 — 스냅샷은 특성 이전 그대로다.
+    즉 이 테스트는 "카드도 특성도 없으면 옛 엔진과 비트 단위로 같다"를 잠근다.
+    특성 코드가 특성 없는 전투에서 난수를 하나라도 더 뽑거나 이벤트 한 줄을 더하면 여기서 깨진다.
+  */
+  it('1~30층 × 시드 5개의 전투 로그가 변하지 않는다', () => {
+    expect(rowsWith(gameDataNoTraits)).toMatchSnapshot();
+  });
+
+  /*
+    특성을 켠 실제 게임의 지문. 특성 수치(`data/traits.ts`)를 의도적으로 바꿨을 때만 갱신한다 —
+    그때는 trait-check·sim·climb-check·floor-tune을 다시 쟀다는 뜻이어야 한다.
+  */
+  it('계열 특성을 켠 전투 로그가 변하지 않는다', () => {
+    const on = rowsWith(gameData);
+    expect(on).toMatchSnapshot();
+    // 켠 것과 끈 것이 같으면 특성이 실제로는 아무 일도 안 하는 것이다
+    expect(on).not.toEqual(rowsWith(gameDataNoTraits));
   });
 });

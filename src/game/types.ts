@@ -418,6 +418,10 @@ export interface Combatant {
   statuses: ActiveStatus[];
   cooldowns: Record<SkillId, number>;
   isAlive: boolean;
+  /** 영웅의 계열 — 계열 특성 판정에 쓴다. 적·수비 대상은 없다 */
+  lineage?: Lineage;
+  /** 지휘관 특성이 걸어 둔 공격력 배수. 엔진이 행동마다 다시 정한다(없으면 1) */
+  atkAura?: number;
 }
 
 export interface ActiveStatus {
@@ -447,6 +451,7 @@ export type BattleEventType =
   | 'withdraw'     // 전투에서 완전히 이탈 — 퇴각 방침 또는 후퇴 신호. 생존한다
   | 'cover'        // 보호 방침 — 아군 탱커(actorUid)가 보호 대상(targetUids)을 막아섰다
   | 'stratagem'    // 책략 발동 — actorUid = 수행자, stratagemId·success. 뒤에 효과 이벤트가 따른다
+  | 'trait'        // 계열 특성이 따로 드러나는 순간 — 선제·진두지휘(전투 시작), 넘치는 은총(보호막 amount)
   | 'battleEnd';
 
 /**
@@ -485,6 +490,11 @@ export interface BattleEvent {
   stratagemId?: string;
   /** stratagem 이벤트 전용 — 성공(true) / 간파(false) */
   success?: boolean;
+  /**
+   * 계열 특성이 이 결과를 바꿨다 — damage·heal에는 꼬리표로, `trait` 이벤트에는 본체로 실린다.
+   * 수치는 이미 `amount`에 반영돼 있다. 화면이 "왜 이 숫자인지"를 말하는 데 쓴다.
+   */
+  trait?: Lineage;
 }
 
 /*
