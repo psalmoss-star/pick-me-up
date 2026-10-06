@@ -88,6 +88,12 @@
   설명 문장은 손으로 적지 않는다 — `describeTrait`가 수치에서 만든다.
   **특성 수치를 만졌으면 `floorgen.ts`의 `TRAIT_COMPENSATION`(적 배수 — 손층 1.03 · 생성 1.04)도 다시 잰다.**
   순서: `trait-check` → `npm run sim` → `climb-check` → `floor-tune`. 손층에도 배수가 붙으므로 "1~20층 적 수치 = 정의 값"이 아니다.
+- **장비 궁합(STEP 70)** — 계열의 주 장비 슬롯은 효과가 더 크다(`data/gearAffinity.ts`). **착용 제한이 아니다**(사용자 결정).
+  이로운 수치에만 곱한다. **`heroBonus`를 부를 때는 계열을 넘긴다** — 엔진·로스터·착용 전 비교·상태창·상세·편성이 같은 값을 써야
+  화면의 숫자와 실제 전투가 안 어긋난다. 장비 자체의 값(상점·대장간)은 `bonusOf(g)` 그대로다.
+  사다리 비율(`ladderTarget`)은 궁합을 넣지 않은 값이다 — 궁합 수치를 만졌으면 `climb-check --gear elite|relic`을 다시 잰다.
+- **로그에서 HP를 재생할 때는 `hpLossOf(e)`를 쓴다**(beats.ts). damage 이벤트의 `amount`는 들어온 피해 전체이고
+  보호막이 막은 양은 `absorbed`에 따로 있다. `amount`를 그대로 빼면 보호막을 두른 영웅의 HP 바가 실제보다 낮다(STEP 70에서 고쳤다).
 - 합성 UI에서 **"제물"이라는 단어를 그대로 쓴다.** 순화하지 말 것.
 - 승급은 레벨을 1로 리셋한다 → 승급 직후는 이전보다 약하다. 이건 버그가 아니라 설계다.
   **소환 시작 레벨(`summonLevel`)을 승급에 적용하지 말 것** — 그 대가가 사라진다.
@@ -185,7 +191,7 @@
 
 ```bash
 npm run dev        # 개발 서버
-npm test           # Vitest 1회 실행 (현재 1262개 통과)
+npm test           # Vitest 1회 실행 (현재 1283개 통과)
 npm run test:watch
 npm run sim        # 밸런싱 시뮬레이터 (전 층 승률 출력)
 npm run typecheck
@@ -329,6 +335,7 @@ src/
 │     ├─ heroes.ts    # 영웅 12종 + HERO 상수
 │     ├─ lineages.ts  # 계열 7종 + 계열 × 등급 클래스 이름표
 │     ├─ traits.ts    # 계열 특성 수치·이름 — 만지면 floorgen의 TRAIT_COMPENSATION도 다시 잰다
+│     ├─ gearAffinity.ts # 장비 궁합 — 계열별 주 장비 슬롯과 배수
 │     ├─ enemies.ts   # 적 19종 + ENEMY 상수. 보스 수치 주석 = 밸런스 도출 근거
 │     ├─ floors.ts    # 층 정의 — 손으로 짠 1~20층 + 생성분 21~100층
 │     ├─ floorgen.ts  # 층 생성기(21~) + 적 깊이 배수. 결정적이어야 한다
