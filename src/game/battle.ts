@@ -1012,14 +1012,17 @@ function applyDamage(
   actorUid?: string, isCrit?: boolean, affinity?: Affinity, trait?: Combatant['lineage'],
 ): void {
   let remaining = amount;
+  let absorbed = 0;
   if (target.shield > 0) {
-    const absorbed = Math.min(target.shield, remaining);
+    absorbed = Math.min(target.shield, remaining);
     target.shield -= absorbed;
     remaining -= absorbed;
   }
   target.currentHp -= remaining;
   events.push({
     turn, type: 'damage', actorUid, targetUids: [target.uid], amount, isCrit, affinity,
+    // 보호막이 막은 양 — 화면이 HP를 재생할 때 이만큼은 빼지 않는다(`hpLossOf`)
+    ...(absorbed > 0 ? { absorbed } : {}),
     // 특성이 없으면 키 자체를 싣지 않는다 — 특성 이전 로그와 글자 하나까지 같아야 한다
     ...(trait ? { trait } : {}),
   });

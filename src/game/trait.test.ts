@@ -172,7 +172,9 @@ describe('사제 — 넘치는 은총', () => {
     */
     const cut = { ...input, maxTurns: 3 };
     const { on, off } = pair(cut, 1);
-    expect(core(on)).toEqual(off.events);
+    // 막은 양(`absorbed`)만 다르다 — 들어온 피해와 행동은 같다
+    const bare = ({ absorbed: _a, ...e }: BattleEvent) => e;
+    expect(core(on).map(bare)).toEqual(off.events.map(bare));
     const gained = on.events
       .filter((e) => e.type === 'trait' && e.trait === 'priest')
       .reduce((a, e) => a + e.amount!, 0);

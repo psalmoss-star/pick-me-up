@@ -45,6 +45,14 @@ export interface BeatContext {
   chronicle?: ChronicleEntry[];
 }
 
+/**
+ * damage 이벤트가 HP를 실제로 깎은 양 — 보호막이 막은 만큼은 빠진다.
+ * **로그에서 HP를 재생하는 곳은 전부 이 함수를 쓴다**(전투 화면의 HP 바, 아래 경고 비트).
+ */
+export function hpLossOf(e: BattleEvent): number {
+  return Math.max(0, (e.amount ?? 0) - (e.absorbed ?? 0));
+}
+
 /** 보호 대상이 이 비율 밑으로 떨어지면 한 번 경고한다 */
 const GUARD_WARN_RATIO = 0.5;
 
@@ -73,7 +81,7 @@ export function deriveBeats(events: BattleEvent[], ctx: BeatContext): Beat[] {
       for (const uid of targets) {
         const u = byUid.get(uid);
         if (!u) continue;
-        hp[uid] = Math.max(0, (hp[uid] ?? u.maxHp) - (e.amount ?? 0));
+        hp[uid] = Math.max(0, (hp[uid] ?? u.maxHp) - hpLossOf(e));
 
         // 보호 대상이 절반 이하로 떨어진 순간 — 단 1회
         if (

@@ -5,7 +5,7 @@ import { Scene } from '../ui/art/Scene';
 import { T } from '../ui/tokens';
 import { BattleUnit, STATUS_MARK, type Floater } from './battle/BattleUnit';
 import { InterventionBar } from './battle/InterventionBar';
-import { deriveBeats } from '../game/beats';
+import { deriveBeats, hpLossOf } from '../game/beats';
 import { chronicleOf } from '../game/chronicle';
 import { MISSION_LABEL } from '../game/mission';
 import { gameData } from '../game/data';
@@ -111,7 +111,7 @@ export function BattleScreen({
       for (const uid of e.targetUids ?? []) {
         if (m[uid] === undefined) continue;
         m[uid] = e.type === 'damage'
-          ? Math.max(0, m[uid] - (e.amount ?? 0))
+          ? Math.max(0, m[uid] - hpLossOf(e))
           : Math.min(max[uid], m[uid] + (e.amount ?? 0));
       }
     }
@@ -373,6 +373,8 @@ export function BattleScreen({
               `　└ ${nameOf((e.targetUids ?? [])[0])}에게 ${e.amount} 피해`
               + `${e.isCrit ? ' (치명타)' : ''}`
               + `${e.affinity === 'adv' ? ' ▲효과적' : e.affinity === 'dis' ? ' ▼반감' : ''}`
+              // 보호막이 막은 만큼은 HP 바가 안 준다 — 숫자와 바가 어긋나 보이지 않게 말해 준다
+              + `${e.absorbed ? ` (보호막 ${e.absorbed})` : ''}`
               // 계열 특성이 이 숫자를 바꿨다 — 이름을 붙여야 "왜 더 아픈가"가 읽힌다
               + `${e.trait ? ` ·${TRAIT_NAME[e.trait]}` : ''}`
             )}

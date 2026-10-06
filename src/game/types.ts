@@ -472,6 +472,15 @@ export interface BattleEvent {
   skillId?: SkillId;
   amount?: number;
   status?: StatusKind;
+  /**
+   * damage 이벤트 전용 — 이 피해 중 **보호막이 막은 양**. 막은 것이 없으면 키가 없다.
+   *
+   * `amount`는 들어온 피해 전체다(누가 얼마나 때렸나 — MVP 집계가 이것을 쓴다).
+   * HP가 실제로 깎인 양은 `amount − absorbed`이며, 로그에서 HP를 재생하는 쪽은
+   * 반드시 `hpLossOf`(beats.ts)를 거친다. `amount`를 그대로 빼면 보호막을 두른 영웅의
+   * HP 바가 실제보다 낮게 보인다(2026-10-06까지 그랬다).
+   */
+  absorbed?: number;
   /** damage 이벤트 전용 — 치명타 여부. UI가 연출을 다르게 한다. */
   isCrit?: boolean;
   /**
