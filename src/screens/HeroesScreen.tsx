@@ -7,7 +7,7 @@ import { useViewport } from '../ui/useViewport';
 import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName } from '../game/identity';
 import { livingHeroes } from '../game/roster';
 import { estimatePotential } from '../game/reveal';
@@ -158,7 +158,7 @@ export function HeroesScreen({
                 art={heroArtOf(h.defId)}
                 defId={h.defId}
                 level={h.level}
-                klass={klassFor(h.star)}
+                klass={klassName(h.defId, h.star, gameData.heroes)}
                 width={cardWidth}
                 squad={memberOf === -1 ? undefined : ((memberOf + 1) as 1 | 2)}
                 favorite={h.favorite}

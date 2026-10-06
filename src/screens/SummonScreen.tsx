@@ -7,7 +7,7 @@ import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { STAR_TIERS, T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName, displayTitle } from '../game/identity';
 import { lineFor } from '../game/voice';
 import { legendOf } from '../game/legend';
@@ -173,7 +173,7 @@ export function SummonScreen({
               defId={pulled.hero.defId}
               variant={heroVariantOf(pulled.hero)}
               level={pulled.hero.level}
-              klass={klassFor(pulled.star)}
+              klass={klassName(pulled.hero.defId, pulled.star, gameData.heroes)}
               width={132}
             />
           </div>

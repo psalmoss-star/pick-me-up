@@ -5,7 +5,7 @@ import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { T } from '../ui/tokens';
 import { MISSION_LABEL } from '../game/mission';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName } from '../game/identity';
 import { hasBatchim, lineFor, pickSpeaker, templateLastWords } from '../game/voice';
 import { chronicleOf } from '../game/chronicle';
@@ -219,7 +219,7 @@ export function ResultScreen({
               art={heroArtOf(mvp.defId)}
               defId={mvp.defId}
               level={mvp.level}
-              klass={klassFor(mvp.star)}
+              klass={klassName(mvp.defId, mvp.star, gameData.heroes)}
               width={150}
               reveal={estimatePotential(mvp).progress}
               variant={heroVariantOf(mvp)}

@@ -28,6 +28,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 1,
       element: 'fire',
       role: 'dealer',
+      lineage: 'blade',
       attackAttr: 'str',
       baseCaps: { str: 22, int: 8, vit: 14, agi: 17 },
       skillIds: ['sk_slash', 'sk_rend'] as SkillId[],
@@ -40,6 +41,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 2,
       element: 'earth',
       role: 'tank',
+      lineage: 'guardian',
       attackAttr: 'str',
       baseCaps: { str: 13, int: 6, vit: 30, agi: 9 },
       skillIds: ['sk_taunt_hit', 'sk_guard'] as SkillId[],
@@ -52,6 +54,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 3,
       element: 'water',
       role: 'healer',
+      lineage: 'priest',
       attackAttr: 'int',
       baseCaps: { str: 7, int: 21, vit: 16, agi: 14 },
       skillIds: ['sk_mend', 'sk_spark'] as SkillId[],
@@ -64,6 +67,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 4,
       element: 'wind',
       role: 'dealer',
+      lineage: 'scout',
       attackAttr: 'str',
       baseCaps: { str: 20, int: 10, vit: 15, agi: 22 },
       skillIds: ['sk_rend', 'sk_slash'] as SkillId[],
@@ -76,6 +80,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 5,
       element: 'thunder',
       role: 'breaker',
+      lineage: 'blade',
       attackAttr: 'int',
       baseCaps: { str: 12, int: 24, vit: 17, agi: 20 },
       skillIds: ['sk_maul', 'sk_spark'] as SkillId[],
@@ -102,6 +107,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 2,
       element: 'earth',
       role: 'dealer',
+      lineage: 'hunter',
       attackAttr: 'agi',
       baseCaps: { str: 16, int: 9, vit: 13, agi: 21 },
       // 도트 딜러 — 즉발이 약한 대신 오래 끌수록 아프다
@@ -115,6 +121,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 4,
       element: 'fire',
       role: 'dealer',
+      lineage: 'mage',
       attackAttr: 'int',
       baseCaps: { str: 8, int: 23, vit: 13, agi: 16 },
       // 파티 최초의 광역기. 다수 적 층에서 판이 달라진다
@@ -128,6 +135,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 3,
       element: 'wind',
       role: 'support',
+      lineage: 'scout',
       attackAttr: 'agi',
       baseCaps: { str: 10, int: 17, vit: 14, agi: 19 },
       // 최초의 support 역할. 적 주력을 정확히 깎는다(highestAtk)
@@ -141,6 +149,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 4,
       element: 'water',
       role: 'support',
+      lineage: 'mage',
       attackAttr: 'int',
       baseCaps: { str: 9, int: 20, vit: 19, agi: 12 },
       // 보호막 — 회복과 다르다. 맞기 전에 미리 두는 자원
@@ -154,6 +163,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 5,
       element: 'fire',
       role: 'support',
+      lineage: 'commander',
       attackAttr: 'str',
       baseCaps: { str: 18, int: 14, vit: 18, agi: 15 },
       // 정화 + 공격력 버프. 도트·기절 위주 층의 해답이 된다
@@ -167,6 +177,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 3,
       element: 'water',
       role: 'healer',
+      lineage: 'priest',
       attackAttr: 'int',
       baseCaps: { str: 8, int: 19, vit: 17, agi: 13 },
       // 두 번째 힐러. 세인과 달리 최저 HP를 직접 노린다
@@ -180,6 +191,7 @@ export const heroes: Record<HeroDefId, HeroDef> = Object.fromEntries(
       baseStar: 2,
       element: 'earth',
       role: 'tank',
+      lineage: 'guardian',
       attackAttr: 'str',
       baseCaps: { str: 15, int: 6, vit: 28, agi: 8 },
       // 두 번째 탱커 — 오르나와 달리 도발 대신 광역 보호막을 쓴다

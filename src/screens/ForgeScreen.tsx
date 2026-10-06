@@ -7,7 +7,7 @@ import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { T, quartersFor } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { livingHeroes, isPreciousSacrifice } from '../game/roster';
@@ -265,7 +265,7 @@ export function ForgeScreen({
                 art={heroArtOf(h.defId)}
                 defId={h.defId}
                 level={h.level}
-                klass={klassFor(h.star)}
+                klass={klassName(h.defId, h.star, gameData.heroes)}
                 width={92}
                 selected={isTarget || isSac}
                 favorite={h.favorite}
@@ -335,7 +335,7 @@ function Slot({
         art={heroArtOf(hero.defId)}
         defId={hero.defId}
         level={hero.level}
-        klass={klassFor(hero.star)}
+        klass={klassName(hero.defId, hero.star, gameData.heroes)}
         width={100}
         favorite={hero.favorite}
         reveal={estimatePotential(hero).progress}

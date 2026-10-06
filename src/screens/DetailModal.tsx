@@ -5,7 +5,8 @@ import { HeroPortrait } from '../ui/art/HeroPortrait';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { heroArtOf } from '../ui/artMap';
 import { ELEMENT_KR, T, quartersFor, nextQuartersFor } from '../ui/tokens';
-import { computeAttributes, computeHeroStats, isAtCap, klassFor } from '../game/stats';
+import { computeAttributes, computeHeroStats, isAtCap } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { applyBonus, heroBonus, bonusOf } from '../game/gear';
@@ -126,7 +127,7 @@ export function DetailModal({
             {displayName(hero, gameData.heroes)}({'★'.repeat(hero.star)}) <span style={{ fontSize: 15 }}>Lv.{hero.level}</span>
           </div>
           <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>
-            {displayTitle(hero, gameData.heroes)} · 클래스 : {klassFor(hero.star)} · 거처 : {quartersFor(hero.star)} · 속성 : {ELEMENT_KR[def.element]}
+            {displayTitle(hero, gameData.heroes)} · 클래스 : {klassName(hero.defId, hero.star, gameData.heroes)} · 거처 : {quartersFor(hero.star)} · 속성 : {ELEMENT_KR[def.element]}
           </div>
           <div style={{ fontSize: 14, lineHeight: 2.1 }}>
             {row('힘', attrs.str)}{row('지능', attrs.int)}

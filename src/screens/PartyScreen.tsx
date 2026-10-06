@@ -18,7 +18,7 @@ import { MISSION_LABEL } from '../game/mission';
 import { heroPower, partyPower } from '../game/power';
 import { heroBonus } from '../game/gear';
 import { sortRoster } from '../game/rosterSort';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName } from '../game/identity';
 import { livingHeroes } from '../game/roster';
 import { estimatePotential } from '../game/reveal';
@@ -345,7 +345,7 @@ export function PartyScreen({
                 art={heroArtOf(h.defId)}
                 defId={h.defId}
                 level={h.level}
-                klass={klassFor(h.star)}
+                klass={klassName(h.defId, h.star, gameData.heroes)}
                 width={cardWidth}
                 selected={memberOf === editing}
                 squad={memberOf === -1 ? undefined : ((memberOf + 1) as 1 | 2)}

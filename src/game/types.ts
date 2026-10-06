@@ -48,6 +48,10 @@ export type Klass =
 
 export type Role = 'dealer' | 'tank' | 'healer' | 'support' | 'breaker';
 
+/** 계열 — 클래스 이름의 갈래. 이름표는 data/lineages.ts */
+export type Lineage =
+  | 'blade' | 'guardian' | 'priest' | 'mage' | 'hunter' | 'scout' | 'commander';
+
 export type TargetSide = 'ally' | 'enemy' | 'self';
 
 export type TargetScope =
@@ -165,6 +169,11 @@ export interface HeroDef {
   baseStar: Star;         // 가챠에서 뽑힐 때의 최초 등급
   element: Element;
   role: Role;
+  /**
+   * 계열. 등급과 함께 클래스 이름을 정한다(klass.ts의 klassName).
+   * 지금은 표시 전용이다 — 전투는 여전히 `role`만 본다.
+   */
+  lineage: Lineage;
   /**
    * 공격력이 어느 능력치 기반인지.
    *

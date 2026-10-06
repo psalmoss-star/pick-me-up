@@ -6,7 +6,8 @@ import { heroArtOf } from '../ui/artMap';
 import { heroVariantOf } from '../ui/art/heroImages';
 import { T, ELEMENT_KR, ELEMENT_TINT, STAR_TIERS, quartersFor } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
-import { statsOfInstance, attributesOfInstance, klassFor } from '../game/stats';
+import { statsOfInstance, attributesOfInstance } from '../game/stats';
+import { klassName } from '../game/klass';
 import { displayName, displayTitle } from '../game/identity';
 import { estimatePotential } from '../game/reveal';
 import { originOf, originText } from '../game/origin';
@@ -159,7 +160,7 @@ export function StatusScreen({
               {displayTitle(hero, gameData.heroes)}
             </div>
             <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.7 }}>
-              {klassFor(hero.star)}
+              {klassName(hero.defId, hero.star, gameData.heroes)}
               {/* 전직 트리는 없다 — 승급 횟수가 실제 대응물이다 */}
               {hero.star > 1 && ` · 승급 ${hero.star - 1}회`}
               {' · '}

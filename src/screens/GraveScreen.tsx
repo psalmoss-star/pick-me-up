@@ -8,7 +8,7 @@ import { heroArtOf } from '../ui/artMap';
 import { T } from '../ui/tokens';
 import { SectionLabel } from './SectionLabel';
 import { DeedList } from './DeedList';
-import { klassFor } from '../game/stats';
+import { klassName } from '../game/klass';
 import { gameData } from '../game/data';
 import type { Legacy } from '../game/legacyTypes';
 
@@ -110,7 +110,7 @@ export function GraveScreen({
                   <HeroCard
                     name={f.name}
                     star={f.star}
-                    klass={klassFor(f.star)}
+                    klass={klassName(f.defId, f.star, gameData.heroes)}
                     art={heroArtOf(f.defId)}
                     defId={f.defId}
                     element={gameData.heroes[f.defId]?.element ?? 'fire'}
